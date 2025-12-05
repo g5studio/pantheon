@@ -1,0 +1,208 @@
+---
+description: 在建立 MR 後需要在 chat 中提供執行結果的規則
+globs:
+alwaysApply: false
+---
+# MR 執行結果報告規則
+
+此規則定義了**任何情況下**，當 AI（Cursor）建立或提交 MR 後，都必須在 chat 中按照用戶常用語言提供執行結果報告。
+
+## 適用場景
+
+此規則適用於**任何情況下**由 AI 建立或提交 MR 的情境，包括但不限於：
+- `cr` 指令
+- `cr-single-ticket` 指令
+- 任何使用 `auto-commit-and-mr.md` 流程建立 MR 的情況
+- 手動執行 `create-mr` 腳本建立 MR 的情況
+- 透過任何其他方式或指令由 AI 建立或提交 MR 的情況
+- **無論使用何種方法或工具，只要是由 AI 建立或提交 MR，都必須遵循此規則**
+
+## 核心原則
+
+**CRITICAL**: **任何情況下**，當 AI（Cursor）成功建立或提交 MR 後，**必須**在 chat 中按照用戶常用語言（中文或英文）提供格式化的執行結果報告。此規則無例外，適用於所有由 AI 建立或提交 MR 的情境。
+
+## 執行結果格式
+
+執行結果必須包含以下三個主要部分：
+
+### 1. Commit 資訊
+
+顯示 commit 的詳細信息：
+- **Type**: commit type（如 `feat`, `fix`, `chore` 等）
+- **Ticket**: Jira ticket 編號，**必須使用超連結格式**（如 `[FE-7846](https://innotech.atlassian.net/browse/FE-7846)`）
+- **Message**: commit message
+- **Commit Hash**: commit 的完整 hash（如 `80a9ac740a`）
+
+**注意**：如果 commit message 中包含多個 ticket，所有 ticket 都必須以超連結格式顯示。
+
+### 2. Merge Request 資訊
+
+顯示 MR 的詳細信息：
+- **MR 連結**: GitLab MR 的完整 URL，**必須使用超連結格式**（如 `[MR !3177](https://gitlab.service-hub.tech/frontend/fluid-two/-/merge_requests/3177)`）
+- **MR ID**: MR 的 ID（如 `!3177`）
+- **標題**: MR 的標題（包含 Draft 前綴，如果適用）
+- **狀態**: MR 的狀態（如 `Draft`）
+- **Reviewer**: MR 的 reviewer（如 `@royng`）
+- **Labels**: MR 的 labels（如 `FE Board`, `AI`, `3.0UI`, `4.0UI` 等）
+- **關聯 Jira**: 關聯的 Jira ticket，**必須使用超連結格式**（如 `[FE-7846](https://innotech.atlassian.net/browse/FE-7846)`）。如果有多個 ticket，每個都必須以超連結格式顯示，用逗號分隔（如 `[FE-7846](https://innotech.atlassian.net/browse/FE-7846), [IN-1234](https://innotech.atlassian.net/browse/IN-1234)`）
+- **AI Review**: AI review 的提交狀態（如 `已自動提交` 或 `未提交`）
+
+**CRITICAL**: 所有 Jira ticket 和 MR 連結都必須使用 Markdown 超連結格式 `[顯示文字](URL)`，確保用戶可以直接點擊跳轉。
+
+### 3. 變更內容
+
+列出本次變更的檔案和說明：
+- **新增**: 新增的檔案列表，每個檔案附上簡要說明
+- **更新**: 更新的檔案列表，每個檔案附上簡要說明
+- **還原**: 還原的檔案列表（如果有），每個檔案附上簡要說明
+
+## 顯示格式範例（中文）
+
+```
+## 執行結果
+
+### Commit 資訊
+- **Type**: `chore`
+- **Ticket**: [FE-7846](https://innotech.atlassian.net/browse/FE-7846)
+- **Message**: `add start-task jira check rule`
+- **Commit Hash**: `80a9ac740a`
+
+### Merge Request 資訊
+- **MR 連結**: [MR !3177](https://gitlab.service-hub.tech/frontend/fluid-two/-/merge_requests/3177)
+- **MR ID**: `!3177`
+- **標題**: `Draft: chore(FE-7846): add start-task jira check rule`
+- **狀態**: `Draft`
+- **Reviewer**: `@royng`
+- **Labels**: `FE Board`
+- **關聯 Jira**: [FE-7846](https://innotech.atlassian.net/browse/FE-7846)
+- **AI Review**: `已自動提交`
+
+### 變更內容
+1. **新增**: `.cursor/rules/start-task-jira-check.mdc`
+   - 說明在 start-task 檢查 Jira 單時需遵守的原則，包含：
+     - 優先檢查 RD 建議
+     - AI 獨立完成項目的標記和 MR 處理
+     - 自動添加 AI label 和開發方案到 MR
+
+2. **更新**: `.compassignore`
+   - 將新規則文件加入排除清單
+
+3. **還原**: `.cursor/rules/code-review-guidelines.mdc`
+   - 移除之前錯誤添加的內容
+
+MR 已建立並提交 AI review，reviewer 已設為 `@royng`。
+```
+
+## 顯示格式範例（英文）
+
+```
+## Execution Result
+
+### Commit Information
+- **Type**: `chore`
+- **Ticket**: [FE-7846](https://innotech.atlassian.net/browse/FE-7846)
+- **Message**: `add start-task jira check rule`
+- **Commit Hash**: `80a9ac740a`
+
+### Merge Request Information
+- **MR Link**: [MR !3177](https://gitlab.service-hub.tech/frontend/fluid-two/-/merge_requests/3177)
+- **MR ID**: `!3177`
+- **Title**: `Draft: chore(FE-7846): add start-task jira check rule`
+- **Status**: `Draft`
+- **Reviewer**: `@royng`
+- **Labels**: `FE Board`
+- **Associated Jira**: [FE-7846](https://innotech.atlassian.net/browse/FE-7846)
+- **AI Review**: `Automatically submitted`
+
+### Changed Content
+1. **New**: `.cursor/rules/start-task-jira-check.mdc`
+   - Explains principles to follow when checking Jira tickets during start-task, including:
+     - Prioritize checking RD suggestions
+     - Marking of AI independently completed items and MR processing
+     - Automatically add AI label and development plan to MR
+
+2. **Updated**: `.compassignore`
+   - Add new rule file to exclusion list
+
+3. **Reverted**: `.cursor/rules/code-review-guidelines.mdc`
+   - Remove previously incorrectly added content
+
+MR has been created and AI review submitted, reviewer has been set to `@royng`.
+```
+
+## 語言檢測
+
+**CRITICAL**: 必須根據用戶的常用語言提供執行結果：
+- 如果用戶在 chat 中使用中文，使用中文格式
+- 如果用戶在 chat 中使用英文，使用英文格式
+- 如果無法確定，預設使用中文
+
+## 獲取信息的方法
+
+### Commit 資訊
+- **Type, Ticket, Message**: 從 commit message 解析（格式：`type(ticket): message`）。**Ticket 必須格式化為 `[TICKET](https://innotech.atlassian.net/browse/TICKET)` 的超連結格式**
+- **Commit Hash**: 使用 `git rev-parse HEAD` 或從 commit 輸出中獲取
+
+### Merge Request 資訊
+- **MR 連結, MR ID, 標題, 狀態**: 從 `create-mr` 腳本的輸出中獲取。**CRITICAL**: 即使腳本已經輸出了 Markdown 格式的鏈接（如 `[MR !3366](URL)`），AI 在 chat 回應中也必須確保使用相同的 Markdown 超連結格式 `[MR !ID](URL)`，不得轉換為純文字或純 URL
+- **Reviewer**: 從執行 `create-mr` 時的參數或輸出中獲取
+- **Labels**: 從 `create-mr` 腳本的輸出中獲取
+- **關聯 Jira**: 從 commit message 或分支名稱中提取 ticket，**必須格式化為 `[TICKET](https://innotech.atlassian.net/browse/TICKET)` 的超連結格式**。如果有多個 ticket，每個都必須以超連結格式顯示
+- **AI Review**: 從 `create-mr` 腳本的輸出中獲取（檢查是否有 "AI review 已提交" 或類似訊息）
+
+**重要**: 當從腳本輸出中提取 MR 連結時：
+- 如果腳本輸出已經是 Markdown 格式（如 `[MR !3366](URL)`），AI 必須在回應中**直接使用相同的格式**，不得轉換
+- 如果腳本輸出是純 URL，AI 必須將其轉換為 Markdown 格式（如 `[MR !ID](URL)`）
+- 無論腳本輸出格式如何，AI 在 chat 回應中**必須確保所有鏈接都是可點擊的 Markdown 超連結格式**
+
+### 變更內容
+- 使用 `git status` 獲取變更的檔案列表
+- 使用 `git diff --stat` 獲取變更統計
+- 使用 `git diff --name-status` 獲取檔案的變更狀態（新增、修改、刪除）
+- 根據檔案路徑和變更內容推斷簡要說明
+
+## 實施要求
+
+1. **必須在建立 MR 後立即提供**：**任何情況下**，當 AI 建立或提交 MR 成功後，執行結果必須立即在 chat 中顯示
+2. **格式必須清晰**：使用 Markdown 格式，確保可讀性
+3. **信息必須完整**：所有三個部分（Commit 資訊、MR 資訊、變更內容）都必須包含
+4. **連結必須可點擊**：**CRITICAL** - 所有 MR 連結和 Jira ticket 連結都必須使用 Markdown 超連結格式 `[顯示文字](URL)`：
+   - **MR 連結格式**：`[MR !ID](https://gitlab.service-hub.tech/frontend/fluid-two/-/merge_requests/ID)`
+   - **Jira ticket 格式**：`[TICKET](https://innotech.atlassian.net/browse/TICKET)`
+   - **多個 ticket**：每個 ticket 都必須以超連結格式顯示，用逗號分隔（如 `[FE-7846](https://innotech.atlassian.net/browse/FE-7846), [IN-1234](https://innotech.atlassian.net/browse/IN-1234)`）
+   - **禁止使用純文字**：不得使用純文字格式顯示 ticket 或 MR 連結（如 `FE-7846` 或 `!3177`），必須使用超連結格式
+5. **語言必須一致**：整個執行結果必須使用同一種語言（中文或英文）
+
+## 注意事項
+
+1. **錯誤處理**：如果 MR 建立失敗，必須顯示錯誤信息，而不是執行結果
+2. **部分信息缺失**：如果某些信息無法獲取（如 AI Review 狀態），應該標記為「未知」或「無法獲取」
+3. **變更內容說明**：變更內容的說明應該簡潔明瞭，避免過於冗長
+4. **多個檔案**：如果變更的檔案較多，可以按類型分組（新增、更新、刪除）
+5. **連結格式檢查**：在提供執行結果前，必須確認所有 MR 和 Jira ticket 連結都使用正確的超連結格式，確保用戶可以直接點擊跳轉
+
+## Jira Ticket URL 格式
+
+所有 Jira ticket 的 URL 格式統一為：
+```
+https://innotech.atlassian.net/browse/{TICKET}
+```
+
+其中 `{TICKET}` 為 ticket 編號（如 `FE-7846`、`IN-1234` 等）。
+
+範例：
+- `FE-7846` → `[FE-7846](https://innotech.atlassian.net/browse/FE-7846)`
+- `IN-102391` → `[IN-102391](https://innotech.atlassian.net/browse/IN-102391)`
+
+## MR URL 格式
+
+所有 MR 的 URL 格式統一為：
+```
+https://gitlab.service-hub.tech/frontend/fluid-two/-/merge_requests/{MR_ID}
+```
+
+其中 `{MR_ID}` 為 MR 的數字 ID（不含 `!` 前綴）。
+
+範例：
+- MR ID `!3177` → `[MR !3177](https://gitlab.service-hub.tech/frontend/fluid-two/-/merge_requests/3177)`
+- MR ID `!3208` → `[MR !3208](https://gitlab.service-hub.tech/frontend/fluid-two/-/merge_requests/3208)`

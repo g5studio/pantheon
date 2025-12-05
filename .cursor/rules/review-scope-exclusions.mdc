@@ -1,0 +1,91 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# Code Review Scope Exclusions
+
+This rule clarifies what should NOT be commented on during code reviews, helping focus reviewer attention on meaningful architectural and design issues rather than automated checks.
+
+## When to Use
+
+- Always apply during code reviews.
+- Use as a filter to avoid wasting review effort on automated checks.
+
+## Scope / Exclusions
+
+- **Scope:** Defines exclusions (what NOT to review).
+- **Applies to:** All code reviews.
+
+## Core Rules
+
+### 1. Do Not Comment on Lint-Level Issues
+
+**Prohibited Review Comments:**
+- ❌ Unused imports
+- ❌ Unused variables
+- ❌ Trailing spaces, indentation, or other formatting issues
+- ❌ Any issue that ESLint/Prettier/automated linters detect
+
+**Rationale:**
+1. The project has pre-commit hooks and CI pipelines that enforce lint checks.
+2. Code that fails linting cannot be committed or merged; it will not reach code review.
+3. Reviewers (especially LLMs) may see only diff fragments and incorrectly flag variables as unused when they are used elsewhere.
+4. Wastes review bandwidth on issues that are already automatically caught.
+
+**What Reviewers SHOULD Focus On:**
+- ✅ Architectural design and abstraction levels
+- ✅ Business logic correctness
+- ✅ Security and performance concerns
+- ✅ Team conventions and best practices
+- ✅ Maintainability and readability
+- ✅ Correct use of project-specific patterns (Provider/Controller/Service, state management, hooks)
+
+---
+
+### 2. Ignore Automatic CSS Class Reordering
+
+**Prohibited Review Comments:**
+- ❌ "Why did the class order change?"
+- ❌ "Suggest maintaining the original class order."
+
+**Context:**
+- Prettier and Tailwind CSS plugins automatically reorder Tailwind classes.
+- This is intentional and improves consistency across the project.
+
+**Example (Ignore These Changes):**
+```diff
+- "mb-6_5 mx-auto w-29"
++ "mx-auto mb-6_5 w-29"
+```
+
+**Exception:**
+- ✅ Only flag class order changes if they cause functional bugs (e.g., incorrect responsive breakpoint precedence leading to broken styles).
+
+---
+
+### 3. Other Tooling-Managed Issues
+
+**Do Not Comment On:**
+- Type errors already caught by TypeScript (reviewers should assume code compiles).
+- Test failures already reported by CI (unless discussing root cause in context).
+- Dependency version conflicts flagged by package manager.
+
+---
+
+## Review Philosophy
+
+- **Automated tools handle syntax and style.**
+- **Humans handle semantics, design, and maintainability.**
+- Focus review effort where it adds the most value.
+
+## Review Checklist (Negative)
+
+- [ ] Am I commenting on an unused import/variable? (Don't—linter catches it.)
+- [ ] Am I questioning automatic class reordering? (Don't—formatter handles it.)
+- [ ] Is this a formatting/spacing issue? (Don't—pre-commit hook enforces it.)
+- [ ] Could this comment be replaced by a lint rule? (If yes, consider adding the rule instead.)
+
+## Rationale
+
+Maximizes the value of human code review by focusing on issues that require judgment, domain knowledge, and architectural understanding, rather than mechanical issues already handled by tooling.

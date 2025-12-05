@@ -1,0 +1,618 @@
+# Commit and MR Guidelines
+
+This rule defines the requirements for commit messages and merge requests in this project.
+
+## Commit Message Requirements
+
+### Language
+- **MUST**: All commits must be written in **English only**
+- Commit messages (both subject and body) must be in **English only**
+- Chinese characters are not allowed in commit messages
+- This is enforced by commitlint rules: `subject-english-only` and `body-english-only`
+
+### Format
+Commit messages must follow the conventional commit format:
+```
+{type}({scope}): {subject}
+
+{body}
+```
+
+Where:
+- **type**: Must be one of: `feat`, `fix`, `update`, `refactor`, `chore`, `test`, `style`, `revert`
+- **scope**: Must be a valid Jira ticket (e.g., `FE-7838`, `IN-1234`)
+- **subject**: 
+  - Must be lowercase
+  - Maximum 64 characters
+  - Must be in English only
+- **body**: Optional, but if provided must be in English only
+
+### Examples
+
+✅ **Correct:**
+```
+feat(FE-7838): enable new sport baseball in stg, dev, and demo environments
+```
+
+```
+fix(IN-1234): resolve memory leak in sport game component
+
+- Fixed memory leak in component cleanup
+- Added proper event listener removal
+```
+
+❌ **Incorrect:**
+```
+feat(FE-7838): 啟用新的棒球運動功能  // Chinese characters not allowed
+```
+
+```
+fix(IN-1234): Fix memory leak  // Uppercase not allowed in subject
+```
+
+### Code Modification Restrictions During Commit Process
+
+**CRITICAL**: During the commit process, if any issues are detected that require code modifications, **MUST** follow the strict protocol below. **NEVER** modify code and commit/push without explicit user consent.
+
+**重要**：此規則必須與 [ai-decision-making-priorities.mdc](mdc:.cursor/rules/ai-decision-making-priorities.mdc) 規則一起遵守。當需要修改代碼時，必須遵循「先詢問再修改」的最高優先級原則，無論任務目標為何。
+
+#### Required Protocol
+
+**MUST**: When any of the following situations are detected during the commit process:
+
+1. **Code quality issues** (linting errors, code smells, architectural violations)
+2. **Missing dependencies or imports**
+3. **Type errors or compilation issues**
+4. **Test failures**
+5. **Rule violations** (Cursor rules, project conventions)
+6. **Any other issues requiring code changes**
+
+**The following protocol MUST be followed:**
+
+1. **Immediately stop the commit process**
+2. **Provide clear feedback in chat**:
+   - Identify the specific issues detected
+   - Explain what needs to be modified and why
+   - Provide actionable guidance on how to fix the issues
+   - List the specific files and locations that need modification
+
+3. **Ask for user consent**:
+   - **MUST** explicitly ask: "是否需要我協助修正這些問題？"
+   - **MUST** wait for user's explicit response before proceeding
+   - **MUST NOT** assume user wants automatic fixes
+
+4. **Wait for user response**:
+   - If user says **"是"**, **"可以"**, **"幫我修正"**, or similar affirmative responses → Proceed with modifications
+   - If user says **"否"**, **"不用"**, **"我自己來"**, or similar negative responses → Stop and let user handle it
+   - If user does not respond → **DO NOT** proceed with modifications
+
+5. **After modifications (only if user consented)**:
+   - Show what was modified
+   - Ask for user confirmation before committing
+   - Only proceed with commit and push after user confirms
+
+#### Prohibited Actions
+
+**STRICTLY FORBIDDEN**: The following actions are **NEVER** allowed without explicit user consent:
+
+- ❌ Automatically fixing code issues and committing
+- ❌ Modifying code and pushing to remote without asking
+- ❌ Assuming user wants fixes based on context
+- ❌ Proceeding with commit after making silent modifications
+- ❌ Skipping the consent step for "obvious" fixes
+
+#### Examples
+
+**Example 1: Linting Errors Detected**
+```
+Situation: ESLint errors found in src/components/Button.tsx
+
+Action:
+1. Stop commit process
+2. Notify user in chat:
+   "檢測到以下 ESLint 錯誤需要修正：
+   - src/components/Button.tsx:5:10 - 'unusedVariable' is assigned but never used
+   - src/components/Button.tsx:12:3 - Missing return type annotation
+   
+   是否需要我協助修正這些問題？"
+
+3. Wait for user response
+4. If user says "是" → Fix issues → Show changes → Ask for confirmation → Commit
+5. If user says "否" → Stop and let user handle it
+```
+
+**Example 2: Missing Import**
+```
+Situation: Missing import detected in src/utils/helper.ts
+
+Action:
+1. Stop commit process
+2. Notify user in chat:
+   "檢測到 src/utils/helper.ts 中缺少必要的 import：
+   - Line 15 使用了 'formatDate' 但未 import
+   
+   是否需要我協助添加這個 import？"
+
+3. Wait for user response
+4. Only proceed if user explicitly consents
+```
+
+**Example 3: Rule Violation**
+```
+Situation: Cursor rule violation detected (e.g., Provider performing API calls)
+
+Action:
+1. Stop commit process
+2. Notify user in chat:
+   "檢測到架構規則違規：
+   - src/modules/user/context/UserContext.tsx 中的 Provider 組件直接執行了 API 調用
+   - 根據架構規範，Provider 不應執行 side effects
+   
+   建議將 API 調用移至 Controller 組件。
+   是否需要我協助重構這段代碼？"
+
+3. Wait for user response
+4. Only proceed if user explicitly consents
+```
+
+**Example 4: User Explicitly Requests Fix**
+```
+Situation: User says "幫我修正這些 lint 錯誤"
+
+Action:
+1. Proceed with fixes (user has given explicit consent)
+2. Show what was modified
+3. Ask: "已修正以下問題，是否要繼續 commit？"
+4. Wait for confirmation before committing
+```
+
+#### Integration with Commit Workflows
+
+This restriction applies to **all commit-related commands and workflows**, including:
+
+- `cr` command
+- `cr-single-ticket` command
+- `commit-and-push` command
+- `agent-commit` script
+- Any automated commit workflow
+- Pre-commit hooks and checks
+
+**Execution order when issues are detected:**
+
+1. Detect issues during pre-commit checks
+2. **Stop commit process immediately**
+3. **Report issues in chat**
+4. **Ask for user consent**
+5. **Wait for user response**
+6. **Only if user consents**: Fix issues → Show changes → Confirm → Commit
+7. **If user declines**: Stop and let user handle it
+
+#### Exception: User-Initiated Fix Commands
+
+**Exception**: If user explicitly requests fixes using commands like:
+- "修正這些錯誤"
+- "幫我修復這些問題"
+- "fix these issues"
+
+These are considered explicit consent, and fixes can proceed. However, still:
+- Show what will be modified
+- Confirm before committing
+- Never push without user confirmation
+
+## Merge Request Requirements
+
+### Information Validation Before MR Creation
+
+**CRITICAL**: Before creating any MR, **ALL** required information **MUST** be successfully retrieved and validated. The MR creation process **MUST NOT** proceed if any required information is missing or cannot be obtained.
+
+#### Required Information Checklist
+
+The following information **MUST** be successfully retrieved before creating an MR:
+
+1. **GitLab Information**
+   - GitLab API connection status
+   - Current user information (for assignee)
+   - Project information
+   - Branch information
+   - Any other GitLab-related data required for MR creation
+
+2. **Jira Ticket Information**
+   - Jira ticket number (from branch name or commit message)
+   - Jira ticket title/summary (for MR title)
+   - Jira ticket status and validity
+   - Fix version information (if applicable)
+   - Any other Jira-related data required for MR creation
+
+3. **MR Configuration Information**
+   - Labels (UI version labels, FE Board, Static File, Vendor Customization, etc.)
+   - Reviewer information (from command argument, user preference, or default)
+   - Assignee information
+   - Draft status preference
+   - Any other MR configuration parameters
+
+#### Error Handling and User Feedback
+
+**MUST**: If any required information cannot be retrieved (due to network issues, user configuration problems, API errors, etc.):
+
+1. **Immediately stop the MR creation process**
+2. **Provide clear feedback in chat**:
+   - Identify which specific information is missing or cannot be retrieved
+   - Explain the root cause (network issue, configuration problem, etc.)
+   - Provide actionable guidance on how to resolve the issue
+   - List the specific steps the user needs to take to fix the problem
+
+3. **Send system notification**:
+   - Trigger a system notification to alert the user about the issue
+   - Include the same information provided in the chat feedback
+   - Ensure the notification is visible and actionable
+
+4. **Wait for user resolution**:
+   - Do not proceed with MR creation until all information is successfully retrieved
+   - After user fixes the issue, re-validate all information before proceeding
+
+#### Examples of Error Scenarios
+
+**Example 1: Network Issue**
+```
+Error: Cannot connect to GitLab API
+Action: 
+- Stop MR creation
+- Notify user: "無法連接到 GitLab API，請檢查網路連線"
+- Send system notification
+- Wait for user to resolve network issue
+```
+
+**Example 2: Missing Jira Ticket**
+```
+Error: Jira ticket FE-1234 not found or cannot be accessed
+Action:
+- Stop MR creation
+- Notify user: "無法取得 Jira ticket FE-1234 的資訊，請確認：
+  1. Ticket 編號是否正確
+  2. 是否有權限存取該 ticket
+  3. Jira API 連線是否正常"
+- Send system notification
+- Wait for user to resolve issue
+```
+
+**Example 3: Missing User Configuration**
+```
+Error: MR_REVIEWER not set in .env.local
+Action:
+- Stop MR creation
+- Notify user: "未設定 MR_REVIEWER，請在 .env.local 中設定：
+  MR_REVIEWER=@username
+  或使用 --reviewer 參數指定 reviewer"
+- Send system notification
+- Wait for user to add configuration
+```
+
+**Example 4: Missing Label Information**
+```
+Error: Cannot determine UI version label from changed files
+Action:
+- Stop MR creation
+- Notify user: "無法自動判斷 UI 版本標籤，請確認：
+  1. 變更的檔案路徑是否正確
+  2. 檔案是否包含 .v3. 或 .v4. 標記
+  3. 是否需要手動指定標籤"
+- Send system notification
+- Wait for user to resolve or manually specify labels
+```
+
+#### Validation Process Flow
+
+The MR creation process must follow this validation flow:
+
+1. **Pre-validation Phase**:
+   - Check network connectivity
+   - Verify API credentials and permissions
+   - Validate user configuration files
+
+2. **Information Retrieval Phase**:
+   - Retrieve GitLab information
+   - Retrieve Jira ticket information
+   - Determine MR configuration (labels, reviewer, etc.)
+
+3. **Validation Phase**:
+   - Verify all required information is present
+   - Validate information format and correctness
+   - Check for any missing or invalid data
+
+4. **Error Handling Phase** (if validation fails):
+   - Stop process immediately
+   - Provide chat feedback
+   - Send system notification
+   - Wait for user resolution
+
+5. **MR Creation Phase** (only if validation passes):
+   - Proceed with MR creation using validated information
+   - Confirm successful MR creation
+
+### Assignee
+- **MUST**: All new MRs must have the current user set as assignee by default
+- The `create-mr.mjs` script automatically sets the current GitLab user as assignee when creating MRs
+- This ensures proper ownership and tracking of MRs
+
+### Reviewer
+- **Priority Order**: The reviewer selection follows this priority order:
+  1. **Command-line argument** (`--reviewer=@username`): Highest priority, explicitly specified in the command
+  2. **User preference** (`MR_REVIEWER` in `.env.local`): User's preferred reviewer set in environment file
+  3. **Default value** (`@william.chiang`): Fallback if no other option is specified
+- **Setting User Preference**: Users can set their preferred reviewer in `.env.local`:
+  ```
+  MR_REVIEWER=@username
+  ```
+  - Format: GitLab username with or without `@` prefix (e.g., `@william.chiang` or `william.chiang`)
+  - Reference `.env.development` template for the format
+- The `create-mr.mjs` script automatically applies the reviewer based on this priority order
+- **CRITICAL**: When AI automatically executes `cr` command or `create-mr.mjs` script (e.g., in `start-task` workflow), **DO NOT** pass `--reviewer` parameter unless the user explicitly requests it. This allows the script to automatically read from `MR_REVIEWER` environment variable or use the default value `@william.chiang`
+
+### Title
+- **MUST**: MR titles must use the associated Jira ticket title
+- **Format**: `{type}({ticket}): {jiraTitle}`
+  - `{type}`: Commit type (feat, fix, update, refactor, chore, etc.)
+  - `{ticket}`: Jira ticket number (e.g., FE-7838, IN-1234)
+  - `{jiraTitle}`: The title/summary from the Jira ticket
+- **Multiple tickets**: If multiple tickets are associated, use the ticket from the feature branch name as the primary ticket for the title
+- **CRITICAL**: Existing MR titles **MUST NOT** be modified when updating MRs
+  - The `create-mr.mjs` script will not update the title of existing MRs
+  - Only new MRs will use the Jira ticket title format
+
+### Draft Status
+- **MUST**: All new MRs must be created as **Draft** by default
+- Use `--no-draft` flag only when explicitly needed to create a non-draft MR
+- The `create-mr.mjs` script automatically sets MRs as draft unless `--no-draft` is specified
+
+### Target Branch
+- **Default**: Target branch defaults to `main` if not specified
+- **Hotfix Target Branch Automatic Setting**:
+  - **MUST**: When a Jira ticket's fix version meets hotfix conditions (patch version is not 0, e.g., `5.35.1`), the system automatically:
+    1. Adds the `Hotfix` label
+    2. **Automatically sets the target branch to the corresponding release branch** (e.g., fix version `5.35.1` → target branch `release/5.35`)
+  - **Priority**: This automatic setting overrides the default value (`main`), but **does NOT override user-explicitly specified `--target` parameter**
+  - **User Override**: If the user explicitly specifies a different target branch (e.g., `--target=main`), the system will prompt for confirmation because Hotfix MRs should typically be merged into `release/*` branches
+  - **Examples**:
+    - Jira ticket fix version: `5.35.1` → Automatically sets target branch to `release/5.35`
+    - Jira ticket fix version: `5.35.0` → Does not trigger hotfix rule, uses default or user-specified target branch
+    - Jira ticket fix version: `5.35.2` → Automatically sets target branch to `release/5.35`
+  - The `create-mr.mjs` script automatically implements this logic by:
+    1. Checking the Jira ticket's fix version
+    2. Determining if it's a hotfix (patch version ≠ 0)
+    3. Extracting the release branch name from the fix version (e.g., `5.35.1` → `release/5.35`)
+    4. Automatically updating the target branch if hotfix is detected
+
+### Labels
+- **MUST**: MRs must have appropriate UI version labels based on affected files:
+  - **4.0UI**: When changes affect v4 UI only
+  - **3.0UI**: When changes affect v3 UI only
+  - No specific UI label: When changes affect both v3 and v4 UI
+
+The `create-mr.mjs` script automatically analyzes changed files and adds the appropriate labels:
+- Files with `.v4.` or `/v4/` in path → `4.0UI`
+- Files with `.v3.` or `/v3/` in path → `3.0UI`
+- Files in `src/shared/` or `src/utilities/` → Both versions (no specific label)
+- Files with `SystemLayout.International` or `isV4()` → `4.0UI`
+- Files with `SystemLayout.Asia` or `isV3()` → `3.0UI`
+
+### Additional Labels
+- **FE Board**: Automatically added when Jira ticket starts with `FE-`
+- **Static File**: Must be added when changes only include static resource adjustments (files in `assets/` folder)
+- **Vendor Customization**: Must be added when changes only modify specific existing vendor parameters
+
+## Pre-Commit Rebase Requirement
+
+### **CRITICAL**: Rebase to Base Branch Before Commit
+
+**MUST**: Before executing any commit operation, feature branches **MUST** be rebased to their original base branch to ensure the latest changes from the base branch are integrated.
+
+### Determining the Base Branch
+
+The base branch can be determined through the following methods (in priority order):
+
+1. **From start-task Git notes** (if available):
+   - Read `sourceBranch` from the start-task Git notes stored in `refs/notes/start-task`
+   - This is the most reliable method as it records the original base branch when the feature branch was created
+
+2. **Using git merge-base** (fallback method):
+   - Use `git merge-base HEAD {commonBranch}` to find the common ancestor
+   - Try common branches in order: `main`, `develop`, `release/*`
+   - The branch that yields the most recent common ancestor is likely the base branch
+
+3. **Manual confirmation** (if automatic detection fails):
+   - Ask the user to confirm the base branch
+   - Common base branches: `main`, `develop`, `release/5.34`, etc.
+
+### Rebase Process
+
+**CRITICAL**: The rebase process must be executed **before** any commit operation. The complete workflow is:
+
+1. **Stage current changes**:
+   ```bash
+   git add .
+   ```
+
+2. **Stash current changes**:
+   ```bash
+   git stash
+   ```
+
+3. **Pull and rebase from base branch**:
+   ```bash
+   git pull origin {baseBranch} -r
+   ```
+   Where `{baseBranch}` is the determined base branch (e.g., `main`, `release/5.34`)
+
+4. **Restore stashed changes**:
+   ```bash
+   git stash pop
+   ```
+
+5. **Check for conflicts**:
+   - If no conflicts occur, proceed with the normal commit and subsequent processes
+   - If conflicts occur, follow the conflict resolution process below
+
+### Conflict Resolution Process
+
+**If conflicts occur after `git stash pop`:**
+
+1. **Immediately stop the commit process**
+2. **Notify the user** that conflicts need to be resolved
+3. **Wait for user confirmation** that conflicts have been resolved
+4. **After user confirms resolution**, perform impact analysis:
+   - Check if user's changes affect existing functionality in the base branch
+   - Check if user's changes affect local feature branch functionality
+   - If either impact is detected, **warn the user** and require explicit confirmation
+5. **Only proceed with commit** after:
+   - All conflicts are resolved
+   - Impact analysis is complete
+   - User has confirmed (or acknowledged warnings) that functionality is not affected
+
+### Examples
+
+**Example 1: Feature branch from main**
+```
+Branch: feature/IN-1234
+Base branch: main
+
+Process:
+1. git add .
+2. git stash
+3. git pull origin main -r
+4. git stash pop
+5. If no conflicts → continue with commit
+```
+
+**Example 2: Feature branch from release branch**
+```
+Branch: feature/IN-4567
+Base branch: release/5.34
+
+Process:
+1. git add .
+2. git stash
+3. git pull origin release/5.34 -r
+4. git stash pop
+5. If conflicts → wait for user resolution → check impact → continue
+```
+
+### Integration with Commit Workflows
+
+This rebase requirement applies to **all commit-related commands**, including:
+- `cr` command
+- `cr-single-ticket` command
+- `commit-and-push` command
+- Any other command that triggers a commit operation
+
+**Execution order:**
+1. Check Git status
+2. **Rebase to base branch** (this new requirement)
+3. Check Cursor rules
+4. Execute commit
+5. Continue with subsequent processes (push, MR creation, etc.)
+
+## Usage
+
+### Creating Commits
+Use the `agent-commit` script to ensure compliance:
+```bash
+pnpm run agent-commit --type=feat --ticket=FE-7838 --message="enable new sport baseball"
+```
+
+**Note**: The rebase process should be executed **before** running `agent-commit` or any commit command.
+
+### Creating MRs
+Use the `create-mr` script which automatically:
+- Sets MR as draft
+- Analyzes files and adds appropriate UI labels
+- Adds FE Board label if applicable
+
+```bash
+pnpm run create-mr --reviewer="@william.chiang"
+```
+
+## Enforcement
+
+- Commit message validation is enforced by:
+  - `commitlint` via husky `commit-msg` hook
+  - Custom rules: `subject-english-only` and `body-english-only`
+  
+- MR draft status and labels are enforced by:
+  - `create-mr.mjs` script default behavior
+  - Automatic file analysis for UI version detection
+
+## Rule Change Compliance Check
+
+**CRITICAL**: Whenever this rule file (`.cursor/rules/commit-and-mr-guidelines.mdc`) is modified, **MUST** check and update all related implementation scripts and command files to ensure they comply with the updated rules.
+
+### Required Actions After Rule Changes
+
+When any changes are made to this rule file, the following actions **MUST** be performed:
+
+1. **Identify Related Files**:
+   - All commit-related command files in `.cursor/commands/`:
+     - `cr.md`
+     - `cr-single-ticket.md`
+     - `commit-and-push.md`
+     - `auto-commit-and-mr.md`
+   - All commit-related scripts in `scripts/`:
+     - `agent-commit.mjs`
+     - `create-mr.mjs`
+     - `auto-commit-and-mr.mjs`
+
+2. **Review Each File**:
+   - Check if the implementation matches the updated rules
+   - Verify that all required steps are documented and implemented
+   - Ensure error handling follows the specified protocols
+   - Confirm that validation checks are in place
+
+3. **Update Implementation**:
+   - Update command files to reflect new requirements
+   - Modify scripts to implement new validation or workflow steps
+   - Add missing error handling or user feedback mechanisms
+   - Ensure consistency across all related files
+
+4. **Document Changes**:
+   - Update command documentation to reflect rule changes
+   - Add examples if new workflows are introduced
+   - Update error messages to match new requirements
+
+### Key Areas to Check
+
+When reviewing related files, pay special attention to:
+
+1. **Pre-Commit Rebase Requirement**:
+   - Verify that rebase steps are documented in command files
+   - Ensure rebase logic is executed before commit operations
+   - Check conflict resolution handling
+
+2. **Information Validation Before MR Creation**:
+   - Verify that all required information is validated before MR creation
+   - Ensure error handling provides chat feedback and system notifications
+   - Check that the process stops when information is missing
+
+3. **Code Modification Restrictions**:
+   - Verify that AI behavior follows the consent protocol
+   - Ensure no automatic code modifications without user consent
+   - Check that user feedback is provided for detected issues
+
+4. **Execution Order**:
+   - Verify that the execution order matches the specified workflow:
+     1. Check Git status
+     2. Rebase to base branch
+     3. Check Cursor rules
+     4. Execute commit
+     5. Continue with subsequent processes (push, MR creation, etc.)
+
+### Compliance Checklist
+
+After making rule changes, use this checklist:
+
+- [ ] All command files (`.cursor/commands/*.md`) reviewed and updated
+- [ ] All scripts (`scripts/*.mjs`) reviewed and updated
+- [ ] Execution order matches the specified workflow
+- [ ] Error handling follows the specified protocols
+- [ ] User feedback mechanisms are in place
+- [ ] Validation checks are implemented
+- [ ] Examples and documentation are updated
+- [ ] All changes are tested and verified

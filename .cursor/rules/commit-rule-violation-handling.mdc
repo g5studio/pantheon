@@ -1,0 +1,313 @@
+# Commit 時 Cursor Rules 違規處理規則
+
+## 目的
+
+此規則定義了在 commit 流程中，當檢測到代碼違反 Cursor rules 時的處理方式。**核心原則：不自動修改代碼，而是提供建議讓用戶選擇性套用。**
+
+**重要**：此規則必須與 [ai-decision-making-priorities.mdc](mdc:.cursor/rules/ai-decision-making-priorities.mdc) 規則一起遵守。當需要修改代碼時，必須遵循「先詢問再修改」的最高優先級原則。
+
+## 適用場景
+
+此規則適用於所有 commit 相關的指令，包括：
+- `cr` 指令
+- `cr-single-ticket` 指令
+- `commit-and-push` 指令
+- 其他任何觸發 commit 流程的指令
+
+## 處理流程
+
+### 1. 檢查階段（在執行 commit 之前）
+
+AI 必須在執行 commit 之前檢查所有變更的檔案，確認是否符合 Cursor rules：
+
+**檢查範圍：**
+- 是否符合架構規範（參考 `architecture-overview.mdc`）
+- State management 是否正確（Provider 不應有 side effects、API calls 等）
+- 組件命名和結構是否符合規範
+- 是否有其他 Cursor rules 違規
+
+### 2. 違規檢測處理
+
+**CRITICAL：當檢測到違規時，必須遵循以下流程：**
+
+#### 2.1. 立即停止 Commit 流程
+
+- **不要執行 commit 操作**
+- **不要自動修改任何代碼**
+- **不要調用任何自動修復腳本**
+
+#### 2.2. 在 Chat 中列出所有違規和建議
+
+AI 必須在 chat 中清晰列出：
+
+1. **違規摘要**：
+   - 總共發現多少個違規
+   - 涉及哪些檔案
+   - 違反了哪些規則
+
+2. **詳細違規列表**：
+   對於每個違規，提供以下信息：
+   - **違規編號**（例如：違規 #1, 違規 #2）
+   - **檔案路徑**和**行號範圍**
+   - **違反的規則名稱**（例如：architecture-overview.mdc - Provider 不應有 side effects）
+   - **違規描述**（簡潔說明問題）
+   - **建議的修正方案**（具體說明如何修正）
+   - **修正後的代碼示例**（使用 code reference 格式顯示）
+
+3. **每個改動提供 Apply 按鈕**：
+   - 每個違規對應一個獨立的修正建議
+   - 每個修正建議必須提供一個 **Apply** 按鈕
+   - Apply 按鈕應該使用 Cursor 的標準格式，讓用戶可以點擊套用
+
+#### 2.3. 格式化輸出範例
+
+```
+# Cursor Rules 檢查結果
+
+## 摘要
+發現 3 個違規，涉及 2 個檔案：
+- `src/modules/user/components/UserProfileCard/index.tsx`
+- `src/modules/user/context/user-context.tsx`
+
+---
+
+## 違規 #1: Provider 中包含 API 調用
+
+**檔案**: `src/modules/user/context/user-context.tsx`
+**行號**: 23-45
+**違反規則**: architecture-overview.mdc - Provider 不應有 side effects
+
+**問題描述**:
+Provider 組件中直接調用了 `createCustomizeQuery`，這違反了架構規範。Provider 應該只負責提供狀態和純函數，不應包含 API 調用。
+
+**當前代碼**:
+```23:45:src/modules/user/context/user-context.tsx
+export const UserContextProvider = (props) => {
+  const userQuery = createCustomizeQuery({
+    // ... API 調用
+  });
+  // ...
+};
+```
+
+**建議修正**:
+將 API 調用移到 Controller 組件中，Provider 只提供狀態和更新函數。
+
+**修正後的代碼**:
+```typescript
+// Provider 中只提供狀態
+export const UserContextProvider = (props) => {
+  const [userState, setUserState] = createStore({});
+  
+  return (
+    <UserContext.Provider value={{ userState, setUserState }}>
+      {props.children}
+    </UserContext.Provider>
+  );
+};
+
+// Controller 中處理 API 調用
+export const UserController = () => {
+  const { setUserState } = useUserContext();
+  const userQuery = createCustomizeQuery({
+    // ... API 調用
+  });
+  // ...
+  return <></>;
+};
+```
+
+[Apply 修正 #1]
+
+---
+
+## 違規 #2: 組件命名不符合規範
+
+**檔案**: `src/modules/user/components/UserProfileCard/index.tsx`
+**行號**: 1-10
+**違反規則**: component-structure.mdc - 組件命名規範
+
+**問題描述**:
+組件使用了 `useState` 而不是 SolidJS 的 `createSignal`。
+
+**當前代碼**:
+```1:10:src/modules/user/components/UserProfileCard/index.tsx
+import { useState } from 'react';
+
+export const UserProfileCard = () => {
+  const [count, setCount] = useState(0);
+  // ...
+};
+```
+
+**建議修正**:
+使用 SolidJS 的 `createSignal` 替代 React 的 `useState`。
+
+**修正後的代碼**:
+```typescript
+import { createSignal } from 'solid-js';
+
+export const UserProfileCard = () => {
+  const [count, setCount] = createSignal(0);
+  // ...
+};
+```
+
+[Apply 修正 #2]
+
+---
+
+## 違規 #3: 缺少資源清理
+
+**檔案**: `src/modules/user/components/UserProfileCard/index.tsx`
+**行號**: 45-60
+**違反規則**: code-review-guidelines.mdc - 資源清理
+
+**問題描述**:
+組件中設置了事件監聽器但沒有在組件卸載時清理。
+
+**當前代碼**:
+```45:60:src/modules/user/components/UserProfileCard/index.tsx
+createEffect(() => {
+  window.addEventListener('resize', handleResize);
+  // 缺少 onCleanup
+});
+```
+
+**建議修正**:
+使用 `onCleanup` 在組件卸載時清理事件監聽器。
+
+**修正後的代碼**:
+```typescript
+createEffect(() => {
+  window.addEventListener('resize', handleResize);
+  onCleanup(() => {
+    window.removeEventListener('resize', handleResize);
+  });
+});
+```
+
+[Apply 修正 #3]
+
+---
+
+## 下一步
+
+請選擇要套用的修正：
+1. 點擊上方的 [Apply 修正 #X] 按鈕套用個別修正
+2. 或告訴我「套用所有修正」來一次性套用所有建議
+3. 套用完成後，告訴我「繼續 commit」以繼續原有的 commit 流程
+
+**注意**: 在修正完成之前，commit 流程將保持暫停狀態。
+```
+
+#### 2.4. Apply 按鈕的實現
+
+當用戶點擊 Apply 按鈕時：
+
+1. **執行對應的修正**：
+   - 使用 `search_replace` 或 `read_file` + `write` 工具套用修正
+   - 只修改對應的檔案和行號範圍
+   - 確保修正後的代碼符合建議
+
+2. **更新違規列表**：
+   - 標記該違規為「已修正」
+   - 更新摘要中的違規數量
+   - 如果所有違規都已修正，提示用戶可以繼續 commit
+
+3. **提供繼續選項**：
+   - 如果還有未修正的違規，繼續顯示其他違規
+   - 如果所有違規都已修正，提示用戶可以繼續 commit 流程
+
+#### 2.5. 繼續 Commit 流程
+
+當用戶完成所有修正（或選擇跳過某些修正）後：
+
+1. **重新檢查**（可選但建議）：
+   - 可以選擇性地重新檢查已修正的檔案
+   - 確認修正是否正確
+
+2. **繼續原有流程**：
+   - 恢復執行 commit 流程
+   - 繼續執行步驟 5（執行 Commit 流程）及後續步驟
+   - 不要重複執行已經完成的步驟（如 Git 狀態檢查、commit 信息推斷等）
+
+### 3. 系統通知處理
+
+**檢查 `--no-notify` 參數**：
+- 如果用戶提供了 `--no-notify` 參數，**不發送系統通知**
+- 如果未設置 `--no-notify`，可以選擇性地發送通知，但**不應強制切換視窗**，因為用戶需要在 chat 中處理違規
+
+**通知內容**（如果啟用）：
+- 標題：「Cursor Rules 檢查發現違規」
+- 內容：「在 chat 中查看詳細違規列表和修正建議」
+- **不要自動切換視窗**，讓用戶在 chat 中自行處理
+
+### 4. 用戶選擇性套用
+
+**重要原則**：
+- **用戶可以選擇套用部分修正**，不需要套用所有修正
+- **用戶可以選擇跳過某些修正**（但應該提醒可能影響代碼質量）
+- **用戶可以選擇「套用所有修正」**來一次性套用所有建議
+- **用戶可以選擇「繼續 commit」**（即使還有未修正的違規，但應該警告）
+
+### 5. 批量套用選項
+
+當有多個違規時，AI 應該提供：
+
+1. **「套用所有修正」選項**：
+   - 一次性套用所有建議的修正
+   - 按順序執行每個修正
+   - 套用完成後顯示摘要
+
+2. **「跳過並繼續」選項**（不建議但允許）：
+   - 如果用戶明確要求，可以跳過修正直接繼續 commit
+   - 但應該明確警告可能帶來的風險
+
+## 與現有流程的整合
+
+此規則**替換** `.cursor/commands/auto-commit-and-mr.md` 中步驟 4.5 的處理方式：
+
+**舊流程（已廢棄）**：
+- 檢測到違規 → 發送通知 → 停止流程 → 要求用戶手動修正
+
+**新流程（當前）**：
+- 檢測到違規 → 在 chat 中列出所有違規和修正建議 → 用戶選擇套用 → 繼續 commit 流程
+
+## 範例對話流程
+
+```
+用戶: cr
+
+AI: 正在檢查 Cursor rules...
+
+AI: # Cursor Rules 檢查結果
+
+發現 2 個違規...
+
+[顯示違規列表和 Apply 按鈕]
+
+用戶: [點擊 Apply 修正 #1]
+
+AI: ✅ 已套用修正 #1
+    修正檔案: src/modules/user/context/user-context.tsx
+
+用戶: 套用所有修正
+
+AI: ✅ 已套用修正 #2
+    修正檔案: src/modules/user/components/UserProfileCard/index.tsx
+
+    ✅ 所有修正已完成！
+
+    繼續執行 commit 流程...
+
+AI: [繼續執行原有的 commit 流程]
+```
+
+## 注意事項
+
+1. **不要自動修改代碼**：這是核心原則，必須嚴格遵守
+2. **提供清晰的修正建議**：每個修正應該有明確的說明和代碼示例
+3. **保持流程連貫性**：修正完成後，應該無縫繼續原有的 commit 流程
+4. **尊重用戶選擇**：用戶可以選擇套用部分修正或跳過某些修正
+5. **提供上下文**：使用 code reference 格式顯示當前代碼，讓用戶清楚了解問題所在

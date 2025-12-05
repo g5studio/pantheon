@@ -1,0 +1,130 @@
+---
+description: 當用戶提供 Confluence 或 Jira 鏈接時，自動使用腳本讀取內容
+globs:
+alwaysApply: true
+---
+
+# 自動讀取 Confluence 和 Jira 內容規則
+
+此規則定義了當用戶在 chat 中提供 Confluence 或 Jira 鏈接時，AI 應該自動使用對應的腳本讀取內容。
+
+## 適用場景
+
+當用戶在 chat 中提供以下類型的鏈接時，AI 應該自動讀取內容：
+
+1. **Confluence 頁面鏈接**：
+   - 格式：`https://innotech.atlassian.net/wiki/spaces/{spaceKey}/pages/{pageId}/...`
+   - 範例：`https://innotech.atlassian.net/wiki/spaces/Frontend/pages/4078010378/Agent+Operator+Guideline`
+
+2. **Jira ticket 鏈接或 ID**：
+   - URL 格式：`https://innotech.atlassian.net/browse/{ticket}`
+   - 直接 ID 格式：`FE-1234`、`IN-5678` 等
+   - 範例：`https://innotech.atlassian.net/browse/FE-1234` 或 `FE-1234`
+
+## 核心原則
+
+**CRITICAL**: 當用戶在 chat 中提供 Confluence 或 Jira 鏈接時，AI **必須**：
+
+1. **自動偵測鏈接**：識別聊天內容中的 Confluence 或 Jira 鏈接
+2. **自動執行腳本**：使用對應的腳本讀取內容
+3. **整合到上下文**：將讀取的內容整合到對話上下文中，用於後續的任務執行
+
+## 執行流程
+
+### 1. 偵測鏈接
+
+AI 應該自動偵測用戶消息中的鏈接：
+
+- **Confluence 鏈接模式**：`https://innotech.atlassian.net/wiki/spaces/`
+- **Jira 鏈接模式**：`https://innotech.atlassian.net/browse/` 或 ticket ID 格式 `[A-Z0-9]+-\d+`
+
+### 2. 執行對應腳本
+
+#### 對於 Confluence 鏈接：
+
+```bash
+node .cursor/scripts/read-confluence-page.mjs "<confluence-url>"
+```
+
+#### 對於 Jira ticket：
+
+```bash
+node .cursor/scripts/read-jira-ticket.mjs "<ticket-id-or-url>"
+```
+
+### 3. 處理結果
+
+- 如果腳本執行成功，將讀取的內容整合到對話上下文中
+- 如果腳本執行失敗（如配置缺失、權限問題等），在 chat 中告知用戶並提供解決方案
+- 讀取的內容應該用於：
+  - 理解任務需求
+  - 參考文件內容執行任務
+  - 回答用戶問題
+
+## 範例
+
+### 範例 1: 用戶提供 Confluence 鏈接
+
+```
+用戶: "請參考這個文件：https://innotech.atlassian.net/wiki/spaces/Frontend/pages/4078010378/Agent+Operator+Guideline"
+
+AI 應該：
+1. 偵測到 Confluence 鏈接
+2. 執行: node .cursor/scripts/read-confluence-page.mjs "https://innotech.atlassian.net/wiki/spaces/Frontend/pages/4078010378/Agent+Operator+Guideline"
+3. 讀取內容並整合到上下文
+4. 根據文件內容執行後續任務
+```
+
+### 範例 2: 用戶提供 Jira ticket
+
+```
+用戶: "請查看 FE-1234 這個 ticket"
+
+AI 應該：
+1. 偵測到 Jira ticket ID
+2. 執行: node .cursor/scripts/read-jira-ticket.mjs "FE-1234"
+3. 讀取 ticket 內容並整合到上下文
+4. 根據 ticket 內容執行後續任務
+```
+
+### 範例 3: 用戶提供 Jira URL
+
+```
+用戶: "請參考 https://innotech.atlassian.net/browse/IN-5678"
+
+AI 應該：
+1. 偵測到 Jira URL
+2. 執行: node .cursor/scripts/read-jira-ticket.mjs "https://innotech.atlassian.net/browse/IN-5678"
+3. 讀取 ticket 內容並整合到上下文
+```
+
+## 錯誤處理
+
+### 配置缺失
+
+如果 Jira 配置缺失（`.env.local` 中沒有 `JIRA_EMAIL` 或 `JIRA_API_TOKEN`），腳本會輸出錯誤信息。AI 應該：
+
+1. 在 chat 中告知用戶配置缺失
+2. 提供設置配置的指導
+3. 建議用戶設置後重新執行
+
+### 權限問題
+
+如果 API token 已過期或無權限，AI 應該：
+
+1. 在 chat 中告知用戶權限問題
+2. 建議聯繫 william.chiang 或重新生成 token
+
+### 頁面/Ticket 不存在
+
+如果指定的頁面或 ticket 不存在，AI 應該：
+
+1. 在 chat 中告知用戶找不到指定的內容
+2. 請用戶確認鏈接或 ticket ID 是否正確
+
+## 注意事項
+
+1. **自動執行**：此規則要求 AI 自動執行，無需用戶明確要求
+2. **上下文整合**：讀取的內容應該整合到對話上下文中，用於後續任務
+3. **錯誤處理**：如果讀取失敗，應該在 chat 中提供清晰的錯誤信息和解決方案
+4. **配置檢查**：在執行腳本前，可以檢查配置是否存在，如果不存在可以提前告知用戶
