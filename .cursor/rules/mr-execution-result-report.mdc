@@ -1,7 +1,5 @@
 ---
-description: 在建立 MR 後需要在 chat 中提供執行結果的規則
-globs:
-alwaysApply: false
+alwaysApply: true
 ---
 # MR 執行結果報告規則
 

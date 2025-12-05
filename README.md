@@ -1,93 +1,45 @@
-# pantheon
+# Pantheon
 
+## 專案宗旨
 
+Pantheon 專案旨在規範開發流程中所有 Agent Operator 的行為與標準作業程序（SOP）。此專案作為 Agent Operator 的核心規範庫，提供標準化的開發守則、腳本與命令，以便快速部署到其他專案中。
 
-## Getting started
+在 AI 大規模協作時代下，我們建立了一套由人類決策者與多個 AI Agent 組成的分層式開發工法。此專案確保所有 Agent Operator 在執行開發任務時，能夠遵循一致的規範與流程，從而提升開發效率與程式碼品質。
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## 核心目標
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+- **標準化 Agent 行為**：制定統一的開發守則與作業規範，確保所有 Agent Operator 遵循相同的標準
+- **快速部署能力**：提供可重用的腳本與命令，讓 Agent Operator 能夠快速部署到不同專案
+- **流程規範化**：從開發策略到 MR 程序的完整標準化流程
+- **品質保證**：透過規範化的流程確保程式碼品質與一致性
 
-## Add your files
+## 相關資源
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+### 開發規範文件
 
-```
-cd existing_repo
-git remote add origin https://gitlab.service-hub.tech/frontend/pantheon.git
-git branch -M main
-git push -uf origin main
-```
+- **[Agent Operator Guideline](https://innotech.atlassian.net/wiki/spaces/Frontend/pages/4078010378/Agent+Operator+Guideline)**：詳細說明新時代多層級 AI 協作開發模式，包含 Commander、Pilot、Operator、Master Controller、Reviewer、Admin 等角色的職責與工作流程
 
-## Integrate with your tools
+### 相關 Jira Tickets
 
-- [ ] [Set up project integrations](https://gitlab.service-hub.tech/frontend/pantheon/-/settings/integrations)
+- **[FE-7892](https://innotech.atlassian.net/browse/FE-7892)**：[AI] 抽出基礎 agent operator script & command 以便快速部署到其他專案
+- **[FE-7893](https://innotech.atlassian.net/browse/FE-7893)**：[AI] 制定 agent operator 作業規範與開發守則
 
-## Collaborate with your team
+## 專案結構
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+本專案包含以下核心組件：
 
-## Test and Deploy
+- **開發守則**：定義 Agent Operator 在開發過程中的行為規範
+- **代碼提交守則**：規範 commit 與 MR 建立的標準流程
+- **腳本與命令**：可重用的工具腳本，支援快速部署到其他專案
+- **規範文件**：完整的 SOP 文件，供 Agent Master Controller 作為檢視標準
 
-Use the built-in continuous integration in GitLab.
+## 開發模式
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+本專案遵循「新時代多層級 AI 協作開發模式」，將開發流程拆分為六大關卡：
 
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+1. **任務規劃**：Commander 解讀需求並產出任務簡報
+2. **計畫推導**：Pilot 轉化任務簡報為執行計畫
+3. **自主開發**：Operator 依照執行計畫完成實質開發
+4. **稽核**：Master Controller 檢查開發流程是否符合規範
+5. **審核**：Code Reviewer 審核程式碼品質與風險
+6. **管控**：Admin 監控整體流程運作
