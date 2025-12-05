@@ -1,3 +1,7 @@
+---
+alwaysApply: true
+---
+
 # Commit and MR Guidelines
 
 This rule defines the requirements for commit messages and merge requests in this project.
