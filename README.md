@@ -33,6 +33,45 @@ Pantheon 專案旨在規範開發流程中所有 Agent Operator 的行為與標�
 - **腳本與命令**：可重用的工具腳本，支援快速部署到其他專案
 - **規範文件**：完整的 SOP 文件，供 Agent Master Controller 作為檢視標準
 
+## Submodule 使用說明
+
+Pantheon 專案設計為可以作為 **git submodule** 掛載到其他專案中，並透過 **symbolic link** 進行同步。
+
+### 掛載後的路徑結構
+
+當 Pantheon 掛載到目標專案時，所有檔案會位於 `.pantheon/` 資料夾下：
+
+```
+目標專案/
+├── .pantheon/                    # Pantheon submodule 掛載點
+│   └── .cursor/
+│       ├── commands/             # 命令檔案
+│       ├── rules/                # 規則檔案
+│       ├── scripts/              # 腳本檔案
+│       └── version.json          # 版本資訊
+├── .cursor/                      # 專案自有的 Cursor 設定（可選）
+└── ...
+```
+
+### 路徑對應範例
+
+| Pantheon 內部路徑 | 掛載後實際路徑 |
+|---|---|
+| `.cursor/scripts/cr/agent-commit.mjs` | `.pantheon/.cursor/scripts/cr/agent-commit.mjs` |
+| `.cursor/scripts/notification/notify-cursor-rules-failed.mjs` | `.pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs` |
+| `.cursor/rules/*.mdc` | `.pantheon/.cursor/rules/*.mdc` |
+| `.cursor/commands/*.md` | `.pantheon/.cursor/commands/*.md` |
+
+### AI 執行腳本注意事項
+
+**重要**：當 AI 在目標專案中執行 Pantheon 提供的腳本時，必須使用正確的路徑：
+
+1. **先檢查 `.pantheon/` 資料夾是否存在**
+2. 如果存在，使用 `.pantheon/.cursor/scripts/...` 路徑
+3. 如果不存在（在 Pantheon 專案本身），使用 `.cursor/scripts/...` 路徑
+
+詳細的路徑規則請參考：`.cursor/rules/submodule-path-guideline.mdc`
+
 ## 開發模式
 
 本專案遵循「新時代多層級 AI 協作開發模式」，將開發流程拆分為六大關卡：
