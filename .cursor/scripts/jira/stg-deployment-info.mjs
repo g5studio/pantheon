@@ -93,7 +93,7 @@ async function getFilterJql(filterId, auth) {
 
 // 使用 JQL 搜尋 issues
 async function searchIssues(jql, auth, maxResults = 1000) {
-  const searchUrl = `${BASE_URL}/rest/api/3/search`;
+  const searchUrl = `${BASE_URL}/rest/api/3/search/jql`;
 
   const response = await fetch(searchUrl, {
     method: "POST",
