@@ -1,6 +1,5 @@
 ---
 description: 當用戶提供 Confluence 或 Jira 鏈接時，自動使用腳本讀取內容
-globs:
 alwaysApply: true
 ---
 
@@ -43,13 +42,13 @@ AI 應該自動偵測用戶消息中的鏈接：
 #### 對於 Confluence 鏈接：
 
 ```bash
-node .cursor/scripts/read-confluence-page.mjs "<confluence-url>"
+node .cursor/scripts/jira/read-confluence-page.mjs "<confluence-url>"
 ```
 
 #### 對於 Jira ticket：
 
 ```bash
-node .cursor/scripts/read-jira-ticket.mjs "<ticket-id-or-url>"
+node .cursor/scripts/jira/read-jira-ticket.mjs "<ticket-id-or-url>"
 ```
 
 ### 3. 處理結果
@@ -70,7 +69,7 @@ node .cursor/scripts/read-jira-ticket.mjs "<ticket-id-or-url>"
 
 AI 應該：
 1. 偵測到 Confluence 鏈接
-2. 執行: node .cursor/scripts/read-confluence-page.mjs "https://innotech.atlassian.net/wiki/spaces/Frontend/pages/4078010378/Agent+Operator+Guideline"
+2. 執行: node .cursor/scripts/jira/read-confluence-page.mjs "https://innotech.atlassian.net/wiki/spaces/Frontend/pages/4078010378/Agent+Operator+Guideline"
 3. 讀取內容並整合到上下文
 4. 根據文件內容執行後續任務
 ```
@@ -82,7 +81,7 @@ AI 應該：
 
 AI 應該：
 1. 偵測到 Jira ticket ID
-2. 執行: node .cursor/scripts/read-jira-ticket.mjs "FE-1234"
+2. 執行: node .cursor/scripts/jira/read-jira-ticket.mjs "FE-1234"
 3. 讀取 ticket 內容並整合到上下文
 4. 根據 ticket 內容執行後續任務
 ```
@@ -94,7 +93,7 @@ AI 應該：
 
 AI 應該：
 1. 偵測到 Jira URL
-2. 執行: node .cursor/scripts/read-jira-ticket.mjs "https://innotech.atlassian.net/browse/IN-5678"
+2. 執行: node .cursor/scripts/jira/read-jira-ticket.mjs "https://innotech.atlassian.net/browse/IN-5678"
 3. 讀取 ticket 內容並整合到上下文
 ```
 

@@ -9,12 +9,12 @@ import { execSync, spawnSync } from 'child_process';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { notifyCursorRulesFailed } from './notify-cursor-rules-failed.mjs';
+import { notifyCursorRulesFailed } from '../notification/notify-cursor-rules-failed.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-// 腳本在 .cursor/scripts/，需要往上兩層到項目根目錄
-const projectRoot = join(__dirname, '../..');
+// 腳本在 .cursor/scripts/cr/，需要往上三層到項目根目錄
+const projectRoot = join(__dirname, '../../..');
 
 function exec(command, options = {}) {
   try {

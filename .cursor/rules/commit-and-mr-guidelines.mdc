@@ -29,6 +29,7 @@ Where:
   - Must be lowercase
   - Maximum 64 characters
   - Must be in English only
+  - **MUST** accurately describe the purpose of the current changes (必須準確描述當前改動的目的)
 - **body**: Optional, but if provided must be in English only
 
 ### Examples
@@ -174,8 +175,8 @@ Action:
 
 This restriction applies to **all commit-related commands and workflows**, including:
 
-- `cr` command
-- `cr-single-ticket` command
+- `cr single-ticket` command
+- `cr multiple-ticket` command
 - `commit-and-push` command
 - `agent-commit` script
 - Any automated commit workflow
@@ -204,6 +205,48 @@ These are considered explicit consent, and fixes can proceed. However, still:
 - Never push without user confirmation
 
 ## Merge Request Requirements
+
+### Pre-MR Push Requirement
+
+**CRITICAL**: Before creating any MR, all committed changes **MUST** be pushed to the remote repository.
+
+**Validation Steps**:
+1. **Check for unpushed commits**:
+   ```bash
+   git log origin/{branch}..HEAD
+   ```
+2. **If unpushed commits exist**, push them first:
+   ```bash
+   git push origin {branch}
+   ```
+3. **Only proceed with MR creation** after all commits are successfully pushed
+
+**Error Handling**:
+- If push fails (due to permission, network, or other issues), **MUST** stop the MR creation process
+- Notify the user with the specific error and suggested resolution
+- Wait for user to resolve the push issue before retrying
+
+### Development Plan Ticket Validation
+
+**CRITICAL**: Before creating an MR, if a development plan exists for the current task, **MUST** validate that the ticket number in the development plan matches the current feature branch ticket number.
+
+**Validation Steps**:
+1. **Check for existing development plan** (from start-task notes or context)
+2. **Extract ticket number from feature branch name** (e.g., `feature/FE-7893` → `FE-7893`)
+3. **Compare ticket numbers**:
+   - If they match → Proceed with MR creation
+   - If they don't match → **MUST** stop and notify the user
+
+**Error Handling**:
+- If ticket numbers mismatch, notify the user:
+  ```
+  開發計畫單號與當前 feature branch 單號不一致：
+  - 開發計畫單號: {planTicket}
+  - Feature branch 單號: {branchTicket}
+  
+  請確認是否需要更新開發計畫或切換到正確的分支。
+  ```
+- Wait for user confirmation before proceeding
 
 ### Information Validation Before MR Creation
 
@@ -350,7 +393,7 @@ The MR creation process must follow this validation flow:
   - Format: GitLab username with or without `@` prefix (e.g., `@william.chiang` or `william.chiang`)
   - Reference `.env.development` template for the format
 - The `create-mr.mjs` script automatically applies the reviewer based on this priority order
-- **CRITICAL**: When AI automatically executes `cr` command or `create-mr.mjs` script (e.g., in `start-task` workflow), **DO NOT** pass `--reviewer` parameter unless the user explicitly requests it. This allows the script to automatically read from `MR_REVIEWER` environment variable or use the default value `@william.chiang`
+- **CRITICAL**: When AI automatically executes `cr single-ticket` / `cr multiple-ticket` command or `create-mr.mjs` script (e.g., in `start-task` workflow), **DO NOT** pass `--reviewer` parameter unless the user explicitly requests it. This allows the script to automatically read from `MR_REVIEWER` environment variable or use the default value `@william.chiang`
 
 ### Title
 - **MUST**: MR titles must use the associated Jira ticket title
@@ -392,6 +435,12 @@ The MR creation process must follow this validation flow:
   - **3.0UI**: When changes affect v3 UI only
   - No specific UI label: When changes affect both v3 and v4 UI
 
+**CRITICAL**: Label determination **MUST** be based on the **comprehensive analysis of ALL change history**, not just the latest commit. This means:
+- Analyze ALL commits in the MR (from base branch to HEAD)
+- Consider the **final cumulative result** of all file changes
+- If a file was added then deleted, it should NOT affect the label
+- The label should reflect the **net effect** of all changes combined
+
 The `create-mr.mjs` script automatically analyzes changed files and adds the appropriate labels:
 - Files with `.v4.` or `/v4/` in path → `4.0UI`
 - Files with `.v3.` or `/v3/` in path → `3.0UI`
@@ -403,6 +452,23 @@ The `create-mr.mjs` script automatically analyzes changed files and adds the app
 - **FE Board**: Automatically added when Jira ticket starts with `FE-`
 - **Static File**: Must be added when changes only include static resource adjustments (files in `assets/` folder)
 - **Vendor Customization**: Must be added when changes only modify specific existing vendor parameters
+
+### MR Creation Success Notification
+
+**CRITICAL**: After an MR is successfully created, **MUST** provide a comprehensive execution result report to the user in the chat.
+
+**Required Information**:
+1. **Commit Information**: Type, Ticket (with hyperlink), Message, Commit Hash
+2. **Merge Request Information**: MR Link (with hyperlink), MR ID, Title, Status, Reviewer, Labels, Associated Jira (with hyperlink), AI Review status
+3. **Changed Content**: List of added, updated, and reverted files with brief descriptions
+
+**Format Reference**: Follow the standardized format defined in [mr-execution-result-report.mdc](mdc:.cursor/rules/mr-execution-result-report.mdc)
+
+**Key Requirements**:
+- All Jira ticket links must be clickable hyperlinks: `[TICKET](https://innotech.atlassian.net/browse/TICKET)`
+- All MR links must be clickable hyperlinks: `[MR !ID](URL)`
+- Report language must match user's preferred language (Chinese or English)
+- Report must be provided immediately after successful MR creation
 
 ## Pre-Commit Rebase Requirement
 
@@ -503,8 +569,8 @@ Process:
 ### Integration with Commit Workflows
 
 This rebase requirement applies to **all commit-related commands**, including:
-- `cr` command
-- `cr-single-ticket` command
+- `cr single-ticket` command
+- `cr multiple-ticket` command
 - `commit-and-push` command
 - Any other command that triggers a commit operation
 
@@ -555,8 +621,8 @@ When any changes are made to this rule file, the following actions **MUST** be p
 
 1. **Identify Related Files**:
    - All commit-related command files in `.cursor/commands/`:
-     - `cr.md`
-     - `cr-single-ticket.md`
+     - `cr/single-ticket.md`
+     - `cr/multiple-ticket.md`
      - `commit-and-push.md`
      - `auto-commit-and-mr.md`
    - All commit-related scripts in `scripts/`:

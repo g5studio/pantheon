@@ -4,14 +4,33 @@ description: 自動執行 commit 和建立 MR 的完整流程
 
 ## 簡化指令
 
-**`cr`** - 快速執行 commit 並建立 MR 的完整流程（推薦使用）
+**`cr multiple-ticket`** - 快速執行 commit 並建立 MR，**必須**提供多於一個 Jira ticket（強制包含送審）
 
-當用戶輸入 `cr` 時，自動執行以下完整流程：
+**CRITICAL**: `cr multiple-ticket` 指令**必須**提供多於一個 Jira ticket（當前分支單號 + 至少一個關聯單號）。如果只有一個 ticket，請使用 `cr single-ticket` 指令。
+
+當用戶輸入 `cr multiple-ticket` 時，自動執行以下完整流程：
 1. 檢查 Git 狀態
-2. 從上下文推斷 commit 信息（type, ticket, message）
-3. 執行 commit 並推送到遠端
-4. 自動建立 MR（包含 FE Board label、reviewer、draft 狀態、delete source branch）
-5. **自動提交 AI review**（`cr` 指令強制包含送審功能，無法略過）
+2. **驗證多 ticket 要求**（見下方「多 Ticket 驗證流程」）
+3. 從上下文推斷 commit 信息（type, ticket, message）
+4. 執行 commit 並推送到遠端
+5. 自動建立 MR（包含 FE Board label、reviewer、draft 狀態、delete source branch）
+6. **自動提交 AI review**（`cr multiple-ticket` 指令強制包含送審功能，無法略過）
+
+**多 Ticket 驗證流程：**
+
+1. **用戶明確提供多個 ticket**：
+   - 用戶輸入: `cr multiple-ticket 這個修改同時修復了 IN-1235 和 IN-1236`
+   - → 驗證通過，繼續執行流程
+
+2. **用戶語意暗示「主單與所有子任務」**：
+   - 偵測關鍵字：「所有子任務」、「子項目」、「包含子任務」、「主單和子任務」、「all subtasks」、「with subtasks」等
+   - → 自動詢問用戶確認
+   - → 確認後透過 Jira API 讀取子任務：`node .cursor/scripts/jira/read-jira-ticket.mjs "<ticket-id>"`
+   - → 從回傳 JSON 的 `raw.fields.subtasks` 提取子任務單號
+   - → 自動設置為 `--related-tickets` 參數
+
+3. **用戶只提供一個 ticket 且無子任務意圖**：
+   - → 提示用戶選擇：提供關聯單號、自動獲取子任務、或改用 `cr single-ticket`
 
 **參數支持：**
 - `--reviewer="@username"`：指定 MR reviewer（**僅在用戶明確指定時使用**）
@@ -19,36 +38,38 @@ description: 自動執行 commit 和建立 MR 的完整流程
     1. 命令行參數（`--reviewer=`）：最高優先級，用戶明確指定
     2. 環境變數（`.env.local` 中的 `MR_REVIEWER`）：用戶偏好設置
     3. 預設值（`@william.chiang`）：如果未設置環境變數則使用此值
-  - **重要**：AI 自動執行 `cr` 命令時，**不應傳遞 `--reviewer` 參數**，讓腳本自動從環境變數讀取或使用預設值
+  - **重要**：AI 自動執行 `cr multiple-ticket` 命令時，**不應傳遞 `--reviewer` 參數**，讓腳本自動從環境變數讀取或使用預設值
 - `--target=branch-name`：指定目標分支（預設: "main"）
   - **重要**：關於 Hotfix target branch 自動設置規則，請參考 `.cursor/rules/commit-and-mr-guidelines.mdc` 中的 "Target Branch" 章節
 - `--no-draft`：不使用 draft 狀態（預設為 draft）
-- `--related-tickets="IN-1235,IN-1236"`：指定關聯單號（多個單號用逗號分隔）
+- `--related-tickets="IN-1235,IN-1236"`：指定關聯單號（多個單號用逗號分隔）**（必須提供）**
 - `--no-notify`：停用 Cursor rules 檢查失敗時的系統通知（預設為開啟）
 
 **參數使用範例：**
-- `cr`：使用預設設定
-- `cr --reviewer="@john.doe"`：指定 reviewer 為 @john.doe
-- `cr --target=develop --no-draft`：目標分支為 develop，且不使用 draft 狀態
-- `cr --reviewer="@john.doe" --related-tickets="IN-1235,IN-1236"`：指定 reviewer 和關聯單號
+- `cr multiple-ticket --related-tickets="IN-1235,IN-1236"`：明確指定關聯單號
+- `cr multiple-ticket 這個改動包含所有子任務`：自動獲取子任務作為關聯單號
+- `cr multiple-ticket --reviewer="@john.doe" --related-tickets="IN-1235,IN-1236"`：指定 reviewer 和關聯單號
+- `cr multiple-ticket --target=develop --no-draft --related-tickets="IN-1235"`：目標分支為 develop，且不使用 draft 狀態
 
 **重要：保護現有 Reviewer 規則**
 - 如果 MR 已經存在且已有 reviewer，系統會自動檢查：
   - **如果用戶未明確指定 `--reviewer` 參數**（即使用預設值），系統會**保留現有的 reviewer**，不會更新
-  - **如果用戶明確指定了 `--reviewer` 參數**（例如：`cr --reviewer="@john.doe"`），系統會**更新 reviewer** 為指定的用戶
-- 此規則適用於所有 `cr` 系列指令（`cr`、`cr-single-ticket`）
+  - **如果用戶明確指定了 `--reviewer` 參數**（例如：`cr multiple-ticket --reviewer="@john.doe"`），系統會**更新 reviewer** 為指定的用戶
+- 此規則適用於所有 `cr` 系列指令（`cr single-ticket`、`cr multiple-ticket`）
 
-**注意：** `cr` 指令無法略過送審步驟。如需不送審的流程，請使用 `commit-and-push` 指令。
+**注意：** 
+- `cr multiple-ticket` 指令**必須**有多於一個 Jira ticket
+- `cr multiple-ticket` 指令無法略過送審步驟。如需不送審的流程，請使用 `commit-and-push` 指令
 
-**`cr-single-ticket`** - 快速執行 commit 並建立 MR，略過關聯單號詢問（強制包含送審）
+**`cr single-ticket`** - 快速執行 commit 並建立 MR，略過關聯單號詢問（強制包含送審）
 
-當用戶輸入 `cr-single-ticket` 時，自動執行以下完整流程：
+當用戶輸入 `cr single-ticket` 時，自動執行以下完整流程：
 1. 檢查 Git 狀態
 2. 從上下文推斷 commit 信息（type, ticket, message）
 3. 執行 commit 並推送到遠端
 4. **略過關聯單號詢問環節**，直接使用當前分支單號
 5. 自動建立 MR（包含 FE Board label、reviewer、draft 狀態、delete source branch）
-6. **自動提交 AI review**（`cr-single-ticket` 指令強制包含送審功能，無法略過）
+6. **自動提交 AI review**（`cr single-ticket` 指令強制包含送審功能，無法略過）
 
 **參數支持：**
 - `--reviewer="@username"`：指定 MR reviewer（預設: "@william.chiang"）
@@ -57,19 +78,19 @@ description: 自動執行 commit 和建立 MR 的完整流程
 - `--no-notify`：停用 Cursor rules 檢查失敗時的系統通知（預設為開啟）
 
 **參數使用範例：**
-- `cr-single-ticket`：使用預設設定
-- `cr-single-ticket --reviewer="@john.doe"`：指定 reviewer 為 @john.doe
-- `cr-single-ticket --target=develop --no-draft`：目標分支為 develop，且不使用 draft 狀態
+- `cr single-ticket`：使用預設設定
+- `cr single-ticket --reviewer="@john.doe"`：指定 reviewer 為 @john.doe
+- `cr single-ticket --target=develop --no-draft`：目標分支為 develop，且不使用 draft 狀態
 
 **重要：保護現有 Reviewer 規則**
 - 如果 MR 已經存在且已有 reviewer，系統會自動檢查：
   - **如果用戶未明確指定 `--reviewer` 參數**（即使用預設值），系統會**保留現有的 reviewer**，不會更新
-  - **如果用戶明確指定了 `--reviewer` 參數**（例如：`cr-single-ticket --reviewer="@john.doe"`），系統會**更新 reviewer** 為指定的用戶
-- 此規則適用於所有 `cr` 系列指令（`cr`、`cr-single-ticket`）
+  - **如果用戶明確指定了 `--reviewer` 參數**（例如：`cr single-ticket --reviewer="@john.doe"`），系統會**更新 reviewer** 為指定的用戶
+- 此規則適用於所有 `cr` 系列指令（`cr single-ticket`、`cr multiple-ticket`）
 
 **注意：** 
-- `cr-single-ticket` 指令無法略過送審步驟。如需不送審的流程，請使用 `commit-and-push` 指令。
-- `cr-single-ticket` 指令不支援 `--related-tickets` 參數，因為它會自動略過關聯單號詢問環節。
+- `cr single-ticket` 指令無法略過送審步驟。如需不送審的流程，請使用 `commit-and-push` 指令。
+- `cr single-ticket` 指令不支援 `--related-tickets` 參數，因為它會自動略過關聯單號詢問環節。
 
 **`commit-and-push`** - 快速執行 commit 並推送到遠端，不建立 MR 也不送審
 
@@ -86,8 +107,8 @@ description: 自動執行 commit 和建立 MR 的完整流程
 當用戶說「幫我 commit」、「提交代碼」、「commit 並建立 MR」或類似指令時，執行以下流程：
 
 **重要：AI review 提交邏輯（支援跨語系偵測）**
-- **`cr` 指令**：強制自動提交 AI review（無需提及「送審」），無法略過
-- **`cr-single-ticket` 指令**：強制自動提交 AI review（無需提及「送審」），且略過關聯單號詢問，無法略過
+- **`cr multiple-ticket` 指令**：強制自動提交 AI review（無需提及「送審」），無法略過
+- **`cr single-ticket` 指令**：強制自動提交 AI review（無需提及「送審」），且略過關聯單號詢問，無法略過
 - **`commit-and-push` 指令**：不建立 MR，因此不涉及 AI review 提交
 - **其他指令**（如「幫我 commit」、「提交代碼」等）：
   - 檢查用戶訊息中是否包含「送審」相關關鍵字（支援中英文）：
@@ -161,9 +182,9 @@ description: 自動執行 commit 和建立 MR 的完整流程
   - Jira ticket (格式: FE-1234)
   - Commit message (小寫，最大 64 字元)
 
-### 3.9. 從 Fix Version 推斷目標分支（僅適用於 `cr` 和 `cr-single-ticket` 指令）
+### 3.9. 從 Fix Version 推斷目標分支（僅適用於 `cr single-ticket` 和 `cr multiple-ticket` 指令）
 
-**重要**：當用戶使用 `cr` 或 `cr-single-ticket` 指令時，`create-mr` 腳本會**自動**獲取 Jira ticket 的 fix version，並根據 fix version 推斷目標分支。
+**重要**：當用戶使用 `cr single-ticket` 或 `cr multiple-ticket` 指令時，`create-mr` 腳本會**自動**獲取 Jira ticket 的 fix version，並根據 fix version 推斷目標分支。
 
 **自動推斷邏輯**（由 `create-mr` 腳本自動執行）：
 
@@ -188,9 +209,9 @@ description: 自動執行 commit 和建立 MR 的完整流程
 - 如果用戶明確指定了 `--target` 參數（例如：`cr --target=main`），則使用用戶指定的目標分支
 - 如果用戶指定的目標分支與推斷的目標分支不一致（例如：Hotfix 但指定了 `main`），腳本會顯示警告並要求用戶確認
 
-### 3.5. 自動偵測文字描述中的關聯單號（僅適用於 `cr` 和 `cr-single-ticket` 指令）
+### 3.5. 自動偵測文字描述中的關聯單號（僅適用於 `cr single-ticket` 和 `cr multiple-ticket` 指令）
 
-**重要：** 當用戶使用 `cr` 或 `cr-single-ticket` 指令時，如果用戶在文字描述中提到了單號（例如：`IN-1234`、`FE-5678`、`IN-xxxx` 等格式），系統會自動偵測這些單號並詢問用戶是否要將它們添加到 `--related-tickets` 參數中。**支援跨語系偵測，即使內容非中文也能判斷。**
+**重要：** 當用戶使用 `cr single-ticket` 或 `cr multiple-ticket` 指令時，如果用戶在文字描述中提到了單號（例如：`IN-1234`、`FE-5678`、`IN-xxxx` 等格式），系統會自動偵測這些單號並詢問用戶是否要將它們添加到 `--related-tickets` 參數中。**支援跨語系偵測，即使內容非中文也能判斷。**
 
 **偵測邏輯：**
 - 使用正則表達式匹配單號格式：`[A-Z0-9]+-[0-9]+`（例如：`IN-1234`、`FE-5678`、`IN-xxxx` 等）
@@ -202,7 +223,7 @@ description: 自動執行 commit 和建立 MR 的完整流程
 
 **詢問流程範例：**
 ```
-用戶輸入: "cr 這個修改同時修復了 IN-1235 和 IN-1236 的問題"
+用戶輸入: "cr multiple-ticket 這個修改同時修復了 IN-1235 和 IN-1236 的問題"
 
 1. 系統偵測到文字描述中的單號：IN-1235, IN-1236
 2. 從分支名稱提取當前分支單號（例如：feature/IN-1234 → IN-1234）
@@ -218,14 +239,14 @@ description: 自動執行 commit 和建立 MR 的完整流程
 ```
 
 **注意事項：**
-- 此功能僅適用於 `cr` 和 `cr-single-ticket` 指令
+- 此功能僅適用於 `cr single-ticket` 和 `cr multiple-ticket` 指令
 - 如果用戶已經明確提供了 `--related-tickets` 參數，則不進行自動偵測和詢問
 - 如果用戶選擇「是」，系統會自動將偵測到的單號添加到 `--related-tickets` 參數中
-- 對於 `cr-single-ticket` 指令，雖然它不支援 `--related-tickets` 參數，但如果偵測到單號，仍會詢問用戶，並在用戶確認後提示該指令不支援此參數，建議使用 `cr` 指令
+- 對於 `cr single-ticket` 指令，雖然它不支援 `--related-tickets` 參數，但如果偵測到單號，仍會詢問用戶，並在用戶確認後提示該指令不支援此參數，建議使用 `cr multiple-ticket` 指令
 
-### 3.6. 自動偵測文字描述中的 Reviewer（僅適用於 `cr` 和 `cr-single-ticket` 指令）
+### 3.6. 自動偵測文字描述中的 Reviewer（僅適用於 `cr single-ticket` 和 `cr multiple-ticket` 指令）
 
-**重要：** 當用戶使用 `cr` 或 `cr-single-ticket` 指令時，如果用戶在文字描述中提到了 reviewer 用戶名，系統會自動偵測並詢問用戶是否要將它設置為 `--reviewer` 參數。**支援跨語系偵測，即使內容非中文也能判斷。**
+**重要：** 當用戶使用 `cr single-ticket` 或 `cr multiple-ticket` 指令時，如果用戶在文字描述中提到了 reviewer 用戶名，系統會自動偵測並詢問用戶是否要將它設置為 `--reviewer` 參數。**支援跨語系偵測，即使內容非中文也能判斷。**
 
 **偵測邏輯（支援中英文）：**
 - 使用正則表達式匹配用戶名格式：`@?[a-zA-Z0-9._-]+`（例如：`@john.doe`、`john.doe`、`@william.chiang` 等）
@@ -237,7 +258,7 @@ description: 自動執行 commit 和建立 MR 的完整流程
 
 **詢問流程範例：**
 ```
-用戶輸入: "cr 請讓 @john.doe 審查這個修改"
+用戶輸入: "cr multiple-ticket 請讓 @john.doe 審查這個修改"
 
 1. 系統偵測到文字描述中的用戶名：@john.doe
 2. 詢問用戶：
@@ -253,15 +274,15 @@ AI: 已設置 reviewer 為 @john.doe
 ```
 
 **注意事項：**
-- 此功能僅適用於 `cr` 和 `cr-single-ticket` 指令
+- 此功能僅適用於 `cr single-ticket` 和 `cr multiple-ticket` 指令
 - 如果用戶已經明確提供了 `--reviewer` 參數，則不進行自動偵測和詢問
 - 如果偵測到多個用戶名，會列出所有候選值供用戶選擇
 - **如果用戶選擇「是」或明確指定了 reviewer**，系統會自動將偵測到的用戶名添加到 `--reviewer` 參數中，並在執行 `create-mr` 時傳遞該參數
 - **如果用戶選擇「否」或未明確指定 reviewer**，執行 `create-mr` 時不傳遞 `--reviewer` 參數，讓腳本自動從環境變數讀取或使用預設值
 
-### 3.7. 自動偵測文字描述中的目標分支（僅適用於 `cr` 和 `cr-single-ticket` 指令）
+### 3.7. 自動偵測文字描述中的目標分支（僅適用於 `cr single-ticket` 和 `cr multiple-ticket` 指令）
 
-**重要：** 當用戶使用 `cr` 或 `cr-single-ticket` 指令時，如果用戶在文字描述中提到了目標分支名稱，系統會自動偵測並詢問用戶是否要將它設置為 `--target` 參數。**支援跨語系偵測，即使內容非中文也能判斷。**
+**重要：** 當用戶使用 `cr single-ticket` 或 `cr multiple-ticket` 指令時，如果用戶在文字描述中提到了目標分支名稱，系統會自動偵測並詢問用戶是否要將它設置為 `--target` 參數。**支援跨語系偵測，即使內容非中文也能判斷。**
 
 **偵測邏輯（支援中英文）：**
 - 偵測常見分支名稱：`main`、`master`、`develop`、`dev`、`staging`、`production`、`prod`
@@ -274,7 +295,7 @@ AI: 已設置 reviewer 為 @john.doe
 
 **詢問流程範例：**
 ```
-用戶輸入: "cr 這個修改要合併到 develop 分支"
+用戶輸入: "cr multiple-ticket 這個修改要合併到 develop 分支"
 
 1. 系統偵測到文字描述中的分支名稱：develop
 2. 詢問用戶：
@@ -290,14 +311,14 @@ AI: 已設置目標分支為 develop
 ```
 
 **注意事項：**
-- 此功能僅適用於 `cr` 和 `cr-single-ticket` 指令
+- 此功能僅適用於 `cr single-ticket` 和 `cr multiple-ticket` 指令
 - 如果用戶已經明確提供了 `--target` 參數，則不進行自動偵測和詢問
 - 如果偵測到多個分支名稱，會列出所有候選值供用戶選擇
 - 如果用戶選擇「是」，系統會自動將偵測到的分支名稱添加到 `--target` 參數中
 
-### 3.8. 自動偵測文字描述中的 Draft 狀態（僅適用於 `cr` 和 `cr-single-ticket` 指令）
+### 3.8. 自動偵測文字描述中的 Draft 狀態（僅適用於 `cr single-ticket` 和 `cr multiple-ticket` 指令）
 
-**重要：** 當用戶使用 `cr` 或 `cr-single-ticket` 指令時，如果用戶在文字描述中提到了非草稿狀態的意圖，系統會自動偵測並詢問用戶是否要設置 `--no-draft` 參數。**支援跨語系偵測，即使內容非中文也能判斷。**
+**重要：** 當用戶使用 `cr single-ticket` 或 `cr multiple-ticket` 指令時，如果用戶在文字描述中提到了非草稿狀態的意圖，系統會自動偵測並詢問用戶是否要設置 `--no-draft` 參數。**支援跨語系偵測，即使內容非中文也能判斷。**
 
 **偵測邏輯（支援中英文）：**
 - **中文關鍵字**：「非草稿」、「不是草稿」、「直接提交」、「正式提交」、「ready for review」、「非 draft」、「不要 draft」、「不用 draft」、「不需要 draft」、「直接合併」、「正式合併」、「不要草稿」、「不用草稿」、「不需要草稿」
@@ -306,7 +327,7 @@ AI: 已設置目標分支為 develop
 
 **詢問流程範例：**
 ```
-用戶輸入: "cr 這個修改直接提交，不要 draft"
+用戶輸入: "cr multiple-ticket 這個修改直接提交，不要 draft"
 
 1. 系統偵測到文字描述中的關鍵字：「直接提交」、「不要 draft」
 2. 詢問用戶：
@@ -321,7 +342,7 @@ AI: 已設置 --no-draft 參數
 ```
 
 **注意事項：**
-- 此功能僅適用於 `cr` 和 `cr-single-ticket` 指令
+- 此功能僅適用於 `cr single-ticket` 和 `cr multiple-ticket` 指令
 - 如果用戶已經明確提供了 `--no-draft` 參數，則不進行自動偵測和詢問
 - 如果用戶選擇「是」，系統會自動添加 `--no-draft` 參數
 - 預設行為是使用 draft 狀態，只有明確提及非草稿意圖時才會詢問
@@ -336,9 +357,7 @@ AI: 已設置 --no-draft 參數
 
 **CRITICAL**: 在執行 commit 之前，AI 必須檢查代碼是否符合 Cursor rules。
 
-**重要：此步驟的處理方式遵循 `commit-rule-violation-handling.mdc` 規則。請參考該規則文件了解詳細的處理流程。**
-
-**最高優先級原則**：必須同時遵守 [ai-decision-making-priorities.mdc](mdc:.cursor/rules/ai-decision-making-priorities.mdc) 規則。當檢測到需要修改代碼的問題時，**必須立即停止並詢問用戶**，無論任務目標為何。**先詢問再修改 > 完成任務**。
+**最高優先級原則**：必須遵守 [ai-decision-making-priorities.mdc](mdc:.cursor/rules/ai-decision-making-priorities.mdc) 規則。當檢測到需要修改代碼的問題時，**必須立即停止並詢問用戶**，無論任務目標為何。**先詢問再修改 > 完成任務**。
 
 **核心原則**：
 - **不要自動修改代碼**
@@ -368,8 +387,6 @@ AI: 已設置 --no-draft 參數
    - **修正完成後繼續 commit 流程**：當用戶完成修正（或選擇跳過）後，繼續執行步驟 5
 
 3. **如果通過檢查**：繼續執行 commit 流程
-
-**詳細處理方式請參考**：`.cursor/rules/commit-rule-violation-handling.mdc`
 
 ### 5. 執行 Commit 流程
 
@@ -417,7 +434,7 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
 
 5. **詢問關聯單號（建立 MR 前）**
    
-   **注意：`cr-single-ticket` 指令會跳過此步驟，直接使用當前分支單號。**
+   **注意：`cr single-ticket` 指令會跳過此步驟，直接使用當前分支單號。**
    
    **CRITICAL**: 在建立 MR 之前，**必須先驗證關聯單號**：
    - 驗證關聯單號是否存在於 Jira 中
@@ -428,7 +445,7 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
    
    - 從當前分支名稱提取單號（例如：`feature/IN-1234` → `IN-1234`）
    
-   **自動偵測邏輯（僅適用於 `cr` 和 `cr-single-ticket` 指令）：**
+   **自動偵測邏輯（僅適用於 `cr single-ticket` 和 `cr multiple-ticket` 指令）：**
    - 如果用戶在文字描述中提到了單號（例如：`IN-1234`、`FE-5678` 等格式），系統會自動偵測這些單號
    - 排除當前分支的單號後，如果發現其他單號，優先使用自動偵測的結果
    - 如果用戶已經明確提供了 `--related-tickets` 參數，則使用參數中的值，不進行自動偵測
@@ -437,7 +454,7 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
    
    **情況 A: 偵測到文字描述中的單號（優先）**
    ```
-   用戶輸入: "cr 這個修改同時修復了 IN-1235 和 IN-1236 的問題"
+   用戶輸入: "cr multiple-ticket 這個修改同時修復了 IN-1235 和 IN-1236 的問題"
    當前分支: feature/IN-1234
    
    1. 系統偵測到文字描述中的單號：IN-1235, IN-1236
@@ -636,9 +653,9 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
      - 分支 `feature/FE-1234`，無關聯單號 → 添加 `FE Board` label
    
    **AI review 判斷邏輯：**
-   - **`cr` 指令**：
+   - **`cr multiple-ticket` 指令**：
      - 不添加 `--no-review` 參數，強制自動提交 AI review
-   - **`cr-single-ticket` 指令**：
+   - **`cr single-ticket` 指令**：
      - 不添加 `--no-review` 參數，強制自動提交 AI review`
      - 且不添加 `--related-tickets` 參數（略過關聯單號詢問）
    - **`commit-and-push` 指令**：
@@ -685,8 +702,8 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
      - 格式：`當前分支單號 , 關聯單號1 , 關聯單號2 , ...`
      - 如果未提供，只使用當前分支單號
    - **AI review 提交邏輯**：
-     - `cr` 指令：強制自動提交 AI review
-     - `cr-single-ticket` 指令：強制自動提交 AI review
+     - `cr multiple-ticket` 指令：強制自動提交 AI review
+     - `cr single-ticket` 指令：強制自動提交 AI review
      - `commit-and-push` 指令：不建立 MR，因此不涉及 AI review 提交
      - 其他指令：根據是否提及「送審」決定（未提及時自動使用 `--no-review`）
    - **Cursor rules 檢查失敗通知**（支持 macOS 和 Windows）：
@@ -749,29 +766,79 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
 
 ## 使用範例
 
-**範例 0: 用戶輸入 `cr`（最快速，強制包含送審）**
+**範例 0: 用戶輸入 `cr multiple-ticket`（必須提供多個 ticket，強制包含送審）**
 ```
-用戶輸入: "cr"
+用戶輸入: "cr multiple-ticket 這個修改同時修復了 IN-1235 和 IN-1236"
 1. 自動檢查 git 狀態 → 發現變更
-2. 自動從上下文推斷：
+2. **驗證多 ticket 要求**：偵測到 IN-1235 和 IN-1236 → 驗證通過
+3. 自動從上下文推斷：
    - Type: feat (從變更內容推斷)
    - Ticket: FE-7841 (從分支名稱推斷)
    - Message: add ocr image locale check tool (從變更檔案推斷)
-3. 自動執行: pnpm run agent-commit --type=feat --ticket=FE-7841 --message="add ocr image locale check tool" --auto-push
-4. 從分支名稱提取單號（例如：feature/FE-7841 → FE-7841）
-5. 詢問用戶：除了當前分支單號 FE-7841 外，是否有同步修復其他單號？
-   選項：1. 有  2. 無
-6. 用戶選擇：2（無）
-7. 自動執行: pnpm run create-mr（不傳遞 --reviewer 參數，讓腳本自動從環境變數讀取或使用預設值）
-   - **注意**：如果用戶在指令中明確指定了 reviewer（例如：`cr 請讓 @john.doe 審查`），則應傳遞 `--reviewer="@john.doe"` 參數
-8. MR description: FE-7841
-9. `cr` 指令強制包含送審功能 → 自動提交 AI review
-10. 在 chat 中提供格式化的執行結果（包含 Commit 資訊、MR 資訊、變更內容）
+4. 自動執行: pnpm run agent-commit --type=feat --ticket=FE-7841 --message="add ocr image locale check tool" --auto-push
+5. 自動執行: pnpm run create-mr --related-tickets="IN-1235,IN-1236"
+6. MR description: FE-7841 , IN-1235 , IN-1236
+7. `cr multiple-ticket` 指令強制包含送審功能 → 自動提交 AI review
+8. 在 chat 中提供格式化的執行結果（包含 Commit 資訊、MR 資訊、變更內容）
 ```
 
-**範例 0-1: 用戶輸入 `cr-single-ticket`（快速，略過關聯單號詢問，強制包含送審）**
+**範例 0-0: 用戶使用「主單與所有子任務」意圖**
 ```
-用戶輸入: "cr-single-ticket"
+用戶輸入: "cr multiple-ticket 這個改動包含主單和所有子任務"
+當前分支: feature/FE-7841
+
+1. 自動檢查 git 狀態 → 發現變更
+2. **偵測到子任務意圖**：「主單和所有子任務」
+3. AI 詢問：
+   "偵測到您的意圖可能是「以當前主單與所有關聯子任務進行」。
+    當前分支單號: FE-7841
+    
+    請確認：
+    1. 是，自動獲取 FE-7841 的所有子任務並作為關聯單號
+    2. 否，我會手動提供關聯單號"
+
+4. 用戶選擇: 1
+5. AI 執行: node .cursor/scripts/jira/read-jira-ticket.mjs "FE-7841"
+6. 從回傳 JSON 的 raw.fields.subtasks 提取子任務：FE-7842, FE-7843, FE-7844
+7. AI 確認：
+   "找到以下子任務：
+    - FE-7842: 子任務標題 1
+    - FE-7843: 子任務標題 2
+    - FE-7844: 子任務標題 3
+    
+    是否使用這些子任務作為關聯單號？
+    1. 是，全部使用
+    2. 否，我要選擇部分
+    3. 取消，改用其他方式"
+
+8. 用戶選擇: 1
+9. 自動執行 commit 和 create-mr --related-tickets="FE-7842,FE-7843,FE-7844"
+10. MR description: FE-7841 , FE-7842 , FE-7843 , FE-7844
+11. 自動提交 AI review
+```
+
+**範例 0-0-1: 用戶只提供一個 ticket 且無子任務意圖（被拒絕）**
+```
+用戶輸入: "cr multiple-ticket"
+當前分支: feature/FE-7841
+
+1. 自動檢查 git 狀態 → 發現變更
+2. **驗證多 ticket 要求**：只有當前分支單號 FE-7841 → 驗證失敗
+3. AI 提示：
+   "⚠️ `cr multiple-ticket` 指令必須提供多於一個 Jira ticket。
+    
+    請選擇：
+    1. 提供關聯單號（手動輸入）
+    2. 自動獲取當前分支單號 FE-7841 的所有子任務
+    3. 改用 `cr single-ticket` 指令（僅使用當前分支單號）"
+
+4. 用戶選擇: 3
+5. AI 使用 cr single-ticket 流程繼續
+```
+
+**範例 0-1: 用戶輸入 `cr single-ticket`（快速，略過關聯單號詢問，強制包含送審）**
+```
+用戶輸入: "cr single-ticket"
 1. 自動檢查 git 狀態 → 發現變更
 2. 自動從上下文推斷：
    - Type: feat (從變更內容推斷)
@@ -781,9 +848,9 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
 4. 從分支名稱提取單號（例如：feature/FE-7841 → FE-7841）
 5. **略過關聯單號詢問環節**，直接使用當前分支單號
 6. 自動執行: pnpm run create-mr（不傳遞 --reviewer 參數，讓腳本自動從環境變數讀取或使用預設值）
-   - **注意**：如果用戶在指令中明確指定了 reviewer（例如：`cr-single-ticket 請讓 @john.doe 審查`），則應傳遞 `--reviewer="@john.doe"` 參數
+   - **注意**：如果用戶在指令中明確指定了 reviewer（例如：`cr single-ticket 請讓 @john.doe 審查`），則應傳遞 `--reviewer="@john.doe"` 參數
 7. MR description: FE-7841
-8. `cr-single-ticket` 指令強制包含送審功能 → 自動提交 AI review
+8. `cr single-ticket` 指令強制包含送審功能 → 自動提交 AI review
 9. 在 chat 中提供格式化的執行結果（包含 Commit 資訊、MR 資訊、變更內容）
 ```
 
@@ -889,22 +956,19 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
 10. 在 chat 中提供格式化的執行結果（包含 Commit 資訊、MR 資訊、變更內容）
 ```
 
-**範例 5-1: 用戶輸入 `cr 請讓 @john.doe 審查`（使用智能偵測功能）**
+**範例 5-1: 用戶輸入 `cr multiple-ticket 請讓 @john.doe 審查，同時修復了 IN-1235`（使用智能偵測功能）**
 ```
 1. 檢查 git 狀態 → 發現變更
-2. 自動從上下文推斷 commit 信息
-3. 執行: pnpm run agent-commit --type=feat --ticket=FE-7838 --message="..." --auto-push
-4. 從分支名稱提取單號（例如：feature/FE-7838 → FE-7838）
+2. **驗證多 ticket 要求**：偵測到 IN-1235 → 驗證通過
+3. 自動從上下文推斷 commit 信息
+4. 執行: pnpm run agent-commit --type=feat --ticket=FE-7838 --message="..." --auto-push
 5. **智能偵測到文字描述中的 reviewer: @john.doe**
 6. 詢問用戶：偵測到文字描述中提到了 reviewer：@john.doe，是否要將此用戶設置為 --reviewer 參數？
    選項：1. 是，使用 @john.doe 作為 reviewer  2. 否，不使用 reviewer 參數
 7. 用戶選擇：1（是）
-8. 詢問用戶：除了當前分支單號 FE-7838 外，是否有同步修復其他單號？
-   選項：1. 有  2. 無
-9. 用戶選擇：2（無）
-10. **因為用戶明確指定了 reviewer** → 執行: pnpm run create-mr --reviewer="@john.doe"
-11. MR description: FE-7838
-12. `cr` 指令強制包含送審功能 → 自動提交 AI review
+8. **因為用戶明確指定了 reviewer** → 執行: pnpm run create-mr --reviewer="@john.doe" --related-tickets="IN-1235"
+9. MR description: FE-7838 , IN-1235
+10. `cr multiple-ticket` 指令強制包含送審功能 → 自動提交 AI review
 13. 在 chat 中提供格式化的執行結果（包含 Commit 資訊、MR 資訊、變更內容）
 ```
 
