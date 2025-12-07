@@ -25,7 +25,7 @@ description: 快速執行 commit 並建立 MR，略過關聯單號詢問（強�
     - **如果用戶明確指定了 reviewer**（例如：在指令中提供了 `--reviewer` 參數，或在文字描述中提到了 reviewer 並確認使用），**必須傳遞 `--reviewer` 參數**
     - **如果用戶未明確指定 reviewer**（未提供參數且未在文字描述中提及），**不應傳遞 `--reviewer` 參數**，讓腳本自動從環境變數讀取或使用預設值
 - `cr single-ticket --target=branch-name`：指定目標分支（預設: "main"）
-  - **重要**：關於 Hotfix target branch 自動設置規則，請參考 `.cursor/rules/commit-and-mr-guidelines.mdc` 中的 "Target Branch" 章節
+  - **重要**：關於 Hotfix target branch 自動設置規則，請參考 `.cursor/rules/cr/commit-and-mr-guidelines.mdc` 中的 "Target Branch" 章節
 - `cr single-ticket --no-draft`：不使用 draft 狀態（預設為 draft）
 - `cr single-ticket --no-notify`：停用 Cursor rules 檢查失敗時的系統通知（預設為開啟）
 

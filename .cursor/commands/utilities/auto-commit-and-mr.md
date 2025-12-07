@@ -40,7 +40,7 @@ description: 自動執行 commit 和建立 MR 的完整流程
     3. 預設值（`@william.chiang`）：如果未設置環境變數則使用此值
   - **重要**：AI 自動執行 `cr multiple-ticket` 命令時，**不應傳遞 `--reviewer` 參數**，讓腳本自動從環境變數讀取或使用預設值
 - `--target=branch-name`：指定目標分支（預設: "main"）
-  - **重要**：關於 Hotfix target branch 自動設置規則，請參考 `.cursor/rules/commit-and-mr-guidelines.mdc` 中的 "Target Branch" 章節
+  - **重要**：關於 Hotfix target branch 自動設置規則，請參考 `.cursor/rules/cr/commit-and-mr-guidelines.mdc` 中的 "Target Branch" 章節
 - `--no-draft`：不使用 draft 狀態（預設為 draft）
 - `--related-tickets="IN-1235,IN-1236"`：指定關聯單號（多個單號用逗號分隔）**（必須提供）**
 - `--no-notify`：停用 Cursor rules 檢查失敗時的系統通知（預設為開啟）
@@ -133,7 +133,7 @@ description: 自動執行 commit 和建立 MR 的完整流程
 
 **CRITICAL**: 根據 `commit-and-mr-guidelines.mdc` 規範，在執行 commit 之前，**MUST** 先 rebase 到 base branch。
 
-**詳細流程請參考**: `.cursor/rules/commit-and-mr-guidelines.mdc` 中的 "Pre-Commit Rebase Requirement" 章節。
+**詳細流程請參考**: `.cursor/rules/cr/commit-and-mr-guidelines.mdc` 中的 "Pre-Commit Rebase Requirement" 章節。
 
 **執行步驟**：
 
@@ -525,7 +525,7 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
 
    **CRITICAL**: 根據 `commit-and-mr-guidelines.mdc` 規範，在建立 MR 之前，**MUST** 驗證所有必需信息。
 
-   **詳細流程請參考**: `.cursor/rules/commit-and-mr-guidelines.mdc` 中的 "Information Validation Before MR Creation" 章節。
+   **詳細流程請參考**: `.cursor/rules/cr/commit-and-mr-guidelines.mdc` 中的 "Information Validation Before MR Creation" 章節。
 
    **必需信息檢查清單**：
 
@@ -608,7 +608,7 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
        - **如果用戶明確指定了 reviewer**（例如：在指令中提供了 `--reviewer` 參數，或在文字描述中提到了 reviewer 並確認使用），**必須傳遞 `--reviewer` 參數**
        - **如果用戶未明確指定 reviewer**（未提供參數且未在文字描述中提及），**不應傳遞 `--reviewer` 參數**，讓腳本自動從環境變數讀取或使用預設值
    - `--target`: 目標分支（預設: "main"）
-     - **重要**：關於 Hotfix target branch 自動設置規則，請參考 `.cursor/rules/commit-and-mr-guidelines.mdc` 中的 "Target Branch" 章節
+     - **重要**：關於 Hotfix target branch 自動設置規則，請參考 `.cursor/rules/cr/commit-and-mr-guidelines.mdc` 中的 "Target Branch" 章節
      - **Hotfix Target Branch 自動設置規則**（摘要）：
        - 如果 Jira ticket 的 fix version 符合 hotfix 條件（小版號不為 0，例如：`5.35.1`），系統會自動添加 `Hotfix` label
        - **同時，系統會自動將 target branch 設置為對應的 release branch**（例如：fix version `5.35.1` → target branch `release/5.35`）
@@ -675,7 +675,7 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
        - **如果用戶明確指定了 reviewer**（例如：在指令中提供了 `--reviewer` 參數，或在文字描述中提到了 reviewer 並確認使用），**必須傳遞 `--reviewer` 參數**
        - **如果用戶未明確指定 reviewer**（未提供參數且未在文字描述中提及），**不應傳遞 `--reviewer` 參數**，讓腳本自動從環境變數讀取或使用預設值
    - `--target`: 目標分支（預設: "main"）
-     - **重要**：關於 Hotfix target branch 自動設置規則，請參考 `.cursor/rules/commit-and-mr-guidelines.mdc` 中的 "Target Branch" 章節
+     - **重要**：關於 Hotfix target branch 自動設置規則，請參考 `.cursor/rules/cr/commit-and-mr-guidelines.mdc` 中的 "Target Branch" 章節
      - **Hotfix Target Branch 自動設置規則**（摘要）：
        - 如果 Jira ticket 的 fix version 符合 hotfix 條件（小版號不為 0，例如：`5.35.1`），系統會自動添加 `Hotfix` label
        - **同時，系統會自動將 target branch 設置為對應的 release branch**（例如：fix version `5.35.1` → target branch `release/5.35`）
@@ -730,7 +730,7 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
 
 **CRITICAL**: 當 MR 建立成功後，**必須**在 chat 中按照用戶常用語言（中文或英文）提供格式化的執行結果報告。
 
-**詳細要求請參考**: `.cursor/rules/mr-execution-result-report.mdc`
+**詳細要求請參考**: `.cursor/rules/cr/mr-execution-result-report.mdc`
 
 **執行結果必須包含以下三個部分：**
 
