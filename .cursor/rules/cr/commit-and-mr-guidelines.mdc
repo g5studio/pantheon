@@ -462,7 +462,7 @@ The `create-mr.mjs` script automatically analyzes changed files and adds the app
 2. **Merge Request Information**: MR Link (with hyperlink), MR ID, Title, Status, Reviewer, Labels, Associated Jira (with hyperlink), AI Review status
 3. **Changed Content**: List of added, updated, and reverted files with brief descriptions
 
-**Format Reference**: Follow the standardized format defined in [mr-execution-result-report.mdc](mdc:.cursor/rules/mr-execution-result-report.mdc)
+**Format Reference**: Follow the standardized format defined in [mr-execution-result-report.mdc](mdc:.cursor/rules/cr/mr-execution-result-report.mdc)
 
 **Key Requirements**:
 - All Jira ticket links must be clickable hyperlinks: `[TICKET](https://innotech.atlassian.net/browse/TICKET)`
@@ -613,7 +613,7 @@ pnpm run create-mr --reviewer="@william.chiang"
 
 ## Rule Change Compliance Check
 
-**CRITICAL**: Whenever this rule file (`.cursor/rules/commit-and-mr-guidelines.mdc`) is modified, **MUST** check and update all related implementation scripts and command files to ensure they comply with the updated rules.
+**CRITICAL**: Whenever this rule file (`.cursor/rules/cr/commit-and-mr-guidelines.mdc`) is modified, **MUST** check and update all related implementation scripts and command files to ensure they comply with the updated rules.
 
 ### Required Actions After Rule Changes
 

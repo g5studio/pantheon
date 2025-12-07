@@ -27,7 +27,7 @@ description: 快速執行 commit 並推送到遠端，不建立 MR 也不送審
 
 **CRITICAL**: 根據 `commit-and-mr-guidelines.mdc` 規範，在執行 commit 之前，**MUST** 先 rebase 到 base branch。
 
-**詳細流程請參考**: `.cursor/rules/commit-and-mr-guidelines.mdc` 中的 "Pre-Commit Rebase Requirement" 章節。
+**詳細流程請參考**: `.cursor/rules/cr/commit-and-mr-guidelines.mdc` 中的 "Pre-Commit Rebase Requirement" 章節。
 
 **執行步驟**：
 
