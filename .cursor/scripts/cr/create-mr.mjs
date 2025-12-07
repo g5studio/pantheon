@@ -10,11 +10,6 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import readline from "readline";
 import { readFileSync, existsSync } from "fs";
-import { sendSystemNotification } from "../notification/notify-cursor-rules-failed.mjs";
-import {
-  shouldSkipNotification,
-  getChatContent,
-} from "../utilities/parameter-detector.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -1632,12 +1627,12 @@ function hasSpecificVersionMarkers(changedFiles) {
 function loadEnvLocal() {
   // 優先級 1: 項目根目錄的 .env.local
   let envLocalPath = join(projectRoot, ".env.local");
-  
+
   // 優先級 2: .cursor/.env.local
   if (!existsSync(envLocalPath)) {
     envLocalPath = join(projectRoot, ".cursor", ".env.local");
   }
-  
+
   if (!existsSync(envLocalPath)) {
     return {};
   }
@@ -1686,32 +1681,11 @@ function guideJiraConfig() {
   console.error("");
 
   console.error("💡 提示：");
-    console.error("   - .env.local 文件可位於項目根目錄或 .cursor 目錄");
-    console.error(
-      "   - 如果沒有 .env.local 文件，可以參考 .env.development 範本"
-    );
+  console.error("   - .env.local 文件可位於項目根目錄或 .cursor 目錄");
+  console.error(
+    "   - 如果沒有 .env.local 文件，可以參考 .env.development 範本"
+  );
   console.error("   - 設置完成後，請重新執行命令\n");
-
-  // 發送系統通知
-  try {
-    const skipNotify = shouldSkipNotification(
-      process.argv.slice(2),
-      getChatContent()
-    );
-    if (!skipNotify) {
-      sendSystemNotification(
-        "Jira 配置缺失",
-        "請在 .env.local 文件中配置 Jira 信息",
-        ""
-      );
-    }
-  } catch (notifyError) {
-    // 通知失敗不影響錯誤拋出，但在 chat 中記錄
-    console.error(`\n⚠️  系統通知發送失敗: ${notifyError.message}`);
-    console.error(
-      "   通知內容: Jira 配置缺失 - 請在 .env.local 文件中配置 Jira 信息\n"
-    );
-  }
 }
 
 // 獲取 Jira 配置（從環境變數或 .env.local 讀取）
@@ -2674,10 +2648,6 @@ async function main() {
   let targetBranch = targetBranchArg?.split("=")[1] || "main";
   const draft = !args.includes("--no-draft");
 
-  // 智能偵測是否要跳過通知（支援從 chat 內容中偵測）
-  const chatContent = getChatContent();
-  const skipNotify = shouldSkipNotification(args, chatContent);
-
   // 檢查是否有未提交的變更（必須先 commit 才能建立 MR）
   const uncommittedChanges = getGitStatus();
   if (uncommittedChanges.length > 0) {
@@ -2699,19 +2669,6 @@ async function main() {
     console.error("   3. 或手動 commit 後再執行:");
     console.error("      pnpm run create-mr\n");
     console.error("⚠️  重要：必須先 commit 才能建立 MR！\n");
-
-    // 發送系統通知（除非用戶指定不要通知）
-    if (!skipNotify) {
-      try {
-        sendSystemNotification(
-          "未提交的變更",
-          "檢測到未提交的變更，請先提交後再建立 MR",
-          ""
-        );
-      } catch (notifyError) {
-        // 通知失敗不影響流程
-      }
-    }
 
     process.exit(1);
   }
@@ -2747,19 +2704,6 @@ async function main() {
     console.error("   3. 推送完成後再執行:");
     console.error("      pnpm run create-mr\n");
     console.error("⚠️  重要：必須先推送到遠端才能建立 MR！\n");
-
-    // 發送系統通知（除非用戶指定不要通知）
-    if (!skipNotify) {
-      try {
-        sendSystemNotification(
-          "分支未推送",
-          `分支 ${currentBranch} 尚未推送到遠端，請先推送後再建立 MR`,
-          ""
-        );
-      } catch (notifyError) {
-        // 通知失敗不影響流程
-      }
-    }
 
     process.exit(1);
   }
@@ -3042,23 +2986,6 @@ async function main() {
     );
     console.log(`   當前 target branch: ${targetBranch}`);
     console.log(`   Hotfix 通常應該合併到 release/* 分支\n`);
-
-    // 發送系統通知（除非用戶指定不要通知）
-    if (!skipNotify) {
-      try {
-        sendSystemNotification(
-          "Hotfix MR 確認",
-          `檢測到 Hotfix label，但 target branch 為 ${targetBranch}，請在 Cursor 中確認`,
-          ""
-        );
-      } catch (notifyError) {
-        // 通知失敗不影響流程，但在 chat 中記錄
-        console.error(`\n⚠️  系統通知發送失敗: ${notifyError.message}`);
-        console.error(
-          `   通知內容: Hotfix MR 確認 - 檢測到 Hotfix label，但 target branch 為 ${targetBranch}，請在 Cursor 中確認\n`
-        );
-      }
-    }
 
     await new Promise((resolve) => {
       const rl = readline.createInterface({
@@ -3385,23 +3312,6 @@ async function main() {
       '   設置後重新執行: pnpm run create-mr --reviewer="@william.chiang"\n'
     );
 
-    // 發送系統通知（除非用戶指定不要通知）
-    if (!skipNotify) {
-      try {
-        sendSystemNotification(
-          "GitLab 認證缺失",
-          "未找到 GitLab 認證方式，請在 Cursor chat 中查看詳細說明並設置認證",
-          ""
-        );
-      } catch (notifyError) {
-        // 通知失敗不影響流程，但在 chat 中記錄
-        console.error(`\n⚠️  系統通知發送失敗: ${notifyError.message}`);
-        console.error(
-          "   通知內容: GitLab 認證缺失 - 未找到 GitLab 認證方式，請在 Cursor chat 中查看詳細說明並設置認證\n"
-        );
-      }
-    }
-
     process.exit(1);
   }
 
@@ -3431,23 +3341,6 @@ async function main() {
         console.error(
           `\n   然後重新執行: pnpm run create-mr --reviewer="<選擇的reviewer>"\n`
         );
-
-        // 發送系統通知（除非用戶指定不要通知）
-        if (!skipNotify) {
-          try {
-            sendSystemNotification(
-              "Reviewer 未找到",
-              `未找到 reviewer: ${reviewer}，請在 Cursor chat 中選擇 reviewer`,
-              ""
-            );
-          } catch (notifyError) {
-            // 通知失敗不影響流程，但在 chat 中記錄
-            console.error(`\n⚠️  系統通知發送失敗: ${notifyError.message}`);
-            console.error(
-              `   通知內容: Reviewer 未找到 - 未找到 reviewer: ${reviewer}，請在 Cursor chat 中選擇 reviewer\n`
-            );
-          }
-        }
 
         process.exit(1);
       }

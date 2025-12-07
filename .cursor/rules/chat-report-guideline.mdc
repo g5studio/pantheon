@@ -180,6 +180,103 @@ AI 在回應前應自動檢查：
 
 3. **格式說明**：說明格式規範本身時（如本文件中的範例）
 
+## 任務完成系統通知
+
+**CRITICAL**: 當用戶交付的任務**完成**或**失敗**時，AI **必須**自動透過腳本發送系統通知，提示用戶返回確認。
+
+### 觸發條件
+
+以下情況**必須**發送系統通知：
+
+1. **任務完成**：用戶交付的任務已成功完成
+2. **任務失敗**：用戶交付的任務執行過程中遇到錯誤或失敗
+3. **需要用戶確認**：任何需要用戶在 chat 中確認才能繼續進行的情境，包括但不限於：
+   - 檢測到代碼問題需要詢問是否修復
+   - 檢測到規則違規需要詢問處理方式
+   - 有多個可行方案需要用戶選擇
+   - Git 操作發生衝突需要用戶解決
+   - 任何需要用戶明確同意才能繼續的操作
+
+### 通知格式
+
+通知內容必須包含以下資訊：
+
+| 項目 | 說明 | 範例 |
+|------|------|------|
+| 標題 | 當前專案資料夾名稱 | `pantheon`、`fluid-two` |
+| 訊息 | 簡短的任務結果回報 | `推送完成`、`推送失敗`、`資料整理完畢`、`MR 建立成功`、`Commit 完成` |
+
+### 通知執行方式
+
+使用以下腳本發送系統通知：
+
+```bash
+node .cursor/scripts/notification/notify-cursor-rules-failed.mjs "<專案名稱>" "<簡短回報>"
+```
+
+### 簡短回報範例
+
+| 情境 | 簡短回報 |
+|------|----------|
+| Git push 成功 | `推送完成` |
+| Git push 失敗 | `推送失敗` |
+| MR 建立成功 | `MR 建立成功` |
+| MR 建立失敗 | `MR 建立失敗` |
+| Commit 成功 | `Commit 完成` |
+| Commit 失敗 | `Commit 失敗` |
+| 資料處理完成 | `資料整理完畢` |
+| 檔案修改完成 | `修改完成` |
+| 分析任務完成 | `分析完成` |
+| 代碼審查完成 | `審查完成` |
+| 任務執行失敗 | `執行失敗` |
+| 配置缺失 | `配置缺失` |
+| 需要確認修復 | `待確認` |
+| 需要選擇方案 | `待選擇` |
+| 發生衝突待解決 | `待解決衝突` |
+| 需要用戶決定 | `待決定` |
+
+### 獲取專案名稱
+
+從當前工作目錄路徑提取專案資料夾名稱：
+
+```bash
+# 使用 basename 獲取當前目錄名稱
+basename $(pwd)
+```
+
+或在 Node.js 環境中：
+
+```javascript
+import { basename } from 'path';
+const projectName = basename(process.cwd());
+```
+
+### 執行範例
+
+```bash
+# 推送完成通知
+node .cursor/scripts/notification/notify-cursor-rules-failed.mjs "pantheon" "推送完成"
+
+# MR 建立成功通知
+node .cursor/scripts/notification/notify-cursor-rules-failed.mjs "fluid-two" "MR 建立成功"
+
+# 任務失敗通知
+node .cursor/scripts/notification/notify-cursor-rules-failed.mjs "pantheon" "推送失敗"
+
+# 需要用戶確認通知
+node .cursor/scripts/notification/notify-cursor-rules-failed.mjs "pantheon" "待確認"
+
+# 需要用戶選擇方案通知
+node .cursor/scripts/notification/notify-cursor-rules-failed.mjs "fluid-two" "待選擇"
+```
+
+### 注意事項
+
+1. **必須在任務結束時發送**：無論成功或失敗，都必須發送通知
+2. **簡潔明瞭**：訊息應簡短，讓用戶一眼就能了解任務狀態
+3. **使用正確的專案名稱**：從當前工作目錄提取，確保用戶知道是哪個專案的通知
+4. **通知不阻塞流程**：通知發送失敗不應影響後續流程
+
 ## 檢查清單
 
 在提供 chat 回應前，AI 應確認：
@@ -189,3 +286,4 @@ AI 在回應前應自動檢查：
 - [ ] 多個連結之間使用逗號或適當分隔符
 - [ ] URL 格式正確（Jira 使用 `innotech.atlassian.net`，MR 使用 `gitlab.service-hub.tech`）
 - [ ] 統整、比較、比對類的回報是否使用表格呈現
+- [ ] 任務完成或失敗時是否已發送系統通知
