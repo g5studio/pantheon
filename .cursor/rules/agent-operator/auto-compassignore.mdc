@@ -1,0 +1,280 @@
+---
+description: Automatically add development tool files and scripts to .compassignore when they are modified. When you modify or create files that match development tool patterns (scripts, cursor commands, tool configs), automatically add them to .compassignore using the helper script.
+alwaysApply: true
+---
+
+# Auto-Add Files to .compassignore
+
+This rule ensures that files related to development tools, configuration files, and scripts that are not part of the actual product build are automatically added to `.compassignore` when they are modified.
+
+## Purpose
+
+The `.compassignore` file is used to mark files that should be excluded from product builds. This rule automatically identifies and adds development-related files to prevent them from being included in production builds.
+
+## Files That Should Be Added Automatically
+
+When any of the following types of files are modified, they should be automatically added to `.compassignore`:
+
+### 1. Development Scripts
+- Files in `scripts/` directory (e.g., `scripts/*.mjs`, `scripts/*.js`, `scripts/*.py`, `scripts/*.sh`)
+- Exception: Files that are explicitly used in the build process (e.g., `scripts/image-preprocess.mjs` if used in build)
+
+### 2. Cursor Command Scripts
+- Files in `.cursor/commands/` directory (all `.md` files)
+- Scripts referenced by cursor commands (e.g., `.cursor/scripts/create-mr.mjs`, `.cursor/scripts/notify-cursor-rules-failed.mjs`)
+
+### 3. Tool Configuration Files
+- ESLint config: `.eslintrc.js`, `.eslintrc.json`, `.eslintrc.yml`, `eslint.config.js`
+- Prettier config: `.prettierrc`, `.prettierrc.js`, `.prettierrc.json`, `.prettierrc.yml`, `.prettierrc.yaml`
+- Commitlint config: `commitlint.config.js`, `.commitlintrc.js`, `.commitlintrc.json`
+- Husky config: `.husky/**/*`
+- Lint-staged config: `.lintstagedrc`, `.lintstagedrc.js`, `.lintstagedrc.json`
+- TypeScript config: `tsconfig.json` (if not used in build)
+- Vite config: `vite.config.mts`, `vite.config.ts`, `vite.config.js`
+- Tailwind config: `tailwind.config.ts`, `tailwind.config.js`
+- PostCSS config: `postcss.config.js`
+- Storybook config: `.storybook/**/*`
+- Vitest config: `vitest.config.ts`, `vitest.config.js`
+
+### 4. Cursor Rules and Configuration
+- Files in `.cursor/rules/` directory (all `.mdc` files)
+- Files in `.cursor/` directory (except user-specific settings)
+
+### 5. Development Documentation
+- Files in `docs/` directory (if not used in build)
+- README files in `scripts/` directory
+- Development guides and SOPs
+
+### 6. Git Configuration (if project-specific)
+- `.gitignore` (if modified)
+- `.gitattributes` (if modified)
+
+### 7. Build Tool Configurations (if not used in build)
+- `package.json` scripts section changes (if only affecting dev scripts)
+- `pnpm-lock.yaml` or `package-lock.json` (if only dev dependencies changed)
+
+## Implementation Guidelines
+
+### When to Add Files
+
+1. **IMMEDIATELY After Creation** (HIGHEST PRIORITY): When you (the AI) create a new file that matches the patterns, you MUST add it to `.compassignore` **in the same tool call batch** - do not wait or delay
+2. **IMMEDIATELY After Modification**: When you modify an existing file that matches the patterns, check if it's already in `.compassignore`, and if not, add it immediately
+3. **During Code Review**: When reviewing changes, check if any modified files match the patterns above and are in `.compassignore`
+4. **Before Commit**: Before committing changes, verify that tool configuration files are in `.compassignore`
+
+**CRITICAL**: The "IMMEDIATELY After Creation" step is **MANDATORY** and must be executed in the same response as creating the file. This is not optional.
+
+### When to Remove Files
+
+1. **IMMEDIATELY After Deletion** (HIGHEST PRIORITY): When you (the AI) delete a file that exists in `.compassignore`, you MUST remove it from `.compassignore` **in the same tool call batch** - do not wait or delay
+2. **During Code Review**: When reviewing changes, check if any deleted files exist in `.compassignore` and remove them
+3. **Before Commit**: Before committing changes, verify that deleted files are removed from `.compassignore`
+
+**CRITICAL**: The "IMMEDIATELY After Deletion" step is **MANDATORY** and must be executed in the same response as deleting the file. This ensures `.compassignore` stays synchronized with the actual file system.
+
+### AI Assistant Instructions
+
+**CRITICAL**: When you create, modify, delete, or review files that match any of the patterns defined above, you MUST:
+
+1. **Detect Matching Files**: Check if any files in the current changes match the patterns (scripts, cursor commands, tool configs, etc.)
+2. **IMMEDIATELY Add After Creation**: **RIGHT AFTER** creating or modifying a file that matches the patterns, you MUST run the helper script to add it to `.compassignore`:
+   ```bash
+   pnpm run add-to-compassignore <file1> [file2] ...
+   ```
+   **DO NOT** wait for user confirmation or delay this step. Execute it immediately after file creation/modification.
+3. **IMMEDIATELY Remove After Deletion**: **RIGHT AFTER** deleting a file that exists in `.compassignore`, you MUST remove it from `.compassignore`:
+   - Read the current `.compassignore` file
+   - Check if the deleted file path exists in any section
+   - If found, remove the file path from that section
+   - Write the updated content back to `.compassignore`
+   **DO NOT** wait for user confirmation or delay this step. Execute it immediately after file deletion.
+4. **Inform User**: Let the user know which files were added to or removed from `.compassignore`
+5. **Verify**: After adding or removing, verify the files are correctly updated in `.compassignore`
+
+**MANDATORY Workflow for File Creation (No Exceptions):**
+- User asks you to create a new script `.cursor/scripts/new-tool.mjs`
+- **Step 1**: Create the file
+- **Step 2**: **IMMEDIATELY** (in the same response/tool call batch) run:
+  ```bash
+  pnpm run add-to-compassignore .cursor/scripts/new-tool.mjs
+  ```
+- **Step 3**: Inform the user: "已創建 `.cursor/scripts/new-tool.mjs` 並自動添加到 `.compassignore`"
+
+**MANDATORY Workflow for File Deletion (No Exceptions):**
+- User asks you to delete a file `.cursor/scripts/old-tool.mjs` that exists in `.compassignore`
+- **Step 1**: Delete the file
+- **Step 2**: **IMMEDIATELY** (in the same response/tool call batch) remove it from `.compassignore`:
+  - Read `.compassignore`
+  - Remove the file path from the appropriate section
+  - Write back the updated content
+- **Step 3**: Inform the user: "已刪除 `.cursor/scripts/old-tool.mjs` 並自動從 `.compassignore` 中移除"
+
+**Important Notes:**
+- Adding and removing are **MANDATORY** steps, not optional
+- You must execute these operations **in the same tool call batch** as creating or deleting the file
+- Do not create/delete files and then forget to update `.compassignore`
+- If you create/delete multiple matching files, handle them all in a single operation
+
+### How to Add Files
+
+1. Read the current `.compassignore` file
+2. Check if the file path already exists
+3. If not, add the file path to the appropriate section:
+   - Development scripts → "# 開發工具腳本（打包時不會使用）"
+   - Documentation → "# 文檔檔案"
+   - Configuration files → Add a new section if needed (e.g., "# 工具設定檔案")
+4. Maintain alphabetical or logical ordering within each section
+5. Use relative paths from project root
+
+### How to Remove Files
+
+1. Read the current `.compassignore` file
+2. Check if the deleted file path exists in any section
+3. If found, remove the file path from that section
+4. If a section becomes empty after removal, you may optionally remove the section header (but this is not required)
+5. Write the updated content back to `.compassignore`
+6. Use relative paths from project root (same as when adding)
+
+**Implementation Approach:**
+- Parse the `.compassignore` file into sections (similar to how `.cursor/scripts/add-to-compassignore.mjs` does it)
+- Search for the deleted file path across all sections
+- Remove the file path from the section where it's found
+- Format and write back the updated content
+
+### File Path Patterns
+
+Use these patterns to identify files that should be added:
+
+```javascript
+const patterns = {
+  scripts: /^scripts\/.*\.(mjs|js|py|sh|ts)$/,
+  cursorCommands: /^\.cursor\/commands\/.*\.md$/,
+  cursorRules: /^\.cursor\/rules\/.*\.mdc$/,
+  eslintConfig: /^\.eslintrc(\.js|\.json|\.yml)?$|^eslint\.config\.js$/,
+  prettierConfig: /^\.prettierrc(\.js|\.json|\.yml|\.yaml)?$/,
+  commitlintConfig: /^(commitlint|\.commitlintrc)\.config\.(js|json)$/,
+  huskyConfig: /^\.husky\/.*$/,
+  lintStagedConfig: /^\.lintstagedrc(\.js|\.json)?$/,
+  storybookConfig: /^\.storybook\/.*$/,
+  docs: /^docs\/.*$/,
+  scriptsReadme: /^scripts\/README-.*\.md$/,
+};
+```
+
+## Examples
+
+### Example 1: Adding a New Script
+
+**Scenario**: User creates a new script `.cursor/scripts/generate-icons.mjs`
+
+**Action**: 
+1. Detect that `.cursor/scripts/generate-icons.mjs` matches the scripts pattern
+2. Check if it exists in `.compassignore`
+3. If not, add it under "# 開發工具腳本（打包時不會使用）" section
+
+**Result**:
+```
+# 開發工具腳本（打包時不會使用）
+.cursor/scripts/
+scripts/clone-detect.mjs
+scripts/generate-icons.mjs
+scripts/image-preprocess.mjs
+scripts/install-ocr-dependencies.sh
+```
+
+### Example 2: Adding a Cursor Rule
+
+**Scenario**: User creates a new cursor rule `.cursor/rules/new-feature-guidelines.mdc`
+
+**Action**:
+1. Detect that `.cursor/rules/new-feature-guidelines.mdc` matches the cursor rules pattern
+2. Check if it exists in `.compassignore`
+3. If not, add it under a new section "# Cursor 規則檔案" or existing appropriate section
+
+**Result**:
+```
+# Cursor 規則檔案
+.cursor/rules/new-feature-guidelines.mdc
+```
+
+### Example 3: Modifying Tool Configuration
+
+**Scenario**: User modifies `.eslintrc.js`
+
+**Action**:
+1. Detect that `.eslintrc.js` matches the eslint config pattern
+2. Check if it exists in `.compassignore`
+3. If not, add it under "# 工具設定檔案" section
+
+### Example 4: Removing a Deleted File
+
+**Scenario**: User deletes a script `scripts/old-tool.mjs` that exists in `.compassignore`
+
+**Action**:
+1. Detect that `scripts/old-tool.mjs` was deleted
+2. Check if it exists in `.compassignore` (in the "# 開發工具腳本（打包時不會使用）" section)
+3. If found, remove it from that section
+4. Write the updated content back to `.compassignore`
+
+**Result**:
+```
+# 開發工具腳本（打包時不會使用）
+scripts/add-to-compassignore.mjs
+scripts/agent-commit.mjs
+# ... other files ...
+# scripts/old-tool.mjs <- 已移除
+scripts/other-tool.mjs
+```
+
+## Automation
+
+When implementing this rule:
+
+1. **Before Commit**: Check all staged/modified/deleted files against the patterns
+2. **During Review**: When reviewing code, identify files that should be in `.compassignore` or should be removed from it
+3. **Auto-Detection**: Use file path patterns to automatically detect files that should be added or removed
+4. **Synchronization**: Ensure `.compassignore` stays synchronized with the actual file system - files that are deleted must be removed from `.compassignore`
+5. **User Confirmation**: When adding or removing files automatically, inform the user and allow them to review
+
+### Using the Helper Script
+
+A helper script `.cursor/scripts/add-to-compassignore.mjs` is available to automate adding files:
+
+**Usage:**
+```bash
+# Add single file
+node .cursor/scripts/add-to-compassignore.mjs .cursor/scripts/new-script.mjs
+
+# Add multiple files
+node .cursor/scripts/add-to-compassignore.mjs .cursor/scripts/new-script.mjs .cursor/rules/new-rule.mdc
+
+# Or use pnpm
+pnpm exec node .cursor/scripts/add-to-compassignore.mjs <file1> [file2] ...
+```
+
+**When to Use:**
+- After creating new development scripts
+- After modifying tool configuration files
+- After adding new cursor commands or rules
+- After deleting files that exist in `.compassignore` (manually remove from `.compassignore`)
+- Before committing changes that include development tool files
+
+**Note on Removal:**
+Currently, the helper script only supports adding files. When removing files, you need to:
+1. Read `.compassignore` manually
+2. Remove the deleted file path from the appropriate section
+3. Write back the updated content
+
+Alternatively, you can use the parsing logic from `.cursor/scripts/add-to-compassignore.mjs` as a reference to implement removal functionality.
+
+**Integration with Git Hooks (Optional):**
+You can integrate this into a git pre-commit hook to automatically check and add files before each commit.
+
+## Notes
+
+- Files in `src/` directory should **NOT** be added to `.compassignore` (they are part of the product)
+- Build configuration files that are used during the build process should **NOT** be added
+- Only add files that are truly not part of the production build
+- Maintain the existing format and structure of `.compassignore`
+- Use relative paths from the project root
+- Keep sections organized and alphabetically sorted when possible

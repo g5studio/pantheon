@@ -1,0 +1,172 @@
+# 跨語系參數智能偵測功能
+
+## 概述
+
+所有 Cursor commands 現在都支援跨語系參數智能偵測功能。這意味著：
+
+1. **即使 chat 內容非中文，也能判斷是否包含類似的中文情境**
+2. **所有參數都支援中英文關鍵字檢測**
+3. **系統會自動從 chat 內容中提取參數值**
+
+## 支援的參數
+
+### 1. `--no-notify`（不要通知）
+
+**中文關鍵字：**
+- 不要通知、不通知、取消通知、跳過通知、禁用通知、關閉通知、停止通知、無需通知、不需要通知、不用通知、別通知、勿通知、免通知、禁止通知
+
+**英文關鍵字：**
+- no notify、no notification、skip notify、skip notification、disable notify、disable notification、cancel notify、cancel notification、turn off notify、don't notify、without notify、silent、quiet、mute notification、suppress notification、hide notification
+
+**範例：**
+- 中文：`cr 建立 MR，不要通知`
+- 英文：`cr create MR without notification`
+- 混合：`cr 建立 MR，skip notification`
+
+### 2. `--no-draft`（不要草稿）
+
+**中文關鍵字：**
+- 不要草稿、不用草稿、不需要草稿、非草稿、不是草稿、直接提交、正式提交、直接合併、正式合併、不要 draft、不用 draft、不需要 draft、非 draft、不是 draft、ready for review、ready
+
+**英文關鍵字：**
+- no draft、not draft、without draft、skip draft、disable draft、direct submit、direct commit、ready for review、ready to merge、don't draft、not a draft、non-draft、final、ready
+
+**範例：**
+- 中文：`cr 這個修改直接提交，不要 draft`
+- 英文：`cr submit this change directly, no draft`
+- 混合：`cr 直接提交，ready for review`
+
+### 3. `--no-review`（不要送審）
+
+**中文關鍵字：**
+- 不要送審、不送審、跳過送審、不用送審、不需要送審、別送審、勿送審、免送審、不要審查、不審查、不要 review、不 review、跳過 review、不用 review
+
+**英文關鍵字：**
+- no review、no submit review、skip review、skip submit、without review、without submit、don't review、don't submit、no ai review、skip ai review、not for review
+
+**範例：**
+- 中文：`commit 並建立 MR，不要送審`
+- 英文：`commit and create MR, no review`
+- 混合：`commit 並建立 MR，skip review`
+
+### 4. `--reviewer`（指定審查者）
+
+**中文關鍵字：**
+- reviewer、審查者、審查人、審核者、給 @、讓 @、請 @、由 @、交給 @、指定 @、設置 @、設置 reviewer、指定 reviewer
+
+**英文關鍵字：**
+- reviewer、review by、review from、reviewer is、reviewer:、assign to、assign reviewer、set reviewer、for @、to @、by @
+
+**範例：**
+- 中文：`cr 請讓 @john.doe 審查這個修改`
+- 英文：`cr please let @john.doe review this change`
+- 混合：`cr 讓 @john.doe review`
+
+### 5. `--target`（目標分支）
+
+**中文關鍵字：**
+- 目標分支、合併到、合併至、merge to、target branch、target:、合併到 、合併至 、要合併到、要合併至、目標是、目標為
+
+**英文關鍵字：**
+- target branch、target:、merge to、merge into、merge target、target is、targeting、to branch、into branch
+
+**範例：**
+- 中文：`cr 這個修改要合併到 develop 分支`
+- 英文：`cr merge this change to develop branch`
+- 混合：`cr 合併到 develop branch`
+
+### 6. `--related-tickets`（關聯單號）
+
+**中文關鍵字：**
+- 關聯單號、相關單號、同時修復、一起修復、同步修復、相關的、關聯的、related tickets、related ticket、related:
+
+**英文關鍵字：**
+- related tickets、related ticket、related:、also fixes、also fix、fixes also、related to、related issues、related jira、together with、along with
+
+**範例：**
+- 中文：`cr 這個修改同時修復了 IN-1235 和 IN-1236 的問題`
+- 英文：`cr this fix also resolves IN-1235 and IN-1236`
+- 混合：`cr 同時修復 IN-1235，also fixes IN-1236`
+
+### 7. `--skip-lint`（跳過 lint）
+
+**中文關鍵字：**
+- 跳過 lint、不用 lint、不需要 lint、不要 lint、不執行 lint、跳過檢查、不用檢查、不需要檢查
+
+**英文關鍵字：**
+- skip lint、no lint、without lint、skip check、no check、skip format、no format、skip validation
+
+**範例：**
+- 中文：`commit 跳過 lint`
+- 英文：`commit skip lint`
+- 混合：`commit 不用 lint check`
+
+### 8. `--auto-push`（自動推送）
+
+**中文關鍵字：**
+- 自動推送、自動 push、直接推送、直接 push、立即推送、立即 push、推送、push
+
+**英文關鍵字：**
+- auto push、auto-push、push automatically、push now、push directly、push immediately、and push、then push
+
+**範例：**
+- 中文：`commit 並自動推送`
+- 英文：`commit and push automatically`
+- 混合：`commit 並 push now`
+
+## 使用方式
+
+### 方式 1: 在 Chat 中自然表達（推薦）
+
+直接在 chat 中表達你的意圖，系統會自動偵測：
+
+```
+用戶：cr 建立 MR，不要通知，合併到 develop，讓 @john.doe 審查
+AI：偵測到以下參數：
+    - --no-notify: 不要通知
+    - --target: develop
+    - --reviewer: @john.doe
+    是否使用這些參數？
+```
+
+### 方式 2: 混合語言
+
+系統支援混合語言，即使部分內容是英文，也能偵測中文情境：
+
+```
+用戶：cr create MR，不要通知，merge to develop
+AI：偵測到以下參數：
+    - --no-notify: 不要通知
+    - --target: develop
+```
+
+### 方式 3: 環境變量
+
+AI 可以通過環境變量傳遞 chat 內容：
+
+```bash
+CURSOR_CHAT_CONTENT="建立 MR，不要通知" pnpm run create-mr
+```
+
+## 技術實現
+
+智能偵測功能由 `.cursor/scripts/utilities/parameter-detector.mjs` 提供，包含：
+
+- `shouldSetParameter(parameterName, args, chatContent)`: 判斷是否要設置某個參數
+- `extractReviewer(chatContent)`: 從 chat 內容中提取 reviewer
+- `extractTargetBranch(chatContent)`: 從 chat 內容中提取目標分支
+- `extractRelatedTickets(chatContent, currentTicket)`: 從 chat 內容中提取關聯單號
+- `parseAllParameters(args, chatContent, currentTicket)`: 一次性解析所有參數
+
+## 優先級
+
+1. **命令行參數**（最高優先級）：如果明確提供了參數，直接使用
+2. **Chat 內容偵測**：從 chat 內容中智能偵測參數
+3. **預設值**：如果都未偵測到，使用預設值
+
+## 注意事項
+
+- 所有關鍵字檢測都是**大小寫不敏感**的
+- 只要內容中包含任何關鍵字，就會觸發偵測
+- 如果偵測到多個候選值（如多個 reviewer），系統會詢問用戶選擇
+- 支援混合語言：即使部分內容是英文，也能偵測中文情境的關鍵字
