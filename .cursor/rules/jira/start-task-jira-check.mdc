@@ -1,6 +1,5 @@
 ---
 description: 在 start-task 檢查 Jira 單時需要遵守的原則，特別是優先檢查 RD 提供的建議
-globs:
 alwaysApply: false
 ---
 # Start-Task Jira Ticket 檢查原則
@@ -156,7 +155,7 @@ for AI: 請優先考慮使用現有的 UserProfile 組件，不要重新創建�
 
 #### 1. 自動添加 AI Label
 
-**實施位置**：`.cursor/operator-scripts/create-mr.mjs` 的 `determineLabels()` 函數
+**實施位置**：`.cursor/scripts/cr/create-mr.mjs` 的 `determineLabels()` 函數
 
 **邏輯**：
 - 檢查是否存在 `start-task` 的 Git notes（透過 `readStartTaskInfo()`）
@@ -165,7 +164,7 @@ for AI: 請優先考慮使用現有的 UserProfile 組件，不要重新創建�
 
 #### 2. 自動檢附開發方案到 MR 留言
 
-**實施位置**：`.cursor/operator-scripts/create-mr.mjs` 的 `main()` 函數
+**實施位置**：`.cursor/scripts/cr/create-mr.mjs` 的 `main()` 函數
 
 **邏輯**：
 - 檢查是否存在 `start-task` 的 Git notes
