@@ -11,8 +11,8 @@ import { dirname, join } from "path";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-// 腳本在 .cursor/scripts/，需要往上兩層到項目根目錄
-const projectRoot = join(__dirname, "../..");
+// 腳本在 .cursor/scripts/jira/，需要往上三層到項目根目錄
+const projectRoot = join(__dirname, "../../..");
 
 // 讀取 .env.local 文件
 // 優先從項目根目錄讀取，如果不存在則從 .cursor/.env.local 讀取

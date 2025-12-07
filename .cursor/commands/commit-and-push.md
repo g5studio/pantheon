@@ -86,8 +86,6 @@ description: 快速執行 commit 並推送到遠端，不建立 MR 也不送審
 
 **CRITICAL**: 在執行 commit 之前，AI 必須檢查代碼是否符合 Cursor rules。
 
-**重要：此步驟的處理方式遵循 `commit-rule-violation-handling.mdc` 規則。請參考該規則文件了解詳細的處理流程。**
-
 **核心原則**：
 - **不要自動修改代碼**
 - **在 chat 中列出所有違規和修正建議**
@@ -115,9 +113,7 @@ description: 快速執行 commit 並推送到遠端，不建立 MR 也不送審
 
 3. **如果通過檢查**：繼續執行 commit 流程
 
-**詳細處理方式請參考**：`.cursor/rules/commit-rule-violation-handling.mdc`
-
-**最高優先級原則**：必須同時遵守 [ai-decision-making-priorities.mdc](mdc:.cursor/rules/ai-decision-making-priorities.mdc) 規則。當檢測到需要修改代碼的問題時，**必須立即停止並詢問用戶**，無論任務目標為何。**先詢問再修改 > 完成任務**。
+**最高優先級原則**：必須遵守 [ai-decision-making-priorities.mdc](mdc:.cursor/rules/ai-decision-making-priorities.mdc) 規則。當檢測到需要修改代碼的問題時，**必須立即停止並詢問用戶**，無論任務目標為何。**先詢問再修改 > 完成任務**。
 
 ### 6. 執行 Commit 流程
 
