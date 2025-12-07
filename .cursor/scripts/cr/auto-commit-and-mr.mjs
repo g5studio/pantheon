@@ -19,8 +19,8 @@ import readline from "readline";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-// 腳本在 .cursor/scripts/，需要往上兩層到項目根目錄
-const projectRoot = join(__dirname, "../..");
+// 腳本在 .cursor/scripts/cr/，需要往上三層到項目根目錄
+const projectRoot = join(__dirname, "../../..");
 
 // Commit types 定義
 const COMMIT_TYPES = {
