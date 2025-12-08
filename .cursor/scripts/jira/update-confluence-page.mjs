@@ -18,68 +18,8 @@
  */
 
 import { readFileSync, existsSync } from "fs";
-import { fileURLToPath } from "url";
-import { dirname, join, extname } from "path";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const projectRoot = join(__dirname, "../../..");
-
-// 讀取 .env.local 文件
-function loadEnvLocal() {
-  let envLocalPath = join(projectRoot, ".env.local");
-
-  if (!existsSync(envLocalPath)) {
-    envLocalPath = join(projectRoot, ".cursor", ".env.local");
-  }
-
-  if (!existsSync(envLocalPath)) {
-    return {};
-  }
-
-  const envContent = readFileSync(envLocalPath, "utf-8");
-  const env = {};
-  envContent.split("\n").forEach((line) => {
-    line = line.trim();
-    if (line && !line.startsWith("#")) {
-      const [key, ...valueParts] = line.split("=");
-      if (key && valueParts.length > 0) {
-        env[key.trim()] = valueParts
-          .join("=")
-          .trim()
-          .replace(/^["']|["']$/g, "");
-      }
-    }
-  });
-  return env;
-}
-
-// 獲取 Jira 配置
-function getJiraConfig() {
-  const envLocal = loadEnvLocal();
-  const email = process.env.JIRA_EMAIL || envLocal.JIRA_EMAIL;
-  const apiToken = process.env.JIRA_API_TOKEN || envLocal.JIRA_API_TOKEN;
-  const baseUrl = "https://innotech.atlassian.net/";
-
-  if (!email || !apiToken) {
-    console.error("\n❌ Jira 配置缺失！\n");
-    console.error("📝 請按照以下步驟設置 Jira 配置：\n");
-    console.error("**1. 設置 Jira Email:**");
-    console.error("   在 .env.local 文件中添加:");
-    console.error("   JIRA_EMAIL=your-email@example.com\n");
-    console.error("**2. 設置 Jira API Token:**");
-    console.error(
-      "   1. 前往: https://id.atlassian.com/manage-profile/security/api-tokens"
-    );
-    console.error('   2. 點擊 "Create API token"');
-    console.error("   3. 複製生成的 token");
-    console.error("   4. 在 .env.local 文件中添加:");
-    console.error("      JIRA_API_TOKEN=your-api-token\n");
-    throw new Error("Jira 配置缺失，請檢查 .env.local 文件");
-  }
-
-  return { email, apiToken, baseUrl };
-}
+import { extname } from "path";
+import { getJiraConfig } from "../utilities/env-loader.mjs";
 
 // 從 Confluence URL 解析頁面 ID
 function parseConfluenceUrl(url) {

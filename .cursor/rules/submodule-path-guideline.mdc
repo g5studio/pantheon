@@ -1,0 +1,136 @@
+---
+alwaysApply: true
+---
+
+# Pantheon Submodule 路徑規則
+
+此規則說明 Pantheon 專案作為 submodule 掛載到其他專案時的路徑處理方式。
+
+## 背景說明
+
+Pantheon 專案設計為可以作為 **git submodule** 掛載到其他專案中，並透過 **symbolic link** 進行同步。這種架構會導致所有 Pantheon 內的檔案路徑在目標專案中會有不同的實際位置。
+
+## 路徑對應規則
+
+### 掛載後的路徑結構
+
+當 Pantheon 掛載到其他專案時，所有檔案會位於 `.pantheon/` 資料夾下：
+
+| Pantheon 內部路徑 | 掛載後實際路徑 |
+|---|---|
+| `.cursor/rules/` | `.pantheon/.cursor/rules/` |
+| `.cursor/scripts/` | `.pantheon/.cursor/scripts/` |
+| `.cursor/commands/` | `.pantheon/.cursor/commands/` |
+| `.cursor/version.json` | `.pantheon/.cursor/version.json` |
+
+### 範例路徑對照
+
+| 類型 | Pantheon 內部路徑 | 目標專案實際路徑 |
+|---|---|---|
+| 通知腳本 | `.cursor/scripts/notification/notify-cursor-rules-failed.mjs` | `.pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs` |
+| Commit 腳本 | `.cursor/scripts/cr/agent-commit.mjs` | `.pantheon/.cursor/scripts/cr/agent-commit.mjs` |
+| MR 腳本 | `.cursor/scripts/cr/create-mr.mjs` | `.pantheon/.cursor/scripts/cr/create-mr.mjs` |
+| Jira 腳本 | `.cursor/scripts/jira/read-jira-ticket.mjs` | `.pantheon/.cursor/scripts/jira/read-jira-ticket.mjs` |
+| 版本更新腳本 | `.cursor/scripts/utilities/bump-version.mjs` | `.pantheon/.cursor/scripts/utilities/bump-version.mjs` |
+
+## 腳本執行規則
+
+**CRITICAL**: 當 AI 在目標專案中執行 Pantheon 提供的腳本時，**必須**使用正確的路徑。
+
+### 路徑判斷邏輯
+
+執行腳本前，AI **必須**按以下順序檢查路徑：
+
+1. **優先檢查 `.pantheon/.cursor/scripts/` 路徑**
+   - 如果 `.pantheon/` 資料夾存在，表示 Pantheon 是以 submodule 形式掛載
+   - 使用 `.pantheon/.cursor/scripts/...` 路徑
+
+2. **備用檢查 `.cursor/scripts/` 路徑**
+   - 如果 `.pantheon/` 資料夾不存在，表示在 Pantheon 專案本身
+   - 使用 `.cursor/scripts/...` 路徑
+
+### 路徑檢查範例
+
+```bash
+# 檢查是否存在 .pantheon 資料夾
+if [ -d ".pantheon" ]; then
+  # 使用 submodule 路徑
+  SCRIPT_PATH=".pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs"
+else
+  # 使用直接路徑
+  SCRIPT_PATH=".cursor/scripts/notification/notify-cursor-rules-failed.mjs"
+fi
+
+node "$SCRIPT_PATH" "$@"
+```
+
+## AI 執行腳本的規則
+
+### 自動路徑偵測
+
+**CRITICAL**: 當 AI 需要執行任何 Pantheon 腳本時，**必須**：
+
+1. **先檢查 `.pantheon/` 資料夾是否存在**
+2. **根據檢查結果決定使用的路徑**
+3. **使用正確的完整路徑執行腳本**
+
+### 執行範例
+
+#### 情境 1：在 Pantheon 專案本身
+
+```bash
+# .pantheon 資料夾不存在，使用直接路徑
+node .cursor/scripts/notification/notify-cursor-rules-failed.mjs "pantheon" "推送完成"
+```
+
+#### 情境 2：在掛載了 Pantheon 的目標專案
+
+```bash
+# .pantheon 資料夾存在，使用 submodule 路徑
+node .pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs "fluid-two" "推送完成"
+```
+
+## 常見腳本路徑對照表
+
+以下是常用腳本的路徑對照，方便快速查閱：
+
+| 腳本用途 | Pantheon 路徑 | Submodule 掛載路徑 |
+|---|---|---|
+| **通知** |
+| 系統通知 | `.cursor/scripts/notification/notify-cursor-rules-failed.mjs` | `.pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs` |
+| **Commit & MR** |
+| Agent Commit | `.cursor/scripts/cr/agent-commit.mjs` | `.pantheon/.cursor/scripts/cr/agent-commit.mjs` |
+| 建立 MR | `.cursor/scripts/cr/create-mr.mjs` | `.pantheon/.cursor/scripts/cr/create-mr.mjs` |
+| 自動 Commit & MR | `.cursor/scripts/cr/auto-commit-and-mr.mjs` | `.pantheon/.cursor/scripts/cr/auto-commit-and-mr.mjs` |
+| **Jira** |
+| 讀取 Jira Ticket | `.cursor/scripts/jira/read-jira-ticket.mjs` | `.pantheon/.cursor/scripts/jira/read-jira-ticket.mjs` |
+| 讀取 Confluence | `.cursor/scripts/jira/read-confluence-page.mjs` | `.pantheon/.cursor/scripts/jira/read-confluence-page.mjs` |
+| 更新 Confluence | `.cursor/scripts/jira/update-confluence-page.mjs` | `.pantheon/.cursor/scripts/jira/update-confluence-page.mjs` |
+| **工具** |
+| 版本更新 | `.cursor/scripts/utilities/bump-version.mjs` | `.pantheon/.cursor/scripts/utilities/bump-version.mjs` |
+| 參數偵測 | `.cursor/scripts/utilities/parameter-detector.mjs` | `.pantheon/.cursor/scripts/utilities/parameter-detector.mjs` |
+
+## 規則與命令檔案路徑
+
+規則（`.mdc`）和命令（`.md`）檔案同樣遵循此路徑規則：
+
+| 類型 | Pantheon 路徑 | Submodule 掛載路徑 |
+|---|---|---|
+| 規則檔案 | `.cursor/rules/*.mdc` | `.pantheon/.cursor/rules/*.mdc` |
+| 命令檔案 | `.cursor/commands/*.md` | `.pantheon/.cursor/commands/*.md` |
+
+## 注意事項
+
+1. **路徑檢查必須在每次執行前進行**：不要假設路徑，每次都要確認
+2. **錯誤處理**：如果兩個路徑都找不到腳本，應該報告錯誤並停止執行
+3. **相對路徑與絕對路徑**：建議使用相對於專案根目錄的路徑
+4. **Symbolic Link**：目標專案可能使用 symbolic link 同步檔案，路徑解析時需注意
+
+## 錯誤排查
+
+如果執行腳本時遇到「找不到檔案」錯誤，請檢查：
+
+1. 是否使用了正確的路徑前綴（`.pantheon/` 或無前綴）
+2. `.pantheon/` 資料夾是否存在
+3. Symbolic link 是否正確建立
+4. 腳本檔案是否確實存在於預期路徑
