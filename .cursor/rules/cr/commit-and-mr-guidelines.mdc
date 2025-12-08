@@ -470,116 +470,121 @@ The `create-mr.mjs` script automatically analyzes changed files and adds the app
 - Report language must match user's preferred language (Chinese or English)
 - Report must be provided immediately after successful MR creation
 
-## Pre-Commit Rebase Requirement
+## Pre-MR Rebase Requirement
 
-### **CRITICAL**: Rebase to Base Branch Before Commit
+### **CRITICAL**: Rebase to Target Branch Before Creating MR
 
-**MUST**: Before executing any commit operation, feature branches **MUST** be rebased to their original base branch to ensure the latest changes from the base branch are integrated.
+**MUST**: Before creating any MR, feature branches **MUST** be rebased to the target branch (not the original base branch) to ensure the latest changes from the target branch are integrated.
 
-### Determining the Base Branch
+**重要變更**：Rebase 時機從「commit 前」改為「建立 MR 前」，這樣可以：
+1. 避免開發過程中頻繁 rebase 造成的困擾
+2. 確保在最終建立 MR 時，分支已經是最新的
+3. 由 `create-mr.mjs` 腳本自動執行，減少人為遺漏
 
-The base branch can be determined through the following methods (in priority order):
+### Pre-MR Validation Requirements
 
-1. **From start-task Git notes** (if available):
-   - Read `sourceBranch` from the start-task Git notes stored in `refs/notes/start-task`
-   - This is the most reliable method as it records the original base branch when the feature branch was created
+在建立 MR 之前，`create-mr.mjs` 腳本會自動檢查以下條件：
 
-2. **Using git merge-base** (fallback method):
-   - Use `git merge-base HEAD {commonBranch}` to find the common ancestor
-   - Try common branches in order: `main`, `develop`, `release/*`
-   - The branch that yields the most recent common ancestor is likely the base branch
+1. **所有變更都已 commit**：不允許有未提交的變更
+2. **已 rebase 到 target branch**：確保分支包含目標分支的最新內容
+3. **所有 commits 都已推送到遠端**：rebase 後會自動使用 `--force-with-lease` 推送
 
-3. **Manual confirmation** (if automatic detection fails):
-   - Ask the user to confirm the base branch
-   - Common base branches: `main`, `develop`, `release/5.34`, etc.
+只有當上述三個條件都滿足後，才會繼續執行 MR 建立流程（添加 label、送審等）。
 
-### Rebase Process
+### Rebase Process (Automated by create-mr.mjs)
 
-**CRITICAL**: The rebase process must be executed **before** any commit operation. The complete workflow is:
+`create-mr.mjs` 腳本會自動執行以下流程：
 
-1. **Stage current changes**:
+1. **檢查未提交的變更**：
+   - 如果有未提交的變更，立即停止並要求用戶先 commit
+
+2. **檢查是否有未完成的 rebase**：
+   - 如果有未完成的 rebase，立即停止並要求用戶先處理
+
+3. **執行 rebase 到目標分支**：
    ```bash
-   git add .
+   git fetch origin {targetBranch}
+   git rebase origin/{targetBranch}
    ```
+   Where `{targetBranch}` is the target branch specified by `--target` parameter (default: `main`)
 
-2. **Stash current changes**:
-   ```bash
-   git stash
-   ```
+4. **處理 rebase 結果**：
+   - 如果成功，繼續下一步
+   - 如果發生衝突，立即停止並要求用戶手動解決
 
-3. **Pull and rebase from base branch**:
-   ```bash
-   git pull origin {baseBranch} -r
-   ```
-   Where `{baseBranch}` is the determined base branch (e.g., `main`, `release/5.34`)
-
-4. **Restore stashed changes**:
-   ```bash
-   git stash pop
-   ```
-
-5. **Check for conflicts**:
-   - If no conflicts occur, proceed with the normal commit and subsequent processes
-   - If conflicts occur, follow the conflict resolution process below
+5. **推送到遠端**：
+   - 如果 rebase 改變了 commit history，使用 `--force-with-lease` 推送
+   - 如果是 fast-forward，使用普通 push
 
 ### Conflict Resolution Process
 
-**If conflicts occur after `git stash pop`:**
+**If conflicts occur during rebase:**
 
-1. **Immediately stop the commit process**
-2. **Notify the user** that conflicts need to be resolved
-3. **Wait for user confirmation** that conflicts have been resolved
-4. **After user confirms resolution**, perform impact analysis:
-   - Check if user's changes affect existing functionality in the base branch
-   - Check if user's changes affect local feature branch functionality
-   - If either impact is detected, **warn the user** and require explicit confirmation
-5. **Only proceed with commit** after:
-   - All conflicts are resolved
-   - Impact analysis is complete
-   - User has confirmed (or acknowledged warnings) that functionality is not affected
+1. **腳本會立即停止並顯示錯誤信息**
+2. **用戶需要手動解決衝突**：
+   ```bash
+   # 檢查衝突檔案
+   git status
+   
+   # 解決每個衝突檔案後
+   git add <檔案>
+   
+   # 繼續 rebase
+   git rebase --continue
+   
+   # 或中止 rebase
+   git rebase --abort
+   ```
+3. **解決衝突後重新執行 `create-mr`**
 
 ### Examples
 
-**Example 1: Feature branch from main**
+**Example 1: Feature branch targeting main**
 ```
 Branch: feature/IN-1234
-Base branch: main
+Target branch: main (default)
 
-Process:
-1. git add .
-2. git stash
-3. git pull origin main -r
-4. git stash pop
-5. If no conflicts → continue with commit
+Process (automated by create-mr.mjs):
+1. Check uncommitted changes → None ✓
+2. Check ongoing rebase → None ✓
+3. git fetch origin main
+4. git rebase origin/main → Success ✓
+5. git push origin feature/IN-1234 --force-with-lease → Success ✓
+6. Create MR with labels, reviewer, etc.
 ```
 
-**Example 2: Feature branch from release branch**
+**Example 2: Hotfix targeting release branch**
 ```
 Branch: feature/IN-4567
-Base branch: release/5.34
+Target branch: release/5.35 (auto-detected from Jira fix version)
 
-Process:
-1. git add .
-2. git stash
-3. git pull origin release/5.34 -r
-4. git stash pop
-5. If conflicts → wait for user resolution → check impact → continue
+Process (automated by create-mr.mjs):
+1. Check uncommitted changes → None ✓
+2. Check ongoing rebase → None ✓
+3. git fetch origin release/5.35
+4. git rebase origin/release/5.35 → Conflict!
+5. Script stops with error message
+6. User resolves conflict manually
+7. User re-runs: pnpm run create-mr
+8. Rebase succeeds → Continue with MR creation
 ```
 
-### Integration with Commit Workflows
+### Integration with MR Workflows
 
-This rebase requirement applies to **all commit-related commands**, including:
+This rebase requirement is **automatically enforced** by `create-mr.mjs` for all MR-related commands:
 - `cr single-ticket` command
 - `cr multiple-ticket` command
-- `commit-and-push` command
-- Any other command that triggers a commit operation
+- Direct `pnpm run create-mr` execution
 
-**Execution order:**
-1. Check Git status
-2. **Rebase to base branch** (this new requirement)
-3. Check Cursor rules
-4. Execute commit
-5. Continue with subsequent processes (push, MR creation, etc.)
+**Execution order in create-mr.mjs:**
+1. Check uncommitted changes
+2. Check remote branch exists
+3. **Check ongoing rebase** (new)
+4. **Rebase to target branch** (new)
+5. Push to remote (with `--force-with-lease` if needed)
+6. Validate Jira ticket
+7. Create/Update MR with labels, reviewer, etc.
+8. Submit AI review (if applicable)
 
 ## Usage
 
@@ -589,10 +594,12 @@ Use the `agent-commit` script to ensure compliance:
 pnpm run agent-commit --type=feat --ticket=FE-7838 --message="enable new sport baseball"
 ```
 
-**Note**: The rebase process should be executed **before** running `agent-commit` or any commit command.
+**Note**: Rebase is no longer required before commit. It will be automatically executed when creating MR.
 
 ### Creating MRs
 Use the `create-mr` script which automatically:
+- **Rebases to target branch** (new)
+- **Pushes with `--force-with-lease` if needed** (new)
 - Sets MR as draft
 - Analyzes files and adds appropriate UI labels
 - Adds FE Board label if applicable
@@ -651,10 +658,11 @@ When any changes are made to this rule file, the following actions **MUST** be p
 
 When reviewing related files, pay special attention to:
 
-1. **Pre-Commit Rebase Requirement**:
-   - Verify that rebase steps are documented in command files
-   - Ensure rebase logic is executed before commit operations
-   - Check conflict resolution handling
+1. **Pre-MR Rebase Requirement**:
+   - Verify that rebase is executed automatically by `create-mr.mjs` before MR creation
+   - Ensure rebase targets the MR target branch (not the original base branch)
+   - Check conflict resolution handling (script should stop and require manual resolution)
+   - Verify `--force-with-lease` is used for pushing after rebase
 
 2. **Information Validation Before MR Creation**:
    - Verify that all required information is validated before MR creation
@@ -666,13 +674,16 @@ When reviewing related files, pay special attention to:
    - Ensure no automatic code modifications without user consent
    - Check that user feedback is provided for detected issues
 
-4. **Execution Order**:
+4. **Execution Order in create-mr.mjs**:
    - Verify that the execution order matches the specified workflow:
-     1. Check Git status
-     2. Rebase to base branch
-     3. Check Cursor rules
-     4. Execute commit
-     5. Continue with subsequent processes (push, MR creation, etc.)
+     1. Check uncommitted changes (must be all committed)
+     2. Check remote branch exists
+     3. Check ongoing rebase (must be none)
+     4. Rebase to target branch
+     5. Push to remote (with `--force-with-lease` if needed)
+     6. Validate Jira ticket
+     7. Create/Update MR with labels, reviewer, etc.
+     8. Submit AI review (if applicable)
 
 ### Compliance Checklist
 
