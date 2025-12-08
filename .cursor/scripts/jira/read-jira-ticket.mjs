@@ -5,86 +5,7 @@
  * 使用 Jira API token 透過 API 訪問 ticket 信息
  */
 
-import { readFileSync, existsSync } from "fs";
-import { fileURLToPath } from "url";
-import { dirname, join } from "path";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-// 腳本在 .cursor/scripts/jira/，需要往上三層到項目根目錄
-const projectRoot = join(__dirname, "../../..");
-
-// 讀取 .env.local 文件
-// 優先從項目根目錄讀取，如果不存在則從 .cursor/.env.local 讀取
-function loadEnvLocal() {
-  // 優先級 1: 項目根目錄的 .env.local
-  let envLocalPath = join(projectRoot, ".env.local");
-  
-  // 優先級 2: .cursor/.env.local
-  if (!existsSync(envLocalPath)) {
-    envLocalPath = join(projectRoot, ".cursor", ".env.local");
-  }
-  
-  if (!existsSync(envLocalPath)) {
-    return {};
-  }
-
-  const envContent = readFileSync(envLocalPath, "utf-8");
-  const env = {};
-  envContent.split("\n").forEach((line) => {
-    line = line.trim();
-    if (line && !line.startsWith("#")) {
-      const [key, ...valueParts] = line.split("=");
-      if (key && valueParts.length > 0) {
-        env[key.trim()] = valueParts
-          .join("=")
-          .trim()
-          .replace(/^["']|["']$/g, "");
-      }
-    }
-  });
-  return env;
-}
-
-// 獲取 Jira 配置（從環境變數或 .env.local 讀取）
-function getJiraConfig() {
-  const envLocal = loadEnvLocal();
-  const email = process.env.JIRA_EMAIL || envLocal.JIRA_EMAIL;
-  const apiToken = process.env.JIRA_API_TOKEN || envLocal.JIRA_API_TOKEN;
-  // Base URL 固定為 innotech
-  const baseUrl = "https://innotech.atlassian.net/";
-
-  if (!email || !apiToken) {
-    console.error("\n❌ Jira 配置缺失！\n");
-    console.error("📝 請按照以下步驟設置 Jira 配置：\n");
-    console.error("**1. 設置 Jira Email:**");
-    console.error("   在 .env.local 文件中添加:");
-    console.error("   JIRA_EMAIL=your-email@example.com");
-    console.error("   或設置環境變數:");
-    console.error("   export JIRA_EMAIL=your-email@example.com");
-    console.error("");
-    console.error("**2. 設置 Jira API Token:**");
-    console.error(
-      "   1. 前往: https://id.atlassian.com/manage-profile/security/api-tokens"
-    );
-    console.error('   2. 點擊 "Create API token"');
-    console.error('   3. 填寫 Label（例如: "fluid-project"）');
-    console.error('   4. 點擊 "Create"');
-    console.error("   5. 複製生成的 token（只會顯示一次）");
-    console.error("   6. 在 .env.local 文件中添加:");
-    console.error("      JIRA_API_TOKEN=your-api-token");
-    console.error("   或設置環境變數:");
-    console.error("      export JIRA_API_TOKEN=your-api-token");
-    console.error("");
-    throw new Error("Jira 配置缺失，請檢查 .env.local 文件");
-  }
-
-  return {
-    email,
-    apiToken,
-    baseUrl,
-  };
-}
+import { getJiraConfig } from "../utilities/env-loader.mjs";
 
 // 從 Jira URL 解析 ticket ID
 function parseJiraUrl(url) {
@@ -159,9 +80,7 @@ async function readJiraTicket(ticketOrUrl) {
       if (response.status === 404) {
         throw new Error(`找不到 Jira ticket: ${ticket}`);
       } else if (response.status === 401 || response.status === 403) {
-        throw new Error(
-          "Jira API Token 已過期或無權限，請聯繫 william.chiang"
-        );
+        throw new Error("Jira API Token 已過期或無權限，請聯繫 william.chiang");
       } else {
         throw new Error(
           `獲取 Jira ticket 失敗: ${response.status} ${response.statusText}`
@@ -240,4 +159,3 @@ async function main() {
 }
 
 main();
-

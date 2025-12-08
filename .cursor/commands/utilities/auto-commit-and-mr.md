@@ -129,35 +129,7 @@ description: 自動執行 commit 和建立 MR 的完整流程
 使用 `run_terminal_cmd` 執行 `git rev-parse --abbrev-ref HEAD` 獲取當前分支名稱
 - 如果分支是 main/master/develop，提示警告但允許繼續
 
-### 2.5. Rebase to Base Branch（在執行 commit 之前）
-
-**CRITICAL**: 根據 `commit-and-mr-guidelines.mdc` 規範，在執行 commit 之前，**MUST** 先 rebase 到 base branch。
-
-**詳細流程請參考**: `.cursor/rules/cr/commit-and-mr-guidelines.mdc` 中的 "Pre-Commit Rebase Requirement" 章節。
-
-**執行步驟**：
-
-1. **確定 Base Branch**：
-   - 優先從 start-task Git notes 讀取 `sourceBranch`
-   - 如果沒有，使用 `git merge-base` 推斷
-   - 如果無法推斷，詢問用戶確認
-
-2. **執行 Rebase**：
-   ```bash
-   git add .
-   git stash
-   git pull origin {baseBranch} -r
-   git stash pop
-   ```
-
-3. **處理衝突**（如果有）：
-   - 立即停止 commit 流程
-   - 通知用戶需要解決衝突
-   - 等待用戶確認衝突已解決
-   - 進行影響分析
-   - 只有當用戶確認後才繼續
-
-**注意**：此步驟必須在 Cursor Rules 檢查之前執行。
+**注意**：根據 `commit-and-mr-guidelines.mdc` 規範，rebase 已改為在建立 MR 前由 `create-mr.mjs` 自動執行。`create-mr.mjs` 會在建立 MR 前自動 rebase 到 target branch，並使用 `--force-with-lease` 推送（如果需要）。
 
 ### 3. 從上下文推斷 Commit 信息
 根據以下優先順序獲取 commit 信息：

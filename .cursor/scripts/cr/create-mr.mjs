@@ -6,15 +6,22 @@
  */
 
 import { execSync, spawnSync } from "child_process";
-import { fileURLToPath } from "url";
-import { dirname, join } from "path";
+import { join } from "path";
 import readline from "readline";
 import { readFileSync, existsSync } from "fs";
+import {
+  getProjectRoot,
+  loadEnvLocal,
+  getJiraConfig,
+  guideJiraConfig,
+  getGitLabToken,
+  getJiraEmail,
+  getCompassApiToken,
+  getMRReviewer,
+} from "../utilities/env-loader.mjs";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-// 腳本在 .cursor/scripts/cr/，需要往上三層到項目根目錄
-const projectRoot = join(__dirname, "../../..");
+// 使用 env-loader 提供的 projectRoot
+const projectRoot = getProjectRoot();
 
 function exec(command, options = {}) {
   try {
@@ -349,32 +356,6 @@ function createMRWithGlab(
   }
 }
 
-// 從環境變數、.env.local 或 git config 獲取 GitLab token
-function getGitLabToken() {
-  // 優先級 1: 從環境變數獲取
-  if (process.env.GITLAB_TOKEN) {
-    return process.env.GITLAB_TOKEN;
-  }
-
-  // 優先級 2: 從 .env.local 讀取
-  const envLocal = loadEnvLocal();
-  if (envLocal.GITLAB_TOKEN) {
-    return envLocal.GITLAB_TOKEN;
-  }
-
-  // 優先級 3: 嘗試從 git config 獲取
-  try {
-    const token = exec("git config --get gitlab.token", {
-      silent: true,
-    }).trim();
-    if (token) return token;
-  } catch (error) {
-    // 忽略錯誤
-  }
-
-  return null;
-}
-
 // 獲取項目信息
 function getProjectInfo() {
   const remoteUrl = exec("git config --get remote.origin.url", {
@@ -428,6 +409,121 @@ function getGitStatus() {
       .filter((line) => line.trim());
   } catch (error) {
     return [];
+  }
+}
+
+// 獲取未推送的 commits（已提交但尚未推送到遠端的 commits）
+function getUnpushedCommits(branch) {
+  try {
+    const result = exec(`git log origin/${branch}..HEAD --oneline`, {
+      silent: true,
+    });
+    return result
+      .trim()
+      .split("\n")
+      .filter((line) => line.trim());
+  } catch (error) {
+    // 如果遠端分支不存在，返回空陣列（將在其他地方處理）
+    return [];
+  }
+}
+
+// 推送 commits 到遠端
+// forceWithLease: 如果為 true，使用 --force-with-lease（用於 rebase 後的推送）
+function pushToRemote(branch, forceWithLease = false) {
+  try {
+    const forceFlag = forceWithLease ? " --force-with-lease" : "";
+    console.log(
+      `🚀 正在推送 commits 到 origin/${branch}${
+        forceWithLease ? "（force-with-lease）" : ""
+      }...`
+    );
+    exec(`git push origin ${branch}${forceFlag}`, { silent: false });
+    return { success: true, error: null };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+// 執行 rebase 到目標分支
+function rebaseToTargetBranch(targetBranch) {
+  console.log(`\n🔄 正在 rebase 到目標分支 ${targetBranch}...\n`);
+
+  // Step 1: Fetch 最新的目標分支
+  console.log(`📥 正在 fetch origin/${targetBranch}...`);
+  try {
+    exec(`git fetch origin ${targetBranch}`, { silent: false });
+    console.log(`✅ fetch 完成\n`);
+  } catch (error) {
+    return {
+      success: false,
+      error: `無法 fetch 目標分支 ${targetBranch}: ${error.message}`,
+      hasConflict: false,
+    };
+  }
+
+  // Step 2: 執行 rebase
+  console.log(`🔀 正在執行 git rebase origin/${targetBranch}...`);
+  try {
+    exec(`git rebase origin/${targetBranch}`, { silent: false });
+    console.log(`\n✅ Rebase 成功！\n`);
+    return { success: true, error: null, hasConflict: false };
+  } catch (error) {
+    // 檢查是否有衝突
+    try {
+      const status = exec("git status --porcelain", { silent: true });
+      const hasConflict =
+        status.includes("UU ") ||
+        status.includes("AA ") ||
+        status.includes("DD ") ||
+        status.includes("AU ") ||
+        status.includes("UA ") ||
+        status.includes("DU ") ||
+        status.includes("UD ");
+
+      if (hasConflict) {
+        return {
+          success: false,
+          error: `Rebase 過程中發生衝突`,
+          hasConflict: true,
+        };
+      }
+    } catch (statusError) {
+      // 無法檢查狀態，視為一般錯誤
+    }
+
+    return {
+      success: false,
+      error: `Rebase 失敗: ${error.message}`,
+      hasConflict: false,
+    };
+  }
+}
+
+// 檢查是否正在進行 rebase
+function isRebaseInProgress() {
+  try {
+    // 檢查 .git/rebase-merge 或 .git/rebase-apply 目錄是否存在
+    const gitDir = exec("git rev-parse --git-dir", { silent: true }).trim();
+    const rebaseMergeExists = existsSync(
+      join(projectRoot, gitDir, "rebase-merge")
+    );
+    const rebaseApplyExists = existsSync(
+      join(projectRoot, gitDir, "rebase-apply")
+    );
+    return rebaseMergeExists || rebaseApplyExists;
+  } catch (error) {
+    return false;
+  }
+}
+
+// 中止 rebase
+function abortRebase() {
+  try {
+    exec("git rebase --abort", { silent: true });
+    return { success: true, error: null };
+  } catch (error) {
+    return { success: false, error: error.message };
   }
 }
 
@@ -1622,93 +1718,6 @@ function hasSpecificVersionMarkers(changedFiles) {
   return false;
 }
 
-// 讀取 .env.local 文件
-// 優先從項目根目錄讀取，如果不存在則從 .cursor/.env.local 讀取
-function loadEnvLocal() {
-  // 優先級 1: 項目根目錄的 .env.local
-  let envLocalPath = join(projectRoot, ".env.local");
-
-  // 優先級 2: .cursor/.env.local
-  if (!existsSync(envLocalPath)) {
-    envLocalPath = join(projectRoot, ".cursor", ".env.local");
-  }
-
-  if (!existsSync(envLocalPath)) {
-    return {};
-  }
-
-  const envContent = readFileSync(envLocalPath, "utf-8");
-  const env = {};
-  envContent.split("\n").forEach((line) => {
-    line = line.trim();
-    if (line && !line.startsWith("#")) {
-      const [key, ...valueParts] = line.split("=");
-      if (key && valueParts.length > 0) {
-        env[key.trim()] = valueParts
-          .join("=")
-          .trim()
-          .replace(/^["']|["']$/g, "");
-      }
-    }
-  });
-  return env;
-}
-
-// 引導用戶設置 Jira 配置
-function guideJiraConfig() {
-  console.error("\n❌ Jira 配置缺失！\n");
-  console.error("📝 請按照以下步驟設置 Jira 配置：\n");
-
-  console.error("**1. 設置 Jira Email:**");
-  console.error("   在 .env.local 文件中添加:");
-  console.error("   JIRA_EMAIL=your-email@example.com");
-  console.error("   或設置環境變數:");
-  console.error("   export JIRA_EMAIL=your-email@example.com");
-  console.error("");
-
-  console.error("**2. 設置 Jira API Token:**");
-  console.error(
-    "   1. 前往: https://id.atlassian.com/manage-profile/security/api-tokens"
-  );
-  console.error('   2. 點擊 "Create API token"');
-  console.error('   3. 填寫 Label（例如: "fluid-project"）');
-  console.error('   4. 點擊 "Create"');
-  console.error("   5. 複製生成的 token（只會顯示一次）");
-  console.error("   6. 在 .env.local 文件中添加:");
-  console.error("      JIRA_API_TOKEN=your-api-token");
-  console.error("   或設置環境變數:");
-  console.error("      export JIRA_API_TOKEN=your-api-token");
-  console.error("");
-
-  console.error("💡 提示：");
-  console.error("   - .env.local 文件可位於項目根目錄或 .cursor 目錄");
-  console.error(
-    "   - 如果沒有 .env.local 文件，可以參考 .env.development 範本"
-  );
-  console.error("   - 設置完成後，請重新執行命令\n");
-}
-
-// 獲取 Jira 配置（從環境變數或 .env.local 讀取）
-function getJiraConfig() {
-  // 優先從環境變數讀取
-  const envLocal = loadEnvLocal();
-  const email = process.env.JIRA_EMAIL || envLocal.JIRA_EMAIL;
-  const apiToken = process.env.JIRA_API_TOKEN || envLocal.JIRA_API_TOKEN;
-  // Base URL 固定為 innotech
-  const baseUrl = "https://innotech.atlassian.net/";
-
-  if (!email || !apiToken) {
-    guideJiraConfig();
-    throw new Error("Jira 配置缺失，請檢查 .env.local 文件");
-  }
-
-  return {
-    email,
-    apiToken,
-    baseUrl,
-  };
-}
-
 // 檢查 Jira ticket 是否存在
 async function checkJiraTicketExists(ticket) {
   if (!ticket || ticket === "N/A") {
@@ -2232,12 +2241,6 @@ async function getGitLabUserEmail(hostname = "gitlab.service-hub.tech") {
   return null;
 }
 
-// 獲取 Jira email（從環境變數或 .env.local）
-function getJiraEmail() {
-  const envLocal = loadEnvLocal();
-  return process.env.JIRA_EMAIL || envLocal.JIRA_EMAIL || null;
-}
-
 // 獲取當前 GitLab 用戶 ID（用於設置 assignee）
 async function getGitLabUserId(hostname = "gitlab.service-hub.tech") {
   // 方法 1: 嘗試使用 glab 獲取用戶信息
@@ -2307,12 +2310,6 @@ async function getJiraTicketTitle(ticket) {
   } catch (error) {
     return null;
   }
-}
-
-// 獲取 Compass API token（從環境變數或 .env.local）
-function getCompassApiToken() {
-  const envLocal = loadEnvLocal();
-  return process.env.COMPASS_API_TOKEN || envLocal.COMPASS_API_TOKEN || null;
 }
 
 // 檢查必要的配置並引導用戶設置（用於 AI review）
@@ -2651,25 +2648,15 @@ async function main() {
   // 檢查是否有未提交的變更（必須先 commit 才能建立 MR）
   const uncommittedChanges = getGitStatus();
   if (uncommittedChanges.length > 0) {
-    console.error("\n❌ 檢測到未提交的變更！\n");
-    console.error("📋 未提交的檔案：");
+    console.error("\n❌ 檢測到未提交的變更，無法建立 MR\n");
+    console.error(`📋 未提交的檔案 (${uncommittedChanges.length} 個)：`);
     uncommittedChanges.slice(0, 10).forEach((change) => {
       console.error(`   ${change}`);
     });
     if (uncommittedChanges.length > 10) {
       console.error(`   ... 還有 ${uncommittedChanges.length - 10} 個檔案`);
     }
-    console.error("\n💡 請先提交變更後再建立 MR：");
-    console.error("   1. 使用 agent-commit 腳本:");
-    console.error(
-      "      pnpm run agent-commit --type=<type> --ticket=<ticket> --message=<message> --auto-push"
-    );
-    console.error("   2. 或使用 auto-commit-and-mr 腳本:");
-    console.error("      pnpm run auto-commit-and-mr");
-    console.error("   3. 或手動 commit 後再執行:");
-    console.error("      pnpm run create-mr\n");
-    console.error("⚠️  重要：必須先 commit 才能建立 MR！\n");
-
+    console.error("\n⚠️  必須先 commit 所有變更才能建立 MR\n");
     process.exit(1);
   }
 
@@ -2691,21 +2678,111 @@ async function main() {
   }
 
   if (!remoteBranchExists) {
-    console.error("\n❌ 檢測到本地分支尚未推送到遠端！\n");
+    console.error("\n❌ 遠端分支不存在，無法建立 MR\n");
     console.error(`📋 當前分支: ${currentBranch}`);
-    console.error("   遠端分支不存在，無法建立 MR\n");
-    console.error("💡 請先推送分支到遠端：");
-    console.error("   1. 使用 agent-commit 腳本（推薦）:");
-    console.error(
-      `      pnpm run agent-commit --type=<type> --ticket=<ticket> --message=<message> --auto-push`
-    );
-    console.error("   2. 或手動推送:");
-    console.error(`      git push -u origin ${currentBranch}`);
-    console.error("   3. 推送完成後再執行:");
-    console.error("      pnpm run create-mr\n");
-    console.error("⚠️  重要：必須先推送到遠端才能建立 MR！\n");
-
+    console.error("⚠️  必須先推送分支到遠端才能建立 MR\n");
     process.exit(1);
+  }
+
+  // ============================================================================
+  // CRITICAL: Pre-MR Rebase Requirement
+  // 根據 commit-and-mr-guidelines.mdc 規則，建立 MR 前必須 rebase 到目標分支
+  // ============================================================================
+
+  // 檢查是否正在進行 rebase（可能是之前中斷的）
+  if (isRebaseInProgress()) {
+    console.error("\n❌ 檢測到有未完成的 rebase，無法建立 MR\n");
+    console.error("⚠️  請先完成或中止 rebase：");
+    console.error("   - 繼續: git rebase --continue");
+    console.error("   - 中止: git rebase --abort\n");
+    process.exit(1);
+  }
+
+  // 執行 rebase 到目標分支
+  console.log("============================================================");
+  console.log("📋 Pre-MR Rebase Check");
+  console.log("============================================================");
+  console.log(`🌿 當前分支: ${currentBranch}`);
+  console.log(`🎯 目標分支: ${targetBranch}`);
+
+  const rebaseResult = rebaseToTargetBranch(targetBranch);
+  if (!rebaseResult.success) {
+    if (rebaseResult.hasConflict) {
+      console.error("\n❌ Rebase 發生衝突，無法建立 MR\n");
+      console.error("⚠️  需要手動解決衝突：");
+      console.error("   1. git status（檢查衝突檔案）");
+      console.error("   2. 解決衝突後 git add <檔案>");
+      console.error("   3. git rebase --continue");
+      console.error("   4. 重新執行 create-mr\n");
+    } else {
+      console.error(`\n❌ Rebase 失敗: ${rebaseResult.error}\n`);
+    }
+    process.exit(1);
+  }
+
+  console.log("============================================================\n");
+
+  // CRITICAL: 檢查是否有未推送的 commits（Pre-MR Push Requirement）
+  // rebase 後可能會有新的 commits 需要推送（rebase 會重寫 commit history）
+  // 根據 commit-and-mr-guidelines.mdc 規則，建立 MR 前所有 commits 必須推送到遠端
+  //
+  // 注意：rebase 後需要使用 --force-with-lease 來推送，因為 commit history 已被重寫
+  // --force-with-lease 比 --force 更安全，它會檢查遠端分支是否被其他人更新過
+
+  // 先檢查本地與遠端的 commit 是否不同（rebase 後 commit hash 會改變）
+  let needsForceWithLease = false;
+  try {
+    // 獲取本地 HEAD 的 commit hash
+    const localHead = exec("git rev-parse HEAD", { silent: true }).trim();
+    // 獲取遠端分支的 commit hash
+    const remoteHead = exec(`git rev-parse origin/${currentBranch}`, {
+      silent: true,
+    }).trim();
+
+    // 如果 local 和 remote 不同，且 local 不是 remote 的直接後代（非 fast-forward），則需要 force
+    if (localHead !== remoteHead) {
+      try {
+        // 檢查 remote HEAD 是否是 local HEAD 的祖先（fast-forward 情況）
+        exec(`git merge-base --is-ancestor origin/${currentBranch} HEAD`, {
+          silent: true,
+        });
+        // 如果上面的命令成功，說明是 fast-forward，不需要 force
+        needsForceWithLease = false;
+      } catch (e) {
+        // 如果上面的命令失敗，說明不是 fast-forward（可能是 rebase 後），需要 force
+        needsForceWithLease = true;
+      }
+    }
+  } catch (error) {
+    // 如果無法檢查，預設不使用 force
+    needsForceWithLease = false;
+  }
+
+  const unpushedCommits = getUnpushedCommits(currentBranch);
+  if (unpushedCommits.length > 0 || needsForceWithLease) {
+    if (needsForceWithLease) {
+      console.log("\n⚠️  Rebase 後需要強制推送更新遠端分支\n");
+    } else {
+      console.log("\n⚠️  檢測到未推送的 commits！\n");
+      console.log(`📋 未推送的 commits (${unpushedCommits.length} 個):`);
+      unpushedCommits.slice(0, 10).forEach((commit) => {
+        console.log(`   ${commit}`);
+      });
+      if (unpushedCommits.length > 10) {
+        console.log(`   ... 還有 ${unpushedCommits.length - 10} 個 commits`);
+      }
+      console.log("");
+    }
+
+    // 自動推送到遠端（rebase 後使用 --force-with-lease）
+    const pushResult = pushToRemote(currentBranch, needsForceWithLease);
+    if (!pushResult.success) {
+      console.error("\n❌ 推送失敗，無法建立 MR\n");
+      console.error(`   錯誤: ${pushResult.error}\n`);
+      process.exit(1);
+    }
+
+    console.log("✅ 所有 commits 已成功推送到遠端\n");
   }
 
   // 檢查用戶是否明確指定了 reviewer
