@@ -52,28 +52,41 @@ function parseEnvContent(content) {
  * 讀取 .env.local 文件
  * 優先級：.cursor/.env.local > 項目根目錄/.env.local
  *
- * 當 .cursor/.env.local 中缺少某個配置時，會從項目根目錄的 .env.local 中讀取作為備援。
- * 這樣可以確保在 submodule 環境下，如果 .cursor/.env.local 沒有設置某個配置，
- * 但主專案的 .env.local 有設置，也可以使用。
+ * 合併邏輯（配置項級別）：
+ * - 對於每個配置項，優先使用 .cursor/.env.local 中的值
+ * - 若 .cursor/.env.local 中該配置項為空值或未設置，則使用項目根目錄 .env.local 的值作為備援
+ * - 這樣可以確保在 submodule 環境下，即使 .cursor/.env.local 某個配置為空，
+ *   也能從主專案的 .env.local 中獲取有效值
  *
  * @returns {Object} 環境變數鍵值對（合併後的結果）
  */
 export function loadEnvLocal() {
   const projectRoot = getProjectRoot();
-  let mergedEnv = {};
 
-  // 優先級 2（備援）: 項目根目錄的 .env.local
+  // 讀取優先級 2（備援）: 項目根目錄的 .env.local
+  let fallbackEnv = {};
   const projectEnvPath = join(projectRoot, ".env.local");
   if (existsSync(projectEnvPath)) {
     const projectEnvContent = readFileSync(projectEnvPath, "utf-8");
-    mergedEnv = { ...mergedEnv, ...parseEnvContent(projectEnvContent) };
+    fallbackEnv = parseEnvContent(projectEnvContent);
   }
 
-  // 優先級 1（最高）: .cursor/.env.local
+  // 讀取優先級 1（最高）: .cursor/.env.local
+  let primaryEnv = {};
   const cursorEnvPath = join(projectRoot, ".cursor", ".env.local");
   if (existsSync(cursorEnvPath)) {
     const cursorEnvContent = readFileSync(cursorEnvPath, "utf-8");
-    mergedEnv = { ...mergedEnv, ...parseEnvContent(cursorEnvContent) };
+    primaryEnv = parseEnvContent(cursorEnvContent);
+  }
+
+  // 合併邏輯：以備援為基底，僅用有效的主要配置覆蓋
+  const mergedEnv = { ...fallbackEnv };
+
+  for (const [key, value] of Object.entries(primaryEnv)) {
+    // 只有當值非空時才覆蓋備援值
+    if (value !== "" && value !== undefined && value !== null) {
+      mergedEnv[key] = value;
+    }
   }
 
   return mergedEnv;
