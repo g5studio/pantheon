@@ -96,7 +96,7 @@ async function main() {
   log.success(".pantheon submodule 存在");
 
   // ========================================
-  // 2. 檢查主專案是否在 main branch，若不在則同步 main
+  // 2. 檢查主專案分支狀態
   // ========================================
   const prometheusLinks = [
     join(cwd, ".cursor", "commands", "prometheus"),
@@ -106,67 +106,97 @@ async function main() {
 
   const hasExistingLinks = prometheusLinks.some((link) => isSymlink(link));
 
-  // 只有在已建立過連結（非首次設置）時才需要同步 main
+  // 只有在已建立過連結（非首次設置）時才需要同步
   if (hasExistingLinks) {
     console.log("");
     console.log("📍 檢查主專案分支狀態...");
 
+    const pantheonDir = join(cwd, ".pantheon");
+    let isOnMain = false;
+
     try {
       const projectBranch = exec("git rev-parse --abbrev-ref HEAD");
       log.dim(`主專案當前分支: ${projectBranch}`);
+      isOnMain = projectBranch === "main";
 
-      if (projectBranch !== "main") {
-        log.warning("主專案當前不在 main 分支上");
-        log.info("嘗試同步 main 分支...");
-
-        exec("git fetch origin main");
-        exec("git merge origin/main --no-edit");
-
-        // 檢查合併後是否與 origin/main 一致
-        const localCommit = exec("git rev-parse HEAD");
-        const remoteCommit = exec("git rev-parse origin/main");
-
-        if (localCommit !== remoteCommit) {
-          console.log("");
-          console.log("==========================================");
-          log.error("同步主專案 main 後 pantheon 仍非最新");
-          console.log("==========================================");
-          log.dim(`當前 commit: ${localCommit}`);
-          log.dim(`main commit: ${remoteCommit}`);
-          console.log("");
-          console.log("請聯絡最高管理員 william.chiang 協助處理");
-          console.log("==========================================");
-          process.exit(1);
-        }
-
-        log.success("主專案已成功同步 main");
-      } else {
+      if (isOnMain) {
         log.success("主專案已在 main 分支上");
+      } else {
+        log.warning("主專案當前不在 main 分支上");
       }
     } catch (error) {
-      log.warning(`同步主專案 main 時發生錯誤: ${error.message}`);
+      log.warning(`檢查主專案分支時發生錯誤: ${error.message}`);
       log.dim("繼續執行同步流程...");
     }
 
     // ========================================
-    // 3. 拉取 pantheon 最新內容
+    // 3. 同步 pantheon 內容
     // ========================================
     console.log("");
-    log.info("正在拉取 pantheon 最新內容...");
 
-    try {
-      const pantheonDir = join(cwd, ".pantheon");
-      const currentBranch = exec("git rev-parse --abbrev-ref HEAD", {
-        cwd: pantheonDir,
-      });
-      log.dim(`pantheon 追蹤分支: ${currentBranch}`);
+    if (isOnMain) {
+      // 在 main branch 上：拉取 pantheon 最新內容
+      log.info("正在拉取 pantheon 最新內容...");
 
-      exec("git fetch origin", { cwd: pantheonDir });
-      exec(`git pull origin ${currentBranch}`, { cwd: pantheonDir });
+      try {
+        const currentBranch = exec("git rev-parse --abbrev-ref HEAD", {
+          cwd: pantheonDir,
+        });
+        log.dim(`pantheon 追蹤分支: ${currentBranch}`);
 
-      log.success("pantheon 已更新至最新");
-    } catch (error) {
-      log.warning(`拉取 pantheon 更新時發生錯誤: ${error.message}`);
+        exec("git fetch origin", { cwd: pantheonDir });
+        exec(`git pull origin ${currentBranch}`, { cwd: pantheonDir });
+
+        log.success("pantheon 已更新至最新");
+      } catch (error) {
+        log.warning(`拉取 pantheon 更新時發生錯誤: ${error.message}`);
+      }
+    } else {
+      // 不在 main branch 上：同步到 main 所指向的 pantheon 版本
+      log.info("正在同步 pantheon 至主專案 main 分支所使用的版本...");
+
+      try {
+        // 先 fetch 主專案的 origin/main
+        exec("git fetch origin main");
+
+        // 查詢 origin/main 中 .pantheon submodule 所指向的 commit hash
+        const mainPantheonCommit = exec("git rev-parse origin/main:.pantheon", {
+          throwOnError: false,
+        });
+
+        if (!mainPantheonCommit) {
+          log.warning("無法取得 main 分支的 pantheon commit");
+          log.dim("跳過 pantheon 同步");
+        } else {
+          log.dim(
+            `main 分支的 pantheon commit: ${mainPantheonCommit.substring(0, 8)}`
+          );
+
+          // 獲取當前 pantheon 的 commit
+          const currentPantheonCommit = exec("git rev-parse HEAD", {
+            cwd: pantheonDir,
+          });
+          log.dim(
+            `當前 pantheon commit: ${currentPantheonCommit.substring(0, 8)}`
+          );
+
+          if (currentPantheonCommit === mainPantheonCommit) {
+            log.success("pantheon 已與 main 分支同步");
+          } else {
+            // Fetch pantheon 的遠端內容
+            exec("git fetch origin", { cwd: pantheonDir });
+
+            // Checkout 到 main 所指向的版本
+            exec(`git checkout ${mainPantheonCommit}`, { cwd: pantheonDir });
+
+            log.success("pantheon 已同步至 main 分支所使用的版本");
+            log.dim(`版本: ${mainPantheonCommit.substring(0, 8)}`);
+          }
+        }
+      } catch (error) {
+        log.warning(`同步 pantheon 版本時發生錯誤: ${error.message}`);
+        log.dim("繼續執行同步流程...");
+      }
     }
   }
 
