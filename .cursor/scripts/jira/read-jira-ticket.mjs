@@ -80,9 +80,7 @@ async function readJiraTicket(ticketOrUrl) {
       if (response.status === 404) {
         throw new Error(`找不到 Jira ticket: ${ticket}`);
       } else if (response.status === 401 || response.status === 403) {
-        throw new Error(
-          "Jira API Token 已過期或無權限，請聯繫 william.chiang"
-        );
+        throw new Error("Jira API Token 已過期或無權限，請聯繫 william.chiang");
       } else {
         throw new Error(
           `獲取 Jira ticket 失敗: ${response.status} ${response.statusText}`
@@ -161,4 +159,3 @@ async function main() {
 }
 
 main();
-
