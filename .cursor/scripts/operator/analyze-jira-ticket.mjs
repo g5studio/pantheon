@@ -1,28 +1,8 @@
 #!/usr/bin/env node
 
-import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
-
-const projectRoot = process.cwd();
-
-function loadEnvLocal() {
-  const envLocalPath = join(projectRoot, '.env.local');
-  if (!existsSync(envLocalPath)) {
-    return {};
-  }
-  const envContent = readFileSync(envLocalPath, 'utf-8');
-  const env = {};
-  envContent.split('\n').forEach((line) => {
-    line = line.trim();
-    if (line && !line.startsWith('#')) {
-      const [key, ...valueParts] = line.split('=');
-      if (key && valueParts.length > 0) {
-        env[key.trim()] = valueParts.join('=').trim().replace(/^["']|["']$/g, '');
-      }
-    }
-  });
-  return env;
-}
+import {
+  getJiraConfig,
+} from '../utilities/env-loader.mjs';
 
 function extractTextFromContent(content) {
   if (!content) return '';
@@ -81,17 +61,11 @@ if (!ticket) {
   process.exit(1);
 }
 
-const envLocal = loadEnvLocal();
-const email = process.env.JIRA_EMAIL || envLocal.JIRA_EMAIL;
-const apiToken = process.env.JIRA_API_TOKEN || envLocal.JIRA_API_TOKEN;
-
-if (!email || !apiToken) {
-  console.error('Jira 配置缺失');
-  process.exit(1);
-}
-
-const auth = Buffer.from(`${email}:${apiToken}`).toString('base64');
-const url = `https://innotech.atlassian.net/rest/api/3/issue/${ticket}?expand=renderedFields,comments`;
+// 使用 env-loader 取得 Jira 配置
+const jiraConfig = getJiraConfig();
+const auth = Buffer.from(`${jiraConfig.email}:${jiraConfig.apiToken}`).toString('base64');
+const baseUrl = jiraConfig.baseUrl.endsWith('/') ? jiraConfig.baseUrl.slice(0, -1) : jiraConfig.baseUrl;
+const url = `${baseUrl}/rest/api/3/issue/${ticket}?expand=renderedFields,comments`;
 
 try {
   const response = await fetch(url, {

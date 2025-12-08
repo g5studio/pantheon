@@ -204,3 +204,14 @@ export function getMRReviewer() {
   const envLocal = loadEnvLocal();
   return process.env.MR_REVIEWER || envLocal.MR_REVIEWER || null;
 }
+
+/**
+ * 獲取 Figma Access Token（從環境變數或 .env.local）
+ *
+ * @param {string} defaultToken - 預設 token（可選）
+ * @returns {string|null} Figma Access Token 或 null
+ */
+export function getFigmaToken(defaultToken = null) {
+  const envLocal = loadEnvLocal();
+  return process.env.FIGMA_ACCESS_TOKEN || envLocal.FIGMA_ACCESS_TOKEN || defaultToken;
+}

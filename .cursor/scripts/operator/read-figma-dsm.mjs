@@ -4,6 +4,8 @@
  * 讀取 Figma DSM 數據
  */
 
+import { getFigmaToken } from '../utilities/env-loader.mjs';
+
 const DEFAULT_FIGMA_FILE_ID = 'H8Kn3hrZIWQCevagFC3bd8';
 const DEFAULT_FIGMA_NODE_ID = '39245-34247';
 const DEFAULT_FIGMA_TOKEN = 'figd_z9ZUQ_BAS7CbE0FuUnCETcTR5OAKCdrCezmU4Okl';
@@ -72,7 +74,8 @@ function extractDsmColorsFromFigmaNode(node, pathParts = [], variables = []) {
 }
 
 async function fetchDsmFromFigma(fileId, nodeId) {
-  const token = process.env.FIGMA_ACCESS_TOKEN || DEFAULT_FIGMA_TOKEN;
+  // 使用 env-loader 取得 Figma token，支援 .env.local 和環境變數
+  const token = getFigmaToken(DEFAULT_FIGMA_TOKEN);
   const url = `https://api.figma.com/v1/files/${fileId}/nodes?ids=${nodeId}`;
 
   console.log(`📡 正在從 Figma 獲取數據...`);
