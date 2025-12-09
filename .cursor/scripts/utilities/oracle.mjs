@@ -96,7 +96,7 @@ async function main() {
   log.success(".pantheon submodule 存在");
 
   // ========================================
-  // 2. 檢查主專案分支狀態
+  // 2. 同步 pantheon 內容（僅非首次設置時）
   // ========================================
   const prometheusLinks = [
     join(cwd, ".cursor", "commands", "prometheus"),
@@ -105,103 +105,43 @@ async function main() {
   ];
 
   const hasExistingLinks = prometheusLinks.some((link) => isSymlink(link));
+  const pantheonDir = join(cwd, ".pantheon");
 
   // 只有在已建立過連結（非首次設置）時才需要同步
   if (hasExistingLinks) {
     console.log("");
-    console.log("📍 檢查主專案分支狀態...");
-
-    const pantheonDir = join(cwd, ".pantheon");
-    let isOnMain = false;
+    log.info("正在拉取 pantheon 最新內容...");
 
     try {
-      const projectBranch = exec("git rev-parse --abbrev-ref HEAD");
-      log.dim(`主專案當前分支: ${projectBranch}`);
-      isOnMain = projectBranch === "main";
+      // 取得 submodule 當前所在的分支
+      const currentBranch = exec("git rev-parse --abbrev-ref HEAD", {
+        cwd: pantheonDir,
+      });
+      log.dim(`當前分支: ${currentBranch}`);
 
-      if (isOnMain) {
-        log.success("主專案已在 main 分支上");
+      // 拉取該分支的最新內容
+      exec("git fetch origin", { cwd: pantheonDir });
+      const pullResult = exec(`git pull origin ${currentBranch}`, {
+        cwd: pantheonDir,
+        throwOnError: false,
+      });
+
+      if (pullResult && pullResult.includes("Already up to date")) {
+        log.success("已是最新版本");
       } else {
-        log.warning("主專案當前不在 main 分支上");
+        log.success("pantheon 已更新至最新版本");
       }
     } catch (error) {
-      log.warning(`檢查主專案分支時發生錯誤: ${error.message}`);
+      log.warning(`拉取 pantheon 更新時發生錯誤: ${error.message}`);
       log.dim("繼續執行同步流程...");
     }
-
-    // ========================================
-    // 3. 同步 pantheon 內容
-    // ========================================
+  } else {
     console.log("");
-
-    if (isOnMain) {
-      // 在 main branch 上：拉取 pantheon 最新內容
-      log.info("正在拉取 pantheon 最新內容...");
-
-      try {
-        const currentBranch = exec("git rev-parse --abbrev-ref HEAD", {
-          cwd: pantheonDir,
-        });
-        log.dim(`pantheon 追蹤分支: ${currentBranch}`);
-
-        exec("git fetch origin", { cwd: pantheonDir });
-        exec(`git pull origin ${currentBranch}`, { cwd: pantheonDir });
-
-        log.success("pantheon 已更新至最新");
-      } catch (error) {
-        log.warning(`拉取 pantheon 更新時發生錯誤: ${error.message}`);
-      }
-    } else {
-      // 不在 main branch 上：同步到 main 所指向的 pantheon 版本
-      log.info("正在同步 pantheon 至主專案 main 分支所使用的版本...");
-
-      try {
-        // 先 fetch 主專案的 origin/main
-        exec("git fetch origin main");
-
-        // 查詢 origin/main 中 .pantheon submodule 所指向的 commit hash
-        const mainPantheonCommit = exec("git rev-parse origin/main:.pantheon", {
-          throwOnError: false,
-        });
-
-        if (!mainPantheonCommit) {
-          log.warning("無法取得 main 分支的 pantheon commit");
-          log.dim("跳過 pantheon 同步");
-        } else {
-          log.dim(
-            `main 分支的 pantheon commit: ${mainPantheonCommit.substring(0, 8)}`
-          );
-
-          // 獲取當前 pantheon 的 commit
-          const currentPantheonCommit = exec("git rev-parse HEAD", {
-            cwd: pantheonDir,
-          });
-          log.dim(
-            `當前 pantheon commit: ${currentPantheonCommit.substring(0, 8)}`
-          );
-
-          if (currentPantheonCommit === mainPantheonCommit) {
-            log.success("pantheon 已與 main 分支同步");
-          } else {
-            // Fetch pantheon 的遠端內容
-            exec("git fetch origin", { cwd: pantheonDir });
-
-            // Checkout 到 main 所指向的版本
-            exec(`git checkout ${mainPantheonCommit}`, { cwd: pantheonDir });
-
-            log.success("pantheon 已同步至 main 分支所使用的版本");
-            log.dim(`版本: ${mainPantheonCommit.substring(0, 8)}`);
-          }
-        }
-      } catch (error) {
-        log.warning(`同步 pantheon 版本時發生錯誤: ${error.message}`);
-        log.dim("繼續執行同步流程...");
-      }
-    }
+    log.dim("首次設置，跳過 pantheon 拉取");
   }
 
   // ========================================
-  // 4. 建立 .cursor 目錄結構
+  // 3. 建立 .cursor 目錄結構
   // ========================================
   console.log("");
   console.log("📁 建立 .cursor 目錄結構...");
@@ -220,7 +160,7 @@ async function main() {
   }
 
   // ========================================
-  // 5. 移除舊的符號連結並建立新的
+  // 4. 移除舊的符號連結並建立新的
   // ========================================
   console.log("");
   console.log("🔗 建立 prometheus 符號連結...");
@@ -261,7 +201,7 @@ async function main() {
   }
 
   // ========================================
-  // 6. 檢查並建立環境變數配置檔
+  // 5. 檢查並建立環境變數配置檔
   // ========================================
   console.log("");
   const envLocalPath = join(cwd, ".cursor", ".env.local");
@@ -282,7 +222,7 @@ async function main() {
   }
 
   // ========================================
-  // 7. 驗證並輸出結果
+  // 6. 驗證並輸出結果
   // ========================================
   console.log("");
   console.log("==========================================");

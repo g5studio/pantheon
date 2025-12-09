@@ -34,45 +34,33 @@ run_terminal_cmd with required_permissions: ["network"]
 
 如果 `.pantheon/.cursor` 不存在，提示用戶執行 `git submodule update --init` 並結束流程。
 
-### 2. 檢查主專案分支狀態（僅非首次設置時）
+### 2. 同步 pantheon 內容（僅非首次設置時）
 
 **CRITICAL**: 只有在已建立過連結（非首次設置）時才執行此步驟。
 
-- 檢查主專案當前是否在 main branch
-- 記錄分支狀態，用於決定步驟 3 的同步策略
-
-### 3. 同步 pantheon 內容（僅非首次設置時）
-
-根據主專案分支狀態採取不同的同步策略：
-
-**若主專案在 main branch 上**：
-- 拉取 pantheon 最新內容（`git fetch origin && git pull origin {branch}`）
+- 取得 submodule 當前所在的分支
+- 拉取該分支的最新內容（`git fetch origin && git pull origin {branch}`）
 - 確保 pantheon 保持最新版本
 
-**若主專案不在 main branch 上**（如 feature branch）：
-- 查詢 `origin/main` 中 `.pantheon` submodule 所指向的 commit hash
-- 將 `.pantheon` checkout 到該特定版本
-- **這確保 feature branch 使用的 pantheon 版本與 main 一致，避免 MR 出現預期外的 pantheon 變更**
-
-### 4. 建立 .cursor 目錄結構
+### 3. 建立 .cursor 目錄結構
 
 建立以下目錄（如果不存在）：
 - `.cursor/commands/`
 - `.cursor/rules/`
 - `.cursor/scripts/`
 
-### 5. 建立 prometheus 符號連結
+### 4. 建立 prometheus 符號連結
 
 在每個目錄中建立 `prometheus` 符號連結，指向 `.pantheon/.cursor` 對應的目錄：
 - `.cursor/commands/prometheus` -> `../../.pantheon/.cursor/commands`
 - `.cursor/rules/prometheus` -> `../../.pantheon/.cursor/rules`
 - `.cursor/scripts/prometheus` -> `../../.pantheon/.cursor/scripts`
 
-### 6. 檢查並建立環境變數配置檔
+### 5. 檢查並建立環境變數配置檔
 
 檢查 `.cursor/.env.local` 是否存在，若不存在則以 pantheon 的 `.env.example` 為模板建立。
 
-### 7. 輸出結果
+### 6. 輸出結果
 
 顯示同步結果摘要：
 
@@ -106,14 +94,14 @@ AI:
 
 輸出:
 1. 檢查 .pantheon submodule → 存在
-2. 未偵測到既有連結，跳過主專案同步與 pantheon 拉取
+2. 未偵測到既有連結，跳過 pantheon 拉取
 3. 建立 .cursor/commands, .cursor/rules, .cursor/scripts 目錄
 4. 建立 prometheus 符號連結
 5. .env.local 不存在，建立模板檔案
 6. 輸出結果，並提示用戶完善 .env.local 配置
 ```
 
-**範例 2: 重新同步（主專案已在 main 上）**
+**範例 2: 重新同步（更新至最新版本）**
 ```
 用戶: oracle
 
@@ -122,37 +110,17 @@ AI:
 
 輸出:
 1. 檢查 .pantheon submodule → 存在
-2. 檢查主專案分支 → main
-3. 拉取 pantheon 最新內容
-4. 目錄已存在，跳過建立
-5. 移除舊的符號連結，建立新的
-6. .env.local 已存在，跳過建立
-7. 輸出結果
-```
-
-**範例 3: 重新同步（主專案在 feature branch 上）**
-```
-用戶: oracle
-
-AI:
-執行: node .pantheon/.cursor/scripts/utilities/oracle.mjs
-
-輸出:
-1. 檢查 .pantheon submodule → 存在
-2. 檢查主專案分支 → feature/FE-1234（非 main）
-3. 同步 pantheon 至主專案 main 分支所使用的版本
-   - 查詢 origin/main 中 .pantheon 所指向的 commit: abc12345
-   - 當前 pantheon commit: def67890
-   - checkout 到 abc12345
-4. 重新建立符號連結
-5. 檢查 .env.local（已存在則跳過）
+2. 同步 pantheon 內容
+   - 當前分支: prometheus
+   - 拉取最新內容: git fetch origin && git pull origin prometheus
+   ✅ 已更新至最新版本
+3. 目錄已存在，跳過建立
+4. 移除舊的符號連結，建立新的
+5. .env.local 已存在，跳過建立
 6. 輸出結果
-
-✅ pantheon 已同步至 main 分支所使用的版本
-   版本: abc12345
 ```
 
-**範例 4: 重新同步（feature branch 上，pantheon 已與 main 同步）**
+**範例 3: 重新同步（已是最新版本）**
 ```
 用戶: oracle
 
@@ -161,12 +129,12 @@ AI:
 
 輸出:
 1. 檢查 .pantheon submodule → 存在
-2. 檢查主專案分支 → feature/FE-5678（非 main）
-3. 同步 pantheon 至主專案 main 分支所使用的版本
-   - 查詢 origin/main 中 .pantheon 所指向的 commit: abc12345
-   - 當前 pantheon commit: abc12345
-   ✅ pantheon 已與 main 分支同步
-4. 重新建立符號連結
+2. 同步 pantheon 內容
+   - 當前分支: prometheus
+   - 拉取最新內容: git fetch origin && git pull origin prometheus
+   ✅ 已是最新版本
+3. 重新建立符號連結
+4. 檢查 .env.local（已存在則跳過）
 5. 輸出結果
 ```
 
@@ -186,11 +154,9 @@ AI:
 - ✅ `.env.local` 只會在不存在時建立，不會覆蓋既有配置
 - ⚠️ 首次設置後請務必編輯 `.cursor/.env.local` 填入實際配置值
 
-### 分支同步相關
-- ⚠️ **更新 pantheon 前會先檢查主專案是否在 main 上**
-- ✅ 若主專案在 main 上：拉取 pantheon 最新版本
-- ✅ 若主專案不在 main 上（如 feature branch）：同步到 main 所使用的 pantheon 版本
-- ✅ **這確保 feature branch 不會意外更新到比 main 更新的 pantheon 版本，避免 MR 出現預期外的變更**
+### 版本同步相關
+- ✅ 已初始化過的專案會自動拉取 submodule 當前分支的最新內容
+- ✅ 首次設置時不會拉取更新，使用 submodule 當前指向的版本
 
 ## 腳本位置
 
