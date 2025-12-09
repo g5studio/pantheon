@@ -78,10 +78,8 @@ node .pantheon/.cursor/scripts/operator/fix-comment.mjs list "<MR_URL>"
 
    **情況 A：用戶同意修正**
    - AI 代理執行代碼修改
-   - 修改完成後，解決該 comment：
-     ```bash
-     node .cursor/scripts/operator/fix-comment.mjs resolve "<MR_URL>" "<DISCUSSION_ID>"
-     ```
+   - **不需要**對 MR comment 做任何回覆
+   - **不要 resolve**：Operator 不應自行將 comment 設為 resolved，resolve 權限由 agent reviewer (compass) 負責
    - 繼續處理下一個 comment
 
    **情況 B：用戶認為毋須修正並提供原因**
@@ -89,6 +87,7 @@ node .pantheon/.cursor/scripts/operator/fix-comment.mjs list "<MR_URL>"
      ```bash
      node .cursor/scripts/operator/fix-comment.mjs reply "<MR_URL>" "<DISCUSSION_ID>" "<用戶提供的原因>"
      ```
+   - **不要 resolve**：回覆後由 agent reviewer (compass) 判斷是否 resolve
    - 繼續處理下一個 comment
 
    **情況 C：用戶要求跳過**
@@ -110,12 +109,14 @@ node .pantheon/.cursor/scripts/operator/fix-comment.mjs list "<MR_URL>"
 
 ## 腳本命令參考
 
-| 命令 | 說明 | 範例 |
-|------|------|------|
-| `list` | 列出所有未解決的 AI review comments | `node fix-comment.mjs list "<MR_URL>"` |
-| `reply` | 回覆指定的 comment | `node fix-comment.mjs reply "<MR_URL>" "<DISCUSSION_ID>" "<內容>"` |
-| `resolve` | 解決（標記為已解決）指定的 comment | `node fix-comment.mjs resolve "<MR_URL>" "<DISCUSSION_ID>"` |
-| `resubmit` | 重新提交 AI review | `node fix-comment.mjs resubmit "<MR_URL>"` |
+| 命令 | 說明 | Operator 可用 | 範例 |
+|------|------|:------------:|------|
+| `list` | 列出所有未解決的 AI review comments | ✅ | `node fix-comment.mjs list "<MR_URL>"` |
+| `reply` | 回覆指定的 comment | ✅ | `node fix-comment.mjs reply "<MR_URL>" "<DISCUSSION_ID>" "<內容>"` |
+| `resolve` | 解決（標記為已解決）指定的 comment | ❌ | `node fix-comment.mjs resolve "<MR_URL>" "<DISCUSSION_ID>"` |
+| `resubmit` | 重新提交 AI review | ✅ | `node fix-comment.mjs resubmit "<MR_URL>"` |
+
+**⚠️ 重要說明**：`resolve` 命令僅供 agent reviewer (compass) 使用，Operator 不應該自行將 comment 標記為 resolved。
 
 ## 使用方式
 
@@ -165,7 +166,7 @@ AI: 🔍 正在獲取 MR !3366 的 AI review comments...
 
 AI: ✅ 正在執行修正...
     [執行代碼修改]
-    ✅ 修正完成，已解決此 comment
+    ✅ 修正完成（待重新送審後由 agent reviewer 確認）
     
     ───────────────────────────────────────
     【Comment 2/3】
@@ -194,9 +195,12 @@ AI: 💬 正在回覆此 comment...
 
     ═══════════════════════════════════════
     📊 處理完成摘要:
-    - 已修正: 2 個
-    - 已回覆: 1 個
+    - 已修正（代碼調整）: 2 個
+    - 不採納（已回覆原因）: 1 個
     - 跳過: 0 個
+    
+    ⚠️ 注意: 未自動 resolve 任何 comment
+    Resolve 將由 agent reviewer (compass) 在重新審核後決定
     
     ❓ 是否要 commit 並推送修改？
 
@@ -218,6 +222,8 @@ AI: [執行 cr single-ticket 流程]
 5. **需要 GitLab Token**：需要有有效的 GitLab token 才能執行操作
 6. **需要 Compass API Token**：重新送審需要有效的 Compass API token
 7. **遵循決策優先級規則**：必須遵守 `ai-decision-making-priorities.mdc` 規則，所有修改都需要用戶確認
+8. **Resolve 權限限制**：**Operator 不應自行將 comment 標記為 resolved**。Resolve 權限專屬於 agent reviewer (compass)，由 compass 在重新審核時決定是否 resolve
+9. **回覆時機**：只有在用戶認為不需要修正並提供原因時，才需要回覆 comment。若用戶同意修正，Operator 只需執行代碼修改，不需要回覆 comment
 
 ## 相關規則
 
