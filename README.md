@@ -33,6 +33,44 @@ Pantheon 專案旨在規範開發流程中所有 Agent Operator 的行為與標�
 - **腳本與命令**：可重用的工具腳本，支援快速部署到其他專案
 - **規範文件**：完整的 SOP 文件，供 Agent Master Controller 作為檢視標準
 
+## 安裝方式
+
+### 1. 添加腳本到目標專案
+
+在目標專案的 `package.json` 中添加以下腳本：
+
+```json
+{
+  "scripts": {
+    "pantheon:descend": "BRANCH=${npm_config_deities:-prometheus} && git submodule add -b \"$BRANCH\" git@gitlab.service-hub.tech:frontend/pantheon.git .pantheon && mkdir -p .cursor/commands .cursor/rules .cursor/scripts && ln -sf ../../.pantheon/.cursor/commands .cursor/commands/prometheus && ln -sf ../../.pantheon/.cursor/rules .cursor/rules/prometheus && ln -sf ../../.pantheon/.cursor/scripts .cursor/scripts/prometheus && echo \"✅ Pantheon mounted on branch: $BRANCH\"",
+    "pantheon:oracle": "git submodule update --init --remote .pantheon"
+  }
+}
+```
+
+### 2. 執行安裝
+
+```bash
+# 使用預設模型 (prometheus) 安裝
+npm run pantheon:descend
+
+# 或指定其他模型安裝
+npm run pantheon:descend --deities=athena
+```
+
+### 3. 更新 Pantheon
+
+```bash
+npm run pantheon:oracle
+```
+
+### 腳本說明
+
+| 腳本 | 功能 |
+|---|---|
+| `pantheon:descend` | 初始化 Pantheon submodule 並建立 symbolic links |
+| `pantheon:oracle` | 更新 Pantheon submodule 到最新版本 |
+
 ## Submodule 使用說明
 
 Pantheon 專案設計為可以作為 **git submodule** 掛載到其他專案中，並透過 **symbolic link** 進行同步。
