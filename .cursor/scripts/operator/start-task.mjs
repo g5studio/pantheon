@@ -270,10 +270,15 @@ async function main() {
         ticket,
         summary: analysis.summary,
         issueType: analysis.issueType,
+        status: analysis.status,
+        assignee: analysis.assignee,
+        priority: analysis.priority,
         suggestedSteps: analysis.suggestedSteps,
         startedAt: new Date().toISOString(),
         sourceBranch: sourceBranchTrimmed,
         featureBranch: `feature/${ticket}`,
+        // developmentReport 將由 AI 在開發完成後填充
+        developmentReport: null,
       };
 
       try {
