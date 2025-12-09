@@ -1493,6 +1493,9 @@ async function main() {
     }
   }
 
+  // 讀取 start-task 的計劃（用於後續的 labels 判斷）
+  const startTaskInfo = readStartTaskInfo();
+
   // 處理開發計劃：優先使用外部傳入，否則使用 start-task 的計劃
   if (externalDevelopmentPlan) {
     if (externalDevelopmentPlan.raw) {
@@ -1514,8 +1517,7 @@ async function main() {
       }
     }
   } else {
-    // 沒有外部傳入，嘗試讀取 start-task 的計劃
-    const startTaskInfo = readStartTaskInfo();
+    // 沒有外部傳入，使用 start-task 的計劃
     if (startTaskInfo) {
       const planSection = generateDevelopmentPlanSection(startTaskInfo);
       if (planSection) {
