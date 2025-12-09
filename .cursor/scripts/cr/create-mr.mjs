@@ -1175,16 +1175,33 @@ function generateDevelopmentPlanSection(taskInfo) {
   return planSection.join("\n");
 }
 
-// 解析外部傳入的開發計劃（JSON 格式）
+// 解析外部傳入的開發計劃
+// 支持兩種格式：
+// 1. JSON 對象格式（包含 steps/suggestedSteps 欄位，會走格式化流程）
+// 2. 純字符串或其他格式（直接作為完整的開發計劃內容使用，存入 raw 欄位）
 function parseExternalDevelopmentPlan(planArg) {
   if (!planArg) return null;
 
   try {
-    // 支持 JSON 字符串
-    return JSON.parse(planArg);
+    // 嘗試解析為 JSON
+    const parsed = JSON.parse(planArg);
+    // 如果是對象且有 steps 或 suggestedSteps 欄位，返回對象以走格式化流程
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      (parsed.steps || parsed.suggestedSteps)
+    ) {
+      return parsed;
+    }
+    // 如果是字符串，作為 raw 內容直接使用
+    if (typeof parsed === "string") {
+      return { raw: parsed };
+    }
+    // 其他情況（如純對象），轉為格式化字符串作為 raw 使用
+    return { raw: JSON.stringify(parsed, null, 2) };
   } catch (error) {
-    console.warn(`⚠️  無法解析外部開發計劃: ${error.message}`);
-    return null;
+    // JSON 解析失敗，視為純字符串，直接作為 raw 內容使用
+    return { raw: planArg };
   }
 }
 
@@ -1477,14 +1494,36 @@ async function main() {
   }
 
   // 處理開發計劃：優先使用外部傳入，否則使用 start-task 的計劃
-  const startTaskInfo = externalDevelopmentPlan || readStartTaskInfo();
-  if (startTaskInfo) {
-    const planSection = generateDevelopmentPlanSection(startTaskInfo);
-    if (planSection) {
-      console.log("📋 檢測到開發計劃，將添加到 MR description\n");
+  if (externalDevelopmentPlan) {
+    if (externalDevelopmentPlan.raw) {
+      // 外部傳入完整計劃，直接使用
+      console.log("📋 使用外部傳入的完整開發計劃\n");
       description = description
-        ? `${description}\n\n${planSection}`
-        : planSection;
+        ? `${description}\n\n${externalDevelopmentPlan.raw}`
+        : externalDevelopmentPlan.raw;
+    } else {
+      // 結構化計劃，走格式化流程
+      const planSection = generateDevelopmentPlanSection(
+        externalDevelopmentPlan
+      );
+      if (planSection) {
+        console.log("📋 檢測到開發計劃，將添加到 MR description\n");
+        description = description
+          ? `${description}\n\n${planSection}`
+          : planSection;
+      }
+    }
+  } else {
+    // 沒有外部傳入，嘗試讀取 start-task 的計劃
+    const startTaskInfo = readStartTaskInfo();
+    if (startTaskInfo) {
+      const planSection = generateDevelopmentPlanSection(startTaskInfo);
+      if (planSection) {
+        console.log("📋 檢測到開發計劃，將添加到 MR description\n");
+        description = description
+          ? `${description}\n\n${planSection}`
+          : planSection;
+      }
     }
   }
 
