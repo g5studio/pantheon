@@ -65,19 +65,22 @@ alwaysApply: false
 - [步驟 3]
 ...
 
+## 📋 關聯單資訊
+
 | 項目 | 值 |
 |---|---|
-| **Jira Ticket** | [TICKET] |
+| **單號** | [TICKET](URL) |
 | **標題** | [SUMMARY] |
 | **類型** | [ISSUE_TYPE] |
-| **狀態** | [STATUS] |
-| **負責人** | [ASSIGNEE] |
-| **優先級** | [PRIORITY] |
-| **啟動時間** | [STARTED_AT] |
 ```
 
+**說明**：
+- 開發計劃區塊：只包含開發步驟，不含關聯單資訊
+- 關聯單資訊區塊：獨立區塊，僅包含單號（含超連結）、標題、類型三項
+
 **實施細節**：
-- 此邏輯已實現在 `create-mr.mjs` 第 1769-1791 行
+- 開發計劃由 `generateDevelopmentPlanSection()` 函數生成
+- 關聯單資訊由 `generateRelatedTicketsSection()` 函數生成
 - 開發方案從 Git notes 讀取，確保是最終版本
 - 如果開發過程中用戶調整過計劃方向，Git notes 應該在最終確認時更新
 
@@ -480,24 +483,25 @@ Ticket: [FE-7850](https://innotech.atlassian.net/browse/FE-7850)
 - [步驟 2]
 ...
 
+## 📋 關聯單資訊
+
+| 項目 | 值 |
+|---|---|
+| **單號** | [TICKET](URL) |
+| **標題** | [SUMMARY] |
+| **類型** | [ISSUE_TYPE] |
+
 ---
 
 ## 📊 開發報告
 
 [根據 Jira card 類型的報告內容]
-
----
-
-| 項目 | 值 |
-|---|---|
-| **Jira Ticket** | [TICKET](URL) |
-| **標題** | [SUMMARY] |
-| **類型** | [ISSUE_TYPE] |
-| **狀態** | [STATUS] |
-| **負責人** | [ASSIGNEE] |
-| **優先級** | [PRIORITY] |
-| **啟動時間** | [STARTED_AT] |
 ```
+
+**說明**：
+- 開發計劃與關聯單資訊為獨立區塊
+- 關聯單資訊僅包含單號（含超連結）、標題、類型三項
+- 開發報告為可選區塊，根據 Jira card 類型生成
 
 ### 實施位置
 
