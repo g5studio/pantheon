@@ -1205,6 +1205,46 @@ function parseExternalDevelopmentPlan(planArg) {
   }
 }
 
+// 解析外部傳入的 Agent 版本資訊
+function parseAgentVersion(versionArg) {
+  if (!versionArg) return null;
+
+  try {
+    // 嘗試解析為 JSON
+    const parsed = JSON.parse(versionArg);
+    if (typeof parsed === "object" && parsed !== null) {
+      return parsed;
+    }
+    return null;
+  } catch (error) {
+    // JSON 解析失敗
+    console.log(`⚠️  Agent 版本資訊格式錯誤，跳過版本顯示`);
+    return null;
+  }
+}
+
+// 生成 Agent 版本資訊區塊
+function generateAgentVersionSection(versionInfo) {
+  if (!versionInfo || Object.keys(versionInfo).length === 0) {
+    return null;
+  }
+
+  const lines = [
+    "---",
+    "",
+    "### 🤖 Agent Version",
+    "",
+    "| Deity Agent | Version |",
+    "|-------------|---------|",
+  ];
+
+  for (const [component, version] of Object.entries(versionInfo)) {
+    lines.push(`| ${component} | ${version} |`);
+  }
+
+  return lines.join("\n");
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const targetBranchArg = args.find((arg) => arg.startsWith("--target="));
@@ -1233,6 +1273,14 @@ async function main() {
         .map((l) => l.trim())
         .filter((l) => l.length > 0)
     : [];
+
+  // 解析外部傳入的 Agent 版本資訊
+  const agentVersionArg = args.find((arg) =>
+    arg.startsWith("--agent-version=")
+  );
+  const agentVersionInfo = agentVersionArg
+    ? parseAgentVersion(agentVersionArg.split("=").slice(1).join("="))
+    : null;
 
   // 檢查是否有未提交的變更
   const uncommittedChanges = getGitStatus();
@@ -1526,6 +1574,17 @@ async function main() {
           ? `${description}\n\n${planSection}`
           : planSection;
       }
+    }
+  }
+
+  // 添加 Agent 版本資訊到 description 最下方
+  if (agentVersionInfo) {
+    const versionSection = generateAgentVersionSection(agentVersionInfo);
+    if (versionSection) {
+      console.log("🤖 檢測到 Agent 版本資訊，將添加到 MR description 最下方\n");
+      description = description
+        ? `${description}\n\n${versionSection}`
+        : versionSection;
     }
   }
 
