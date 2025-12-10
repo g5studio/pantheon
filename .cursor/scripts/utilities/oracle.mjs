@@ -119,21 +119,51 @@ async function main() {
       });
       log.dim(`當前分支: ${currentBranch}`);
 
-      // 拉取該分支的最新內容
-      exec("git fetch origin", { cwd: pantheonDir });
-      const pullResult = exec(`git pull origin ${currentBranch}`, {
+      // 檢查 pantheon 是否有本地變更
+      const localChanges = exec("git status --porcelain", {
         cwd: pantheonDir,
         throwOnError: false,
       });
 
-      if (pullResult && pullResult.includes("Already up to date")) {
-        log.success("已是最新版本");
+      if (localChanges && localChanges.trim()) {
+        log.warning(".pantheon 有本地變更，將自動重置...");
+        log.dim("變更的檔案：");
+        localChanges
+          .trim()
+          .split("\n")
+          .forEach((line) => log.dim(`  ${line}`));
+
+        // 重置本地變更
+        exec("git checkout -- .", { cwd: pantheonDir });
+        // 清除未追蹤的檔案（可選，但確保乾淨狀態）
+        exec("git clean -fd", { cwd: pantheonDir, throwOnError: false });
+
+        log.success("本地變更已重置");
+      }
+
+      // 執行 fetch 和 pull
+      exec("git fetch origin", { cwd: pantheonDir });
+
+      // 檢查是否需要 pull（比較本地與遠端）
+      const localCommit = exec("git rev-parse HEAD", { cwd: pantheonDir });
+      const remoteCommit = exec(`git rev-parse origin/${currentBranch}`, {
+        cwd: pantheonDir,
+        throwOnError: false,
+      });
+
+      if (remoteCommit && localCommit !== remoteCommit) {
+        log.dim(`本地: ${localCommit.substring(0, 8)}`);
+        log.dim(`遠端: ${remoteCommit.substring(0, 8)}`);
+        exec(`git pull origin ${currentBranch}`, { cwd: pantheonDir });
+        log.success("pantheon 已更新至最新");
+      } else if (localCommit === remoteCommit) {
+        log.success("pantheon 已是最新版本");
       } else {
-        log.success("pantheon 已更新至最新版本");
+        log.warning("無法取得遠端 commit，跳過同步");
       }
     } catch (error) {
-      log.warning(`拉取 pantheon 更新時發生錯誤: ${error.message}`);
-      log.dim("繼續執行同步流程...");
+      log.error(`拉取 pantheon 更新失敗: ${error.message}`);
+      log.dim("請手動檢查 .pantheon 目錄狀態");
     }
   } else {
     console.log("");
