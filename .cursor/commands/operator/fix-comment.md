@@ -47,6 +47,25 @@ node .pantheon/.cursor/scripts/operator/fix-comment.mjs list "<MR_URL>"
 
 ### 4. 逐一處理每個 Comment
 
+**🚨 CRITICAL - 強制逐項確認**：
+
+**必須**採用「一個一個」的處理方式，**絕對禁止**批次處理：
+
+**強制流程**：
+1. 呈現**單一** comment 的分析
+2. 詢問用戶是否要修正
+3. **【強制停止】等待用戶回應**
+4. 執行用戶選擇
+5. **只有在用戶回應後**，才能繼續處理下一個 comment
+
+**禁止行為**：
+- ❌ 一次性列出所有 comments 的分析
+- ❌ 統一詢問「以上是否要修正」
+- ❌ 在用戶未回應當前 comment 前就呈現下一個
+- ❌ 假設用戶想要批次處理以提高效率
+
+---
+
 對於每個未解決的 AI review comment，AI 必須：
 
 1. **讀取 Comment 內容**：
