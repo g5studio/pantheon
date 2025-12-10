@@ -1579,7 +1579,6 @@ async function main() {
     }
   }
 
-<<<<<<< HEAD
   // 添加關聯單資訊區塊（獨立於開發計劃，只顯示單號、標題、類型）
   if (startTaskInfo) {
     const relatedTicketsSection = generateRelatedTicketsSection(startTaskInfo);
@@ -1588,7 +1587,9 @@ async function main() {
       description = description
         ? `${description}\n\n${relatedTicketsSection}`
         : relatedTicketsSection;
-=======
+    }
+  }
+
   // 添加 Agent 版本資訊到 description 最下方
   if (agentVersionInfo) {
     const versionSection = generateAgentVersionSection(agentVersionInfo);
@@ -1597,7 +1598,6 @@ async function main() {
       description = description
         ? `${description}\n\n${versionSection}`
         : versionSection;
->>>>>>> f529e5c82cd66975c351c53f4d973015f703713a
     }
   }
 
