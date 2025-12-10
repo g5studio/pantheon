@@ -470,6 +470,168 @@ The `create-mr.mjs` script automatically analyzes changed files and adds the app
 - Report language must match user's preferred language (Chinese or English)
 - Report must be provided immediately after successful MR creation
 
+### Agent Version Information in MR Description
+
+**🚨 CRITICAL**: 當 AI 執行 `create-mr` 時，**務必找到 Agent 的版本資訊，將所有 agent 版本提供給 create-mr 腳本添加到 MR**。
+
+#### 版本資訊要求
+
+1. **MR Description 底部顯示**：Agent 版本資訊**必須**顯示在 MR description 的最下方
+2. **參數控制**：版本資訊透過 `--agent-version` 參數傳入 `create-mr.mjs` 腳本
+3. **可選顯示**：若沒有傳入 `--agent-version` 參數，則不顯示版本資訊區塊
+
+#### 版本資訊檔案定位規則
+
+**CRITICAL**: AI **必須**按照以下優先順序找到正確的 `version.json` 檔案：
+
+| 優先級 | 檔案路徑 | 說明 |
+|---|---|---|
+| 1 | `.pantheon/version.json` | Pantheon 以 submodule 形式掛載到目標專案時的位置 |
+| 2 | `version.json`（根目錄） | Pantheon 專案本身的位置（根目錄） |
+| 3 | `.cursor/version.json` | Pantheon 專案的備用位置 |
+| 4 | 專案內搜尋 | 若以上都找不到，搜尋專案內所有 `version.json`，找到包含 `pantheon` key 的檔案 |
+
+**搜尋邏輯**：
+```bash
+# 優先檢查 .pantheon/version.json（submodule 掛載）
+if [ -f ".pantheon/version.json" ]; then
+  VERSION_FILE=".pantheon/version.json"
+# 次優先檢查根目錄 version.json
+elif [ -f "version.json" ]; then
+  VERSION_FILE="version.json"
+# 再檢查 .cursor/version.json
+elif [ -f ".cursor/version.json" ]; then
+  VERSION_FILE=".cursor/version.json"
+# 最後搜尋專案內所有 version.json
+else
+  # 搜尋包含 "pantheon" key 的 version.json
+  find . -name "version.json" -exec grep -l '"pantheon"' {} \;
+fi
+```
+
+#### 版本檔案格式
+
+`version.json` 檔案格式範例：
+```json
+{
+  "pantheon": "0.0.1"
+}
+```
+
+檔案可能包含多個版本欄位，AI 應該提取**所有**版本資訊：
+```json
+{
+  "pantheon": "0.0.1",
+  "rules": "1.2.0",
+  "scripts": "0.5.3"
+}
+```
+
+#### 傳遞版本資訊給 create-mr 腳本
+
+**執行方式**：
+```bash
+# 讀取版本資訊並傳遞給 create-mr
+VERSION_INFO=$(cat .pantheon/version.json)
+pnpm run create-mr --agent-version="$VERSION_INFO"
+```
+
+**或使用 JSON 字串格式**：
+```bash
+pnpm run create-mr --agent-version='{"pantheon":"0.0.1"}'
+```
+
+#### MR Description 中的版本資訊格式
+
+當 `--agent-version` 參數被傳入時，`create-mr.mjs` 應該在 MR description 的**最下方**添加以下格式的版本資訊：
+
+```markdown
+---
+
+### 🤖 Agent Version
+
+| Deity Agent | Version |
+|-------------|---------|
+| pantheon | 0.0.1 |
+```
+
+如果有多個版本欄位：
+```markdown
+---
+
+### 🤖 Agent Version
+
+| Deity Agent | Version |
+|-------------|---------|
+| pantheon | 0.0.1 |
+| rules | 1.2.0 |
+| scripts | 0.5.3 |
+```
+
+#### AI 執行流程
+
+**CRITICAL**: 當 AI 執行 `cr single-ticket`、`cr multiple-ticket` 或任何會觸發 `create-mr` 的指令時，**必須**：
+
+1. **定位版本檔案**：按照上述優先順序找到正確的 `version.json`
+2. **讀取版本資訊**：提取檔案中的所有版本欄位
+3. **傳遞給腳本**：將版本資訊透過 `--agent-version` 參數傳遞給 `create-mr.mjs`
+
+**禁止行為**：
+- ❌ 忽略版本資訊不傳遞
+- ❌ 找不到檔案時不嘗試搜尋
+- ❌ 只傳遞部分版本資訊
+
+**允許行為**：
+- ✅ 找不到任何版本檔案時，不傳遞 `--agent-version` 參數（版本區塊將不顯示）
+- ✅ 版本檔案存在但為空或格式錯誤時，報告警告但繼續執行 MR 建立
+
+#### 範例
+
+**Example 1: Pantheon 以 submodule 掛載**
+```
+專案結構：
+├── .pantheon/
+│   └── version.json  ← 使用此檔案
+├── src/
+└── package.json
+
+AI 執行：
+1. 檢查 .pantheon/version.json → 存在 ✓
+2. 讀取內容：{"pantheon": "0.0.1"}
+3. 執行：pnpm run create-mr --agent-version='{"pantheon":"0.0.1"}'
+```
+
+**Example 2: 在 Pantheon 專案本身**
+```
+專案結構：
+├── .cursor/
+│   └── rules/
+├── version.json      ← 使用此檔案（根目錄優先）
+└── README.md
+
+AI 執行：
+1. 檢查 .pantheon/version.json → 不存在
+2. 檢查 version.json（根目錄）→ 存在 ✓
+3. 讀取內容：{"pantheon": "0.0.1"}
+4. 執行：pnpm run create-mr --agent-version='{"pantheon":"0.0.1"}'
+```
+
+**Example 3: 版本檔案在其他位置**
+```
+專案結構：
+├── config/
+│   └── version.json  ← 包含 "pantheon" key
+├── src/
+└── package.json
+
+AI 執行：
+1. 檢查 .pantheon/version.json → 不存在
+2. 檢查 .cursor/version.json → 不存在
+3. 搜尋所有 version.json → 找到 config/version.json
+4. 檢查是否包含 "pantheon" key → 是 ✓
+5. 讀取內容並傳遞給 create-mr
+```
+
 ## Pre-MR Rebase Requirement
 
 ### **CRITICAL**: Rebase to Target Branch Before Creating MR
