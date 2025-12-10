@@ -15,6 +15,127 @@ alwaysApply: false
 - Commit 前的確認流程
 - MR 建立和報告檢附
 
+---
+
+## 🚨 強制執行：保存開發計劃到 Git Notes
+
+**CRITICAL**: 當用戶確認開發計劃後，AI **必須立即**執行以下步驟，**絕對不可遺漏**。
+
+### 保存時機
+
+| 時機 | 動作 | 強制性 |
+|-----|------|-------|
+| 用戶確認開發計劃後 | **立即保存** Git notes | 🚨 必須 |
+| 開發過程中調整計劃時 | 更新 Git notes | 建議 |
+| 開發完成準備 commit 前 | 檢查 Git notes 存在 | 🚨 必須 |
+| 執行 cr 指令前 | 驗證 Git notes 存在 | 🚨 必須 |
+
+### startTaskInfo JSON 格式
+
+```json
+{
+  "ticket": "IN-107113",
+  "summary": "[Jira 標題]",
+  "issueType": "Bug",
+  "status": "To Do",
+  "assignee": "FE-William",
+  "priority": "Medium",
+  "suggestedSteps": ["步驟1", "步驟2", "步驟3"],
+  "sourceBranch": "main",
+  "featureBranch": "feature/IN-107113",
+  "startedAt": "2025-12-10T14:30:00+08:00",
+  "aiCompleted": true,
+  "developmentReport": null
+}
+```
+
+### 保存命令
+
+使用 `.cursor/scripts/operator/save-start-task-info.mjs` 腳本保存：
+
+```bash
+# 方式 1：使用獨立參數
+node .cursor/scripts/operator/save-start-task-info.mjs \
+  --ticket=IN-107113 \
+  --summary="[標題]" \
+  --type=Bug \
+  --status="To Do" \
+  --assignee="FE-William" \
+  --priority="Medium" \
+  --steps='["步驟1", "步驟2", "步驟3"]' \
+  --source-branch=main \
+  --ai-completed=true
+
+# 方式 2：使用完整 JSON
+node .cursor/scripts/operator/save-start-task-info.mjs --json='{...}'
+
+# 驗證保存成功
+node .cursor/scripts/operator/save-start-task-info.mjs --verify
+
+# 讀取現有 notes
+node .cursor/scripts/operator/save-start-task-info.mjs --read
+
+# 更新現有 notes（合併模式）
+node .cursor/scripts/operator/save-start-task-info.mjs --update --steps='["新步驟"]'
+```
+
+### 強制檢查點
+
+AI 在以下時機，**必須**確認 Git notes 已保存：
+
+- [ ] **用戶確認開發計劃後** → 立即執行 `save-start-task-info.mjs`
+- [ ] **執行 `--verify` 驗證** → 確認保存成功
+- [ ] **開發完成準備 commit 前** → 檢查 notes 存在
+- [ ] **執行 `cr` 指令前** → 再次驗證 notes 存在
+
+### 遺漏處理
+
+如果在 commit 或建立 MR 時發現沒有 Git notes：
+
+1. **立即停止**流程
+2. **詢問用戶**是否要補充開發計劃
+3. 使用腳本保存：
+   ```bash
+   node .cursor/scripts/operator/save-start-task-info.mjs \
+     --ticket={從分支名提取} \
+     --summary="[補充標題]" \
+     --type={推斷類型} \
+     --steps='["已完成的步驟"]' \
+     --ai-completed=true
+   ```
+4. **驗證保存成功後**才繼續流程
+
+### 流程檢查清單
+
+```
+## 階段 1：初始化
+- [ ] 讀取 Jira ticket 資訊
+- [ ] 檢查 RD 建議（for AI 標記）
+- [ ] 分析需求並制定開發計劃
+
+## 階段 2：確認計劃
+- [ ] 顯示開發計劃給用戶
+- [ ] 等待用戶確認
+- [ ] 🚨 保存開發計劃到 Git notes ← 容易遺漏
+- [ ] 🚨 驗證保存成功
+
+## 階段 3：開發執行
+- [ ] 執行開發步驟
+- [ ] 完成代碼修改
+
+## 階段 4：完成報告
+- [ ] 生成開發報告（根據 Jira 類型）
+- [ ] 顯示報告給用戶確認
+- [ ] 更新 Git notes（如有報告）
+
+## 階段 5：提交 MR
+- [ ] 🚨 檢查 Git notes 存在
+- [ ] 執行 commit
+- [ ] 建立 MR（自動讀取 notes 生成 description）
+```
+
+---
+
 ## AI 獨立完成項目的標記和 MR 處理
 
 ### 標記 AI 獨立完成的項目

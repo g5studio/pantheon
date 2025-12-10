@@ -2,6 +2,8 @@
 description: 開始新任務：創建 feature branch 並分析 Jira ticket 需求
 ---
 
+**🚨 重要規則**：執行 start-task 時，必須讀取並遵守 `.cursor/rules/operator/start-task/development-policy.mdc` 規則。
+
 當用戶輸入 `start-task` 時，**所有交互都在 Cursor chat 中完成**，執行以下完整流程：
 
 1. **在 Chat 中詢問用戶信息**：
@@ -43,7 +45,40 @@ description: 開始新任務：創建 feature branch 並分析 Jira ticket 需�
    - 在 chat 中顯示分析結果和計劃
    - 在 chat 中詢問用戶確認計劃是否正確
 
-4. **完成修改後的確認與自動提交流程**：
+4. **🚨 保存開發計劃到 Git notes（強制步驟）**：
+   - **CRITICAL**: 當用戶確認計劃後，**必須立即**保存開發計劃到 Git notes
+   - 使用腳本保存：
+     ```bash
+     node .cursor/scripts/operator/save-start-task-info.mjs \
+       --ticket="{ticket}" \
+       --summary="{標題}" \
+       --type="{issueType}" \
+       --status="{status}" \
+       --assignee="{assignee}" \
+       --priority="{priority}" \
+       --steps='["步驟1", "步驟2", ...]' \
+       --source-branch="{來源分支}" \
+       --ai-completed=true
+     ```
+   - 或使用 JSON 格式：
+     ```bash
+     node .cursor/scripts/operator/save-start-task-info.mjs --json='{
+       "ticket": "{ticket}",
+       "summary": "{標題}",
+       "issueType": "{issueType}",
+       "status": "{status}",
+       "assignee": "{assignee}",
+       "priority": "{priority}",
+       "suggestedSteps": ["步驟1", "步驟2"],
+       "sourceBranch": "{來源分支}",
+       "featureBranch": "feature/{ticket}",
+       "aiCompleted": true
+     }'
+     ```
+   - 驗證保存成功：`node .cursor/scripts/operator/save-start-task-info.mjs --verify`
+   - **禁止**在保存成功前開始開發
+
+5. **完成修改後的確認與自動提交流程**：
    - 當 AI 完成代碼修改後，必須在 chat 中與用戶確認目前的修改計畫
    - **讀取開發計劃**：從 Git notes 讀取最新的開發計劃（使用 `git notes --ref=start-task show HEAD`）
    - **顯示修改計畫**：在 chat 中顯示以下內容：
