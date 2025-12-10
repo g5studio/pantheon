@@ -1124,7 +1124,7 @@ async function findUserId(token, host, username) {
   }
 }
 
-// 生成開發計劃區塊
+// 生成開發計劃區塊（純開發步驟，不含關聯單資訊）
 function generateDevelopmentPlanSection(taskInfo) {
   if (!taskInfo) return null;
 
@@ -1144,35 +1144,37 @@ function generateDevelopmentPlanSection(taskInfo) {
       "本 MR 由 `start-task` 命令啟動，以下是初步制定的開發計劃：",
     "",
     ...steps.map((step) => `- ${step}`),
-    "",
   ];
 
-  // 添加 ticket 信息（如果有）
-  if (taskInfo.ticket) {
-    planSection.push(`**Jira Ticket:** ${taskInfo.ticket}`);
-  }
-  if (taskInfo.summary) {
-    planSection.push(`**標題:** ${taskInfo.summary}`);
-  }
-  if (taskInfo.issueType) {
-    planSection.push(`**類型:** ${taskInfo.issueType}`);
-  }
-  if (taskInfo.status) {
-    planSection.push(`**狀態:** ${taskInfo.status}`);
-  }
-  if (taskInfo.assignee) {
-    planSection.push(`**負責人:** ${taskInfo.assignee}`);
-  }
-  if (taskInfo.priority) {
-    planSection.push(`**優先級:** ${taskInfo.priority}`);
-  }
-  if (taskInfo.startedAt) {
-    planSection.push(
-      `**啟動時間:** ${new Date(taskInfo.startedAt).toLocaleString("zh-TW")}`
-    );
+  return planSection.join("\n");
+}
+
+// 生成關聯單資訊區塊（僅包含單號、標題、類型）
+function generateRelatedTicketsSection(taskInfo) {
+  if (!taskInfo) return null;
+
+  // 檢查是否有任何關聯單資訊
+  const hasTicketInfo =
+    taskInfo.ticket || taskInfo.summary || taskInfo.issueType;
+
+  if (!hasTicketInfo) {
+    return null;
   }
 
-  return planSection.join("\n");
+  const sections = ["## 📋 關聯單資訊", "", "| 項目 | 值 |", "|---|---|"];
+
+  if (taskInfo.ticket) {
+    const ticketUrl = `https://innotech.atlassian.net/browse/${taskInfo.ticket}`;
+    sections.push(`| **單號** | [${taskInfo.ticket}](${ticketUrl}) |`);
+  }
+  if (taskInfo.summary) {
+    sections.push(`| **標題** | ${taskInfo.summary} |`);
+  }
+  if (taskInfo.issueType) {
+    sections.push(`| **類型** | ${taskInfo.issueType} |`);
+  }
+
+  return sections.join("\n");
 }
 
 // 解析外部傳入的開發計劃
@@ -1526,6 +1528,17 @@ async function main() {
           ? `${description}\n\n${planSection}`
           : planSection;
       }
+    }
+  }
+
+  // 添加關聯單資訊區塊（獨立於開發計劃，只顯示單號、標題、類型）
+  if (startTaskInfo) {
+    const relatedTicketsSection = generateRelatedTicketsSection(startTaskInfo);
+    if (relatedTicketsSection) {
+      console.log("📋 添加關聯單資訊到 MR description\n");
+      description = description
+        ? `${description}\n\n${relatedTicketsSection}`
+        : relatedTicketsSection;
     }
   }
 
