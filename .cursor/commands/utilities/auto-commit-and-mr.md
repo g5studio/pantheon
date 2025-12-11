@@ -360,9 +360,71 @@ AI: 已設置 --no-draft 參數
 
 3. **如果通過檢查**：繼續執行 commit 流程
 
+### 4.6. Bug 類型強制追溯來源（在執行 commit 之前）
+
+**觸發條件**：Jira ticket 類型為 **Bug**
+
+**CRITICAL**: 當 Jira ticket 類型為 Bug 時，在執行 commit 之前，**必須**追溯問題來源並在開發報告中包含「造成問題的單號」資訊。
+
+**必須執行的步驟**：
+
+1. **獲取 Jira ticket 類型**：
+   - 使用 `read-jira-ticket.mjs` 腳本讀取 ticket 資訊
+   - 檢查 `issueType` 欄位是否為 `Bug`
+
+2. **追溯問題來源**（僅 Bug 類型）：
+   - 執行 `git log --oneline -20 -- <changed-files>` 查看變更檔案的歷史記錄
+   - 找出將功能「改壞」或「引入問題」的 commit
+   - 記錄相關的 Jira ticket 或 MR
+
+3. **在開發報告中包含「造成問題的單號」區塊**：
+   - **必須包含**以下資訊：
+     - 引入問題的 Commit（hash 和 message）
+     - 相關 Jira Ticket（如有，使用超連結格式）
+     - 引入日期
+     - 說明（解釋為什麼該 commit 導致問題）
+
+**強制輸出格式**：
+
+在生成開發報告時，Bug 類型必須包含以下區塊：
+
+```markdown
+### 造成問題的單號
+
+| 項目 | 值 |
+|---|---|
+| **引入問題的 Commit** | `{commit_hash}` |
+| **相關 Jira Ticket** | [{ticket}](https://innotech.atlassian.net/browse/{ticket}) |
+| **Commit Message** | {commit_message} |
+| **引入日期** | {date} |
+| **說明** | {explanation} |
+```
+
+**如果無法找到問題來源**：
+- 標註「無法追溯」並說明原因（例如：問題存在於初始實現中）
+- 仍需在報告中保留此區塊，內容填寫「無法追溯，問題存在於初始實現中」
+
+**追溯命令範例**：
+
+```bash
+# 查看變更檔案的歷史記錄
+git log --oneline -20 -- src/utilities/api/endpoint/bet-creator/sport-api.ts
+
+# 查看特定 commit 的詳細信息
+git show <commit_hash> --stat
+
+# 搜尋包含特定關鍵字的 commit
+git log --oneline --all --grep="sportGuestClient"
+```
+
+**禁止行為**：
+- ❌ Bug 類型的開發報告中不包含「造成問題的單號」區塊
+- ❌ 跳過追溯步驟直接生成報告
+- ❌ 在無法追溯時不說明原因
+
 ### 5. 執行 Commit 流程
 
-**前提條件**：必須在執行此步驟之前，先完成 Cursor rules 檢查（見步驟 4.5）。如果檢測到違規，不要執行 commit。
+**前提條件**：必須在執行此步驟之前，先完成 Cursor rules 檢查（見步驟 4.5）和 Bug 類型追溯（見步驟 4.6，如適用）。如果檢測到違規，不要執行 commit。
 
 **方法 A: 使用 agent-commit 腳本（推薦）**
 
