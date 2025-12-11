@@ -19,6 +19,8 @@ description: 快速執行 commit 並建立 MR 的完整流程，必須提供多�
 6. **自動提交 AI review**（`cr multiple-ticket` 指令強制包含送審功能，無法略過）
 7. **自動檢查 Cursor rules**：在執行 commit 之前，AI 會檢查代碼是否符合 Cursor rules
 8. **Bug 類型強制追溯來源**：如果 Jira ticket 類型為 Bug，AI 必須在生成開發報告前執行 `git log` 追溯問題來源，並在報告中包含「造成問題的單號」區塊。詳細流程請參考 [auto-commit-and-mr.md](../utilities/auto-commit-and-mr.md) 中的「步驟 4.6. Bug 類型強制追溯來源」章節。
+9. **生成開發報告（CRITICAL）**：在建立 MR 前，**必須**根據 Jira ticket 資訊和變更內容生成開發報告，並透過 `--development-report` 參數傳遞給 `create-mr.mjs`。詳細格式請參考 [commit-and-mr-guidelines.mdc](mdc:.cursor/rules/cr/commit-and-mr-guidelines.mdc) 中的「Development Report Requirement」章節。
+10. **讀取 Agent 版本（CRITICAL）**：在建立 MR 前，**必須**讀取 `version.json`（優先順序：`.pantheon/version.json` → `version.json` → `.cursor/version.json`）並透過 `--agent-version` 參數傳遞給 `create-mr.mjs`。
 
 ## 多 Ticket 驗證流程
 
