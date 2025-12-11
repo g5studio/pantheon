@@ -1,5 +1,5 @@
 ---
-description: 在 start-task 檢查 Jira 單時需要遵守的原則，特別是優先檢查 RD 提供的建議
+description: 在 start-task 檢查 Jira 單時需要遵守的原則，包含子任務偵測和優先檢查 RD 提供的建議
 alwaysApply: false
 ---
 # Start-Task Jira Ticket 檢查原則
@@ -13,6 +13,105 @@ alwaysApply: false
 - 分析 ticket 的需求和描述
 - 制定開發計劃
 - 顯示 ticket 信息給用戶
+
+---
+
+## 🚨 核心原則：子任務偵測（最高優先級）
+
+**🚨 CRITICAL**: 讀取 Jira ticket 後，**必須立即**檢測是否為子任務，此步驟**絕對不可遺漏**。這是 start-task 流程中的**第一優先級檢查項目**。
+
+### 偵測邏輯
+
+在讀取 Jira ticket 資料後，**必須**執行以下檢查：
+
+1. **檢查 issuetype**：確認 `fields.issuetype.name` 是否為 `Sub-task`
+2. **提取父任務**：若為子任務，從 `fields.parent.key` 取得父任務單號
+
+### 處理流程
+
+| 條件 | 分支單號 | Commit 單號 | MR 關聯單號 |
+|---|---|---|---|
+| `issuetype.name === "Sub-task"` | **父任務單號**（`parent.key`） | 子任務單號 | 子任務 + 父任務 |
+| `issuetype.name !== "Sub-task"` | 用戶提供的單號 | 用戶提供的單號 | 用戶提供的單號 |
+
+### 強制顯示格式
+
+**CRITICAL**: 若偵測到 ticket 為子任務，**必須**在 chat 中明確顯示以下資訊：
+
+```
+🔍 正在檢測 ticket 類型...
+📌 偵測到此為子任務（Sub-task）
+📋 子任務單號: {子任務單號}
+📋 父任務單號: {parent.key}
+
+ℹ️ 分支將使用父任務單號: feature/{父任務單號}
+ℹ️ Commit 將使用子任務單號: ({子任務單號})
+ℹ️ MR 將關聯兩個單號: {子任務單號}, {父任務單號}
+```
+
+### 記錄單號供後續使用
+
+當偵測到子任務時，AI **必須**記錄以下資訊供後續流程使用：
+
+| 用途 | 使用的單號 | 說明 |
+|---|---|---|
+| **創建分支** | 父任務單號 | 避免多個子任務各自建立分支 |
+| **Commit scope** | 子任務單號 | 確保追蹤每個子任務的改動 |
+| **MR 關聯** | 子任務 + 父任務 | 方便在 Jira 中追蹤完整需求進度 |
+| **Git notes** | 子任務單號 | 作為主要 ticket 記錄 |
+
+### 禁止行為
+
+**🚨 CRITICAL**: 以下行為**絕對禁止**：
+
+- ❌ 讀取到 `issuetype: "Sub-task"` 後不執行偵測邏輯
+- ❌ 看到 `parent.key` 資料後不處理
+- ❌ 使用子任務單號建立分支（應使用父任務單號）
+- ❌ 在 MR 中只關聯子任務單號而遺漏父任務單號
+- ❌ 未在 chat 中顯示子任務偵測結果
+
+### 範例場景
+
+**場景：用戶提供子任務單號 IN-107293**
+
+```
+AI 讀取 Jira ticket IN-107293
+    ↓
+檢測到: issueType = "Sub-task", parent.key = "IN-97676"
+    ↓
+在 chat 中顯示：
+    「📌 偵測到此為子任務，父任務為 IN-97676
+     分支將使用父任務單號: feature/IN-97676」
+    ↓
+創建分支: feature/IN-97676（使用父任務單號）
+    ↓
+後續 commit 使用 scope: (IN-107293)（使用子任務單號）
+    ↓
+MR 關聯: IN-107293, IN-97676（兩個都要）
+```
+
+**錯誤示範**：
+
+```
+❌ 錯誤流程：
+AI 讀取 Jira ticket IN-107293
+    ↓
+看到 issueType = "Sub-task"（但未處理）
+    ↓
+直接創建分支: feature/IN-107293（錯誤！應使用父任務單號）
+```
+
+### 檢查清單
+
+在讀取 Jira ticket 後，AI **必須**確認以下項目：
+
+- [ ] 是否檢查了 `fields.issuetype.name`？
+- [ ] 若為 `Sub-task`，是否提取了 `fields.parent.key`？
+- [ ] 是否在 chat 中顯示了子任務偵測結果？
+- [ ] 是否使用父任務單號創建分支？
+- [ ] 是否記錄子任務單號供後續 commit 使用？
+
+---
 
 ## 核心原則：優先檢查 RD 建議
 
