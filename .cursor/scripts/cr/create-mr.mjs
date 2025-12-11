@@ -1124,7 +1124,7 @@ async function findUserId(token, host, username) {
   }
 }
 
-// 生成開發計劃區塊
+// 生成開發計劃區塊（純開發步驟，不含關聯單資訊）
 function generateDevelopmentPlanSection(taskInfo) {
   if (!taskInfo) return null;
 
@@ -1144,35 +1144,37 @@ function generateDevelopmentPlanSection(taskInfo) {
       "本 MR 由 `start-task` 命令啟動，以下是初步制定的開發計劃：",
     "",
     ...steps.map((step) => `- ${step}`),
-    "",
   ];
 
-  // 添加 ticket 信息（如果有）
-  if (taskInfo.ticket) {
-    planSection.push(`**Jira Ticket:** ${taskInfo.ticket}`);
-  }
-  if (taskInfo.summary) {
-    planSection.push(`**標題:** ${taskInfo.summary}`);
-  }
-  if (taskInfo.issueType) {
-    planSection.push(`**類型:** ${taskInfo.issueType}`);
-  }
-  if (taskInfo.status) {
-    planSection.push(`**狀態:** ${taskInfo.status}`);
-  }
-  if (taskInfo.assignee) {
-    planSection.push(`**負責人:** ${taskInfo.assignee}`);
-  }
-  if (taskInfo.priority) {
-    planSection.push(`**優先級:** ${taskInfo.priority}`);
-  }
-  if (taskInfo.startedAt) {
-    planSection.push(
-      `**啟動時間:** ${new Date(taskInfo.startedAt).toLocaleString("zh-TW")}`
-    );
+  return planSection.join("\n");
+}
+
+// 生成關聯單資訊區塊（僅包含單號、標題、類型）
+function generateRelatedTicketsSection(taskInfo) {
+  if (!taskInfo) return null;
+
+  // 檢查是否有任何關聯單資訊
+  const hasTicketInfo =
+    taskInfo.ticket || taskInfo.summary || taskInfo.issueType;
+
+  if (!hasTicketInfo) {
+    return null;
   }
 
-  return planSection.join("\n");
+  const sections = ["## 📋 關聯單資訊", "", "| 項目 | 值 |", "|---|---|"];
+
+  if (taskInfo.ticket) {
+    const ticketUrl = `https://innotech.atlassian.net/browse/${taskInfo.ticket}`;
+    sections.push(`| **單號** | [${taskInfo.ticket}](${ticketUrl}) |`);
+  }
+  if (taskInfo.summary) {
+    sections.push(`| **標題** | ${taskInfo.summary} |`);
+  }
+  if (taskInfo.issueType) {
+    sections.push(`| **類型** | ${taskInfo.issueType} |`);
+  }
+
+  return sections.join("\n");
 }
 
 // 解析外部傳入的開發計劃
@@ -1280,6 +1282,15 @@ async function main() {
   );
   const agentVersionInfo = agentVersionArg
     ? parseAgentVersion(agentVersionArg.split("=").slice(1).join("="))
+    : null;
+
+  // 解析外部傳入的開發報告（與開發計劃不同，開發報告是完成後的報告）
+  // 開發報告包含：影響範圍、根本原因、改動前後邏輯差異（Bug）或預期效果、需求覆蓋率、潛在影響風險（Request）
+  const developmentReportArg = args.find((arg) =>
+    arg.startsWith("--development-report=")
+  );
+  const externalDevelopmentReport = developmentReportArg
+    ? developmentReportArg.split("=").slice(1).join("=")
     : null;
 
   // 檢查是否有未提交的變更
@@ -1574,6 +1585,28 @@ async function main() {
           ? `${description}\n\n${planSection}`
           : planSection;
       }
+    }
+  }
+
+  // 處理開發報告：外部傳入的開發報告直接添加到 description
+  // 開發報告與開發計劃不同：
+  // - 開發計劃（--development-plan）：開發前的計劃步驟
+  // - 開發報告（--development-report）：開發完成後的報告，包含影響範圍、根本原因、改動差異等
+  if (externalDevelopmentReport) {
+    console.log("📊 使用外部傳入的開發報告\n");
+    description = description
+      ? `${description}\n\n${externalDevelopmentReport}`
+      : externalDevelopmentReport;
+  }
+
+  // 添加關聯單資訊區塊（獨立於開發計劃，只顯示單號、標題、類型）
+  if (startTaskInfo) {
+    const relatedTicketsSection = generateRelatedTicketsSection(startTaskInfo);
+    if (relatedTicketsSection) {
+      console.log("📋 添加關聯單資訊到 MR description\n");
+      description = description
+        ? `${description}\n\n${relatedTicketsSection}`
+        : relatedTicketsSection;
     }
   }
 
