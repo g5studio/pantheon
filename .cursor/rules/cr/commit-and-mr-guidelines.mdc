@@ -453,6 +453,83 @@ The `create-mr.mjs` script automatically analyzes changed files and adds the app
 - **Static File**: Must be added when changes only include static resource adjustments (files in `assets/` folder)
 - **Vendor Customization**: Must be added when changes only modify specific existing vendor parameters
 
+### Development Report Requirement (MR Description 開發報告)
+
+**🚨 CRITICAL**: 當 AI 執行 `cr single-ticket`、`cr multiple-ticket` 或任何會觸發 `create-mr` 的指令時，**務必**生成開發報告並透過 `--development-report` 參數傳給 `create-mr.mjs` 腳本。
+
+**此規則適用於所有情境**，無論是否透過 `start-task` 流程觸發。
+
+#### 開發報告內容要求
+
+開發報告必須包含以下結構化資訊：
+
+| 區塊 | 內容 | 必要性 |
+|---|---|---|
+| **關聯單資訊** | 單號（含超連結）、標題、類型 | 必須 |
+| **變更摘要** | 變更的目的和主要改動說明 | 必須 |
+| **變更內容** | 檔案列表（新增/更新/刪除）及簡要說明 | 必須 |
+| **預期效果** | Request 類型需說明功能實現後的預期行為 | Request 類型必須 |
+| **影響範圍** | Bug 類型需說明受影響的模組和組件 | Bug 類型必須 |
+| **根本原因** | Bug 類型需說明問題發生的技術原因 | Bug 類型必須 |
+
+#### 開發報告格式
+
+```markdown
+## 📋 關聯單資訊
+
+| 項目 | 值 |
+|---|---|
+| **單號** | [TICKET](https://innotech.atlassian.net/browse/TICKET) |
+| **標題** | [Jira 標題] |
+| **類型** | [Issue Type] |
+
+---
+
+## 📝 變更摘要
+
+[說明本次變更的目的和主要改動]
+
+### 變更內容
+
+| 檔案 | 狀態 | 說明 |
+|---|---|---|
+| `path/to/file.ts` | 新增/更新/刪除 | 簡要說明 |
+
+### [根據 Jira 類型的額外資訊]
+
+[Bug 類型：影響範圍、根本原因]
+[Request 類型：預期效果、需求覆蓋率]
+```
+
+#### AI 執行流程
+
+**CRITICAL**: AI 在執行 `cr single-ticket` 或 `cr multiple-ticket` 前，**必須**：
+
+1. **分析變更內容**：檢查 `git diff` 和 `git status` 獲取變更檔案
+2. **讀取 Jira 資訊**：從 Jira API 獲取 ticket 的標題和類型
+3. **生成開發報告**：根據 Jira 類型（Bug/Request/其他）生成對應格式的報告
+4. **傳入參數**：將報告內容透過 `--development-report` 參數傳給 `create-mr.mjs`
+
+**執行範例**：
+```bash
+node .cursor/scripts/cr/create-mr.mjs \
+  --ticket=FE-7910 \
+  --development-report="## 📋 關聯單資訊\n\n| 項目 | 值 |\n|---|---|\n| **單號** | [FE-7910](URL) |\n..." \
+  --agent-version='{"pantheon":"0.0.3"}'
+```
+
+#### 禁止行為
+
+- ❌ 執行 `create-mr` 時不傳入 `--development-report` 參數
+- ❌ 只傳入 ticket 號碼作為 description
+- ❌ 生成不完整的開發報告（缺少關聯單資訊或變更摘要）
+- ❌ 忽略 Jira 類型對應的額外資訊要求
+
+#### 例外情況
+
+- ✅ 如果無法讀取 Jira 資訊（API 錯誤），仍需生成基本報告（關聯單資訊可標記「無法獲取」）
+- ✅ 如果變更內容過多，可適當摘要並標註「更多變更請參考 MR diff」
+
 ### MR Creation Success Notification
 
 **CRITICAL**: After an MR is successfully created, **MUST** provide a comprehensive execution result report to the user in the chat.
