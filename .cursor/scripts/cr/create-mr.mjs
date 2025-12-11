@@ -1284,6 +1284,15 @@ async function main() {
     ? parseAgentVersion(agentVersionArg.split("=").slice(1).join("="))
     : null;
 
+  // 解析外部傳入的開發報告（與開發計劃不同，開發報告是完成後的報告）
+  // 開發報告包含：影響範圍、根本原因、改動前後邏輯差異（Bug）或預期效果、需求覆蓋率、潛在影響風險（Request）
+  const developmentReportArg = args.find((arg) =>
+    arg.startsWith("--development-report=")
+  );
+  const externalDevelopmentReport = developmentReportArg
+    ? developmentReportArg.split("=").slice(1).join("=")
+    : null;
+
   // 檢查是否有未提交的變更
   const uncommittedChanges = getGitStatus();
   if (uncommittedChanges.length > 0) {
@@ -1577,6 +1586,17 @@ async function main() {
           : planSection;
       }
     }
+  }
+
+  // 處理開發報告：外部傳入的開發報告直接添加到 description
+  // 開發報告與開發計劃不同：
+  // - 開發計劃（--development-plan）：開發前的計劃步驟
+  // - 開發報告（--development-report）：開發完成後的報告，包含影響範圍、根本原因、改動差異等
+  if (externalDevelopmentReport) {
+    console.log("📊 使用外部傳入的開發報告\n");
+    description = description
+      ? `${description}\n\n${externalDevelopmentReport}`
+      : externalDevelopmentReport;
   }
 
   // 添加關聯單資訊區塊（獨立於開發計劃，只顯示單號、標題、類型）
