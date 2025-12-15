@@ -121,7 +121,9 @@ node .pantheon/.cursor/scripts/operator/fix-comment.mjs list "<MR_URL>"
    - 詢問用戶是否要 commit 並推送
    - 如果同意，執行 `cr single-ticket` 或類似的 commit 流程
 
-2. **重新提交 AI review**：
+2. **重新提交 AI review**（必須執行）：
+   - **無論是否有代碼修改**，在與用戶確認過所有 comment 後，都必須重新提交 AI review
+   - 這確保 agent reviewer (compass) 能重新審核並判斷是否 resolve 各個 comment
    ```bash
    node .cursor/scripts/operator/fix-comment.mjs resubmit "<MR_URL>"
    ```
