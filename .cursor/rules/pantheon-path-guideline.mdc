@@ -2,13 +2,13 @@
 alwaysApply: true
 ---
 
-# Pantheon Submodule 路徑規則
+# Pantheon 路徑規則
 
-此規則說明 Pantheon 專案作為 submodule 掛載到其他專案時的路徑處理方式。
+此規則說明 Pantheon 專案掛載到其他專案時的路徑處理方式。
 
 ## 背景說明
 
-Pantheon 專案設計為可以作為 **git submodule** 掛載到其他專案中，並透過 **symbolic link** 進行同步。這種架構會導致所有 Pantheon 內的檔案路徑在目標專案中會有不同的實際位置。
+Pantheon 專案設計為可以透過 **git clone** 掛載到其他專案中，並透過 **symbolic link** 進行同步。這種架構會導致所有 Pantheon 內的檔案路徑在目標專案中會有不同的實際位置。
 
 ## 路徑對應規則
 
@@ -42,7 +42,7 @@ Pantheon 專案設計為可以作為 **git submodule** 掛載到其他專案中�
 執行腳本前，AI **必須**按以下順序檢查路徑：
 
 1. **優先檢查 `.pantheon/.cursor/scripts/` 路徑**
-   - 如果 `.pantheon/` 資料夾存在，表示 Pantheon 是以 submodule 形式掛載
+   - 如果 `.pantheon/` 資料夾存在，表示 Pantheon 已掛載到目標專案
    - 使用 `.pantheon/.cursor/scripts/...` 路徑
 
 2. **備用檢查 `.cursor/scripts/` 路徑**
@@ -54,7 +54,7 @@ Pantheon 專案設計為可以作為 **git submodule** 掛載到其他專案中�
 ```bash
 # 檢查是否存在 .pantheon 資料夾
 if [ -d ".pantheon" ]; then
-  # 使用 submodule 路徑
+  # 使用掛載路徑
   SCRIPT_PATH=".pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs"
 else
   # 使用直接路徑
@@ -86,7 +86,7 @@ node .cursor/scripts/notification/notify-cursor-rules-failed.mjs "pantheon" "推
 #### 情境 2：在掛載了 Pantheon 的目標專案
 
 ```bash
-# .pantheon 資料夾存在，使用 submodule 路徑
+# .pantheon 資料夾存在，使用掛載路徑
 node .pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs "fluid-two" "推送完成"
 ```
 
@@ -94,7 +94,7 @@ node .pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs "flui
 
 以下是常用腳本的路徑對照，方便快速查閱：
 
-| 腳本用途 | Pantheon 路徑 | Submodule 掛載路徑 |
+| 腳本用途 | Pantheon 路徑 | 掛載後路徑 |
 |---|---|---|
 | **通知** |
 | 系統通知 | `.cursor/scripts/notification/notify-cursor-rules-failed.mjs` | `.pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs` |
@@ -114,7 +114,7 @@ node .pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs "flui
 
 規則（`.mdc`）和命令（`.md`）檔案同樣遵循此路徑規則：
 
-| 類型 | Pantheon 路徑 | Submodule 掛載路徑 |
+| 類型 | Pantheon 路徑 | 掛載後路徑 |
 |---|---|---|
 | 規則檔案 | `.cursor/rules/*.mdc` | `.pantheon/.cursor/rules/*.mdc` |
 | 命令檔案 | `.cursor/commands/*.md` | `.pantheon/.cursor/commands/*.md` |

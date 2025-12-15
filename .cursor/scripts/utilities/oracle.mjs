@@ -20,8 +20,7 @@ import {
   readdirSync,
 } from "fs";
 import { execSync } from "child_process";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
+import { join } from "path";
 
 // 顏色輸出
 const colors = {
@@ -83,91 +82,76 @@ async function main() {
   const cwd = process.cwd();
 
   // ========================================
-  // 1. 檢查 .pantheon submodule 是否存在
+  // 1. 檢查 .pantheon 是否存在
   // ========================================
   const pantheonCursorPath = join(cwd, ".pantheon", ".cursor");
 
   if (!existsSync(pantheonCursorPath)) {
-    log.error("找不到 .pantheon submodule");
+    log.error("找不到 .pantheon 資料夾");
     console.log("");
-    console.log("請先執行: git submodule update --init");
+    console.log("請先執行: npm run pantheon:descend");
     process.exit(1);
   }
-  log.success(".pantheon submodule 存在");
+  log.success(".pantheon 存在");
 
   // ========================================
-  // 2. 同步 pantheon 內容（僅非首次設置時）
+  // 2. 拉取 pantheon 當前分支最新內容
   // ========================================
-  const prometheusLinks = [
-    join(cwd, ".cursor", "commands", "prometheus"),
-    join(cwd, ".cursor", "rules", "prometheus"),
-    join(cwd, ".cursor", "scripts", "prometheus"),
-  ];
+  console.log("");
+  log.info("正在拉取 pantheon 最新內容...");
 
-  const hasExistingLinks = prometheusLinks.some((link) => isSymlink(link));
-  const pantheonDir = join(cwd, ".pantheon");
+  try {
+    const pantheonDir = join(cwd, ".pantheon");
+    const currentBranch = exec("git rev-parse --abbrev-ref HEAD", {
+      cwd: pantheonDir,
+    });
+    log.dim(`pantheon 當前分支: ${currentBranch}`);
 
-  // 只有在已建立過連結（非首次設置）時才需要同步
-  if (hasExistingLinks) {
-    console.log("");
-    log.info("正在拉取 pantheon 最新內容...");
+    // 檢查 pantheon 是否有本地變更
+    const localChanges = exec("git status --porcelain", {
+      cwd: pantheonDir,
+      throwOnError: false,
+    });
 
-    try {
-      // 取得 submodule 當前所在的分支
-      const currentBranch = exec("git rev-parse --abbrev-ref HEAD", {
-        cwd: pantheonDir,
-      });
-      log.dim(`當前分支: ${currentBranch}`);
+    if (localChanges && localChanges.trim()) {
+      log.warning(".pantheon 有本地變更，將自動重置...");
+      log.dim("變更的檔案：");
+      localChanges
+        .trim()
+        .split("\n")
+        .forEach((line) => log.dim(`  ${line}`));
 
-      // 檢查 pantheon 是否有本地變更
-      const localChanges = exec("git status --porcelain", {
-        cwd: pantheonDir,
-        throwOnError: false,
-      });
+      // 重置本地變更
+      exec("git checkout -- .", { cwd: pantheonDir });
+      // 清除未追蹤的檔案
+      exec("git clean -fd", { cwd: pantheonDir, throwOnError: false });
 
-      if (localChanges && localChanges.trim()) {
-        log.warning(".pantheon 有本地變更，將自動重置...");
-        log.dim("變更的檔案：");
-        localChanges
-          .trim()
-          .split("\n")
-          .forEach((line) => log.dim(`  ${line}`));
-
-        // 重置本地變更
-        exec("git checkout -- .", { cwd: pantheonDir });
-        // 清除未追蹤的檔案（可選，但確保乾淨狀態）
-        exec("git clean -fd", { cwd: pantheonDir, throwOnError: false });
-
-        log.success("本地變更已重置");
-      }
-
-      // 執行 fetch 和 pull
-      exec("git fetch origin", { cwd: pantheonDir });
-
-      // 檢查是否需要 pull（比較本地與遠端）
-      const localCommit = exec("git rev-parse HEAD", { cwd: pantheonDir });
-      const remoteCommit = exec(`git rev-parse origin/${currentBranch}`, {
-        cwd: pantheonDir,
-        throwOnError: false,
-      });
-
-      if (remoteCommit && localCommit !== remoteCommit) {
-        log.dim(`本地: ${localCommit.substring(0, 8)}`);
-        log.dim(`遠端: ${remoteCommit.substring(0, 8)}`);
-        exec(`git pull origin ${currentBranch}`, { cwd: pantheonDir });
-        log.success("pantheon 已更新至最新");
-      } else if (localCommit === remoteCommit) {
-        log.success("pantheon 已是最新版本");
-      } else {
-        log.warning("無法取得遠端 commit，跳過同步");
-      }
-    } catch (error) {
-      log.error(`拉取 pantheon 更新失敗: ${error.message}`);
-      log.dim("請手動檢查 .pantheon 目錄狀態");
+      log.success("本地變更已重置");
     }
-  } else {
-    console.log("");
-    log.dim("首次設置，跳過 pantheon 拉取");
+
+    // 執行 fetch 和 pull
+    exec("git fetch origin", { cwd: pantheonDir });
+
+    // 檢查是否需要 pull（比較本地與遠端）
+    const localCommit = exec("git rev-parse HEAD", { cwd: pantheonDir });
+    const remoteCommit = exec(`git rev-parse origin/${currentBranch}`, {
+      cwd: pantheonDir,
+      throwOnError: false,
+    });
+
+    if (remoteCommit && localCommit !== remoteCommit) {
+      log.dim(`本地: ${localCommit.substring(0, 8)}`);
+      log.dim(`遠端: ${remoteCommit.substring(0, 8)}`);
+      exec(`git pull origin ${currentBranch}`, { cwd: pantheonDir });
+      log.success("pantheon 已更新至最新");
+    } else if (localCommit === remoteCommit) {
+      log.success("pantheon 已是最新版本");
+    } else {
+      log.warning("無法取得遠端 commit，跳過同步");
+    }
+  } catch (error) {
+    log.error(`拉取 pantheon 更新失敗: ${error.message}`);
+    log.dim("請手動檢查 .pantheon 目錄狀態");
   }
 
   // ========================================
@@ -190,7 +174,7 @@ async function main() {
   }
 
   // ========================================
-  // 4. 移除舊的符號連結並建立新的
+  // 4. 建立 prometheus 符號連結
   // ========================================
   console.log("");
   console.log("🔗 建立 prometheus 符號連結...");
@@ -252,7 +236,7 @@ async function main() {
   }
 
   // ========================================
-  // 6. 驗證並輸出結果
+  // 6. 輸出結果
   // ========================================
   console.log("");
   console.log("==========================================");
