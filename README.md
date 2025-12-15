@@ -42,8 +42,8 @@ Pantheon 專案旨在規範開發流程中所有 Agent Operator 的行為與標�
 ```json
 {
   "scripts": {
-    "pantheon:descend": "BRANCH=${npm_config_deities:-prometheus} && git submodule add -b \"$BRANCH\" git@gitlab.service-hub.tech:frontend/pantheon.git .pantheon && mkdir -p .cursor/commands .cursor/rules .cursor/scripts && ln -sf ../../.pantheon/.cursor/commands .cursor/commands/prometheus && ln -sf ../../.pantheon/.cursor/rules .cursor/rules/prometheus && ln -sf ../../.pantheon/.cursor/scripts .cursor/scripts/prometheus && echo \"✅ Pantheon mounted on branch: $BRANCH\"",
-    "pantheon:oracle": "git submodule update --init --remote .pantheon"
+    "pantheon:descend": "BRANCH=${npm_config_deities:-prometheus} && git clone -b \"$BRANCH\" git@gitlab.service-hub.tech:frontend/pantheon.git .pantheon && mkdir -p .cursor/commands .cursor/rules .cursor/scripts && ln -sf ../../.pantheon/.cursor/commands .cursor/commands/prometheus && ln -sf ../../.pantheon/.cursor/rules .cursor/rules/prometheus && ln -sf ../../.pantheon/.cursor/scripts .cursor/scripts/prometheus && echo \"✅ Pantheon mounted on branch: $BRANCH\"",
+    "pantheon:oracle": "cd .pantheon && git pull origin $(git rev-parse --abbrev-ref HEAD) && cd .."
   }
 }
 ```
@@ -68,12 +68,12 @@ npm run pantheon:oracle
 
 | 腳本 | 功能 |
 |---|---|
-| `pantheon:descend` | 初始化 Pantheon submodule 並建立 symbolic links |
-| `pantheon:oracle` | 更新 Pantheon submodule 到最新版本 |
+| `pantheon:descend` | 初始化 Pantheon 並建立 symbolic links（透過 git clone） |
+| `pantheon:oracle` | 更新 Pantheon 到最新版本（透過 git pull） |
 
-## Submodule 使用說明
+## 掛載使用說明
 
-Pantheon 專案設計為可以作為 **git submodule** 掛載到其他專案中，並透過 **symbolic link** 進行同步。
+Pantheon 專案設計為可以透過 **git clone** 掛載到其他專案中，並透過 **symbolic link** 進行同步。RD 自行初始化後可透過 `pantheon:oracle` 指令更新版本。
 
 ### 掛載後的路徑結構
 
@@ -81,7 +81,7 @@ Pantheon 專案設計為可以作為 **git submodule** 掛載到其他專案中�
 
 ```
 目標專案/
-├── .pantheon/                    # Pantheon submodule 掛載點
+├── .pantheon/                    # Pantheon 掛載點（透過 git clone）
 │   └── .cursor/
 │       ├── commands/             # 命令檔案
 │       ├── rules/                # 規則檔案
@@ -108,7 +108,7 @@ Pantheon 專案設計為可以作為 **git submodule** 掛載到其他專案中�
 2. 如果存在，使用 `.pantheon/.cursor/scripts/...` 路徑
 3. 如果不存在（在 Pantheon 專案本身），使用 `.cursor/scripts/...` 路徑
 
-詳細的路徑規則請參考：`.cursor/rules/submodule-path-guideline.mdc`
+詳細的路徑規則請參考：`.cursor/rules/pantheon-path-guideline.mdc`
 
 ## 開發模式
 
