@@ -37,13 +37,13 @@ Pantheon 專案旨在規範開發流程中所有 Agent Operator 的行為與標�
 
 ### 1. 添加腳本到目標專案
 
-在目標專案的 `package.json` 中添加以下腳本：
+在目標專案的 `package.json` 中添加以下腳本（跨平台支援 Windows / macOS / Linux）：
 
 ```json
 {
   "scripts": {
-    "pantheon:descend": "BRANCH=${npm_config_deities:-prometheus} && git clone -b \"$BRANCH\" git@gitlab.service-hub.tech:frontend/pantheon.git .pantheon && mkdir -p .cursor/commands .cursor/rules .cursor/scripts && ln -sf ../../.pantheon/.cursor/commands .cursor/commands/prometheus && ln -sf ../../.pantheon/.cursor/rules .cursor/rules/prometheus && ln -sf ../../.pantheon/.cursor/scripts .cursor/scripts/prometheus && echo \"✅ Pantheon mounted on branch: $BRANCH\"",
-    "pantheon:oracle": "cd .pantheon && git pull origin $(git rev-parse --abbrev-ref HEAD) && cd .."
+    "pantheon:descend": "node -e \"const b=process.env.npm_config_deities||'prometheus';require('child_process').execSync('git clone -b '+b+' git@gitlab.service-hub.tech:frontend/pantheon.git .pantheon',{stdio:'inherit'});require('child_process').execSync('node .pantheon/.cursor/scripts/utilities/oracle.mjs',{stdio:'inherit'})\"",
+    "pantheon:oracle": "node .pantheon/.cursor/scripts/utilities/oracle.mjs"
   }
 }
 ```
@@ -66,10 +66,22 @@ npm run pantheon:oracle
 
 ### 腳本說明
 
-| 腳本 | 功能 |
-|---|---|
-| `pantheon:descend` | 初始化 Pantheon 並建立 symbolic links（透過 git clone） |
-| `pantheon:oracle` | 更新 Pantheon 到最新版本（透過 git pull） |
+| 腳本 | 功能 | 平台支援 |
+|---|---|---|
+| `pantheon:descend` | 初始化 Pantheon 並建立 symbolic links（透過 git clone） | Windows / macOS / Linux |
+| `pantheon:oracle` | 更新 Pantheon 到最新版本，重建符號連結，自動建立 `.env.local` | Windows / macOS / Linux |
+
+### 執行效果
+
+`pantheon:descend` 執行後會：
+1. Clone Pantheon 到 `.pantheon/` 目錄
+2. 建立 `.cursor/commands/prometheus`、`.cursor/rules/prometheus`、`.cursor/scripts/prometheus` 符號連結
+3. 自動建立 `.cursor/.env.local` 環境變數配置檔（從模板）
+
+`pantheon:oracle` 執行後會：
+1. 拉取 Pantheon 最新內容
+2. 重建符號連結（確保連結正確）
+3. 檢查並建立 `.env.local`（如不存在）
 
 ## 掛載使用說明
 
