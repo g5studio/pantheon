@@ -22,7 +22,8 @@ import {
 const projectRoot = getProjectRoot();
 
 // AI Review Service Account 的 username
-const AI_REVIEW_SERVICE_ACCOUNT = "service_account_8131c1c3f99badd3c4938c05fa68088b";
+const AI_REVIEW_SERVICE_ACCOUNT =
+  "service_account_8131c1c3f99badd3c4938c05fa68088b";
 
 /**
  * 執行命令
@@ -159,7 +160,9 @@ async function getMRDiscussions(token, host, projectPath, mrIid) {
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`獲取 MR discussions 失敗: ${response.status} ${errorText}`);
+    throw new Error(
+      `獲取 MR discussions 失敗: ${response.status} ${errorText}`
+    );
   }
 
   return await response.json();
@@ -194,41 +197,60 @@ async function getMRDetails(token, host, projectPath, mrIid) {
 /**
  * 篩選 AI review service account 的 unresolved comments
  *
+ * 遍歷每個 discussion 中的所有 notes，而不只是第一個 note。
+ * 這是因為 AI review 可能在已存在的 discussion 中回覆，
+ * 其 comment 可能出現在 notes 陣列的任意位置。
+ *
  * @param {Array} discussions - 所有 discussions
+ * @param {Date|null} sinceDate - 可選，只返回此日期之後建立的 comments
  * @returns {Array} 符合條件的 comments
  */
-function filterAIReviewComments(discussions) {
+function filterAIReviewComments(discussions, sinceDate = null) {
   const aiReviewComments = [];
 
   for (const discussion of discussions) {
-    // 跳過已解決的 discussions
-    if (discussion.notes?.[0]?.resolved) {
-      continue;
-    }
+    const notes = discussion.notes || [];
 
-    // 檢查 discussion 中的第一個 note（通常是原始評論）
-    const firstNote = discussion.notes?.[0];
-    if (!firstNote) continue;
+    // 遍歷 discussion 中的所有 notes
+    for (let i = 0; i < notes.length; i++) {
+      const note = notes[i];
 
-    // 檢查是否由 AI review service account 發布
-    if (firstNote.author?.username === AI_REVIEW_SERVICE_ACCOUNT) {
+      // 跳過已解決的 note
+      if (note.resolved) {
+        continue;
+      }
+
+      // 檢查是否由 AI review service account 發布
+      if (note.author?.username !== AI_REVIEW_SERVICE_ACCOUNT) {
+        continue;
+      }
+
+      // 可選：時間過濾
+      if (sinceDate && new Date(note.created_at) < sinceDate) {
+        continue;
+      }
+
+      // 收集該 note 之後的所有回覆
+      const replies = notes.slice(i + 1).map((replyNote) => ({
+        noteId: replyNote.id,
+        body: replyNote.body,
+        author: replyNote.author?.username,
+        createdAt: replyNote.created_at,
+      }));
+
       aiReviewComments.push({
         discussionId: discussion.id,
-        noteId: firstNote.id,
-        body: firstNote.body,
-        position: firstNote.position,
-        filePath: firstNote.position?.new_path || firstNote.position?.old_path,
-        lineNumber: firstNote.position?.new_line || firstNote.position?.old_line,
-        createdAt: firstNote.created_at,
-        resolved: firstNote.resolved || false,
-        resolvable: firstNote.resolvable || false,
-        // 收集所有回覆
-        replies: discussion.notes.slice(1).map((note) => ({
-          noteId: note.id,
-          body: note.body,
-          author: note.author?.username,
-          createdAt: note.created_at,
-        })),
+        noteId: note.id,
+        body: note.body,
+        position: note.position,
+        filePath: note.position?.new_path || note.position?.old_path,
+        lineNumber: note.position?.new_line || note.position?.old_line,
+        createdAt: note.created_at,
+        resolved: note.resolved || false,
+        resolvable: note.resolvable || false,
+        // 標記此 note 在 discussion 中的位置（0 = 原始評論，>0 = 後續回覆）
+        noteIndex: i,
+        replies,
       });
     }
   }
@@ -247,7 +269,14 @@ function filterAIReviewComments(discussions) {
  * @param {string} body - 回覆內容
  * @returns {Promise<Object>} 新建的 note
  */
-async function replyToDiscussion(token, host, projectPath, mrIid, discussionId, body) {
+async function replyToDiscussion(
+  token,
+  host,
+  projectPath,
+  mrIid,
+  discussionId,
+  body
+) {
   const url = `${host}/api/v4/projects/${projectPath}/merge_requests/${mrIid}/discussions/${discussionId}/notes`;
 
   const response = await fetch(url, {
@@ -277,7 +306,13 @@ async function replyToDiscussion(token, host, projectPath, mrIid, discussionId, 
  * @param {string} discussionId - Discussion ID
  * @returns {Promise<Object>} 更新後的 discussion
  */
-async function resolveDiscussion(token, host, projectPath, mrIid, discussionId) {
+async function resolveDiscussion(
+  token,
+  host,
+  projectPath,
+  mrIid,
+  discussionId
+) {
   const url = `${host}/api/v4/projects/${projectPath}/merge_requests/${mrIid}/discussions/${discussionId}`;
 
   const response = await fetch(url, {
@@ -310,7 +345,7 @@ async function submitAIReview(mrUrl) {
   }
 
   // 獲取 email
-  const email = await getGitLabUserEmail() || getJiraEmail();
+  const email = (await getGitLabUserEmail()) || getJiraEmail();
   if (!email) {
     throw new Error("無法獲取 email，請設置 GitLab token 或 Jira email");
   }
@@ -368,7 +403,9 @@ async function submitAIReview(mrUrl) {
  * @returns {Promise<string>} 檔案內容
  */
 async function getFileContent(token, host, projectPath, ref, filePath) {
-  const url = `${host}/api/v4/projects/${projectPath}/repository/files/${encodeURIComponent(filePath)}/raw?ref=${encodeURIComponent(ref)}`;
+  const url = `${host}/api/v4/projects/${projectPath}/repository/files/${encodeURIComponent(
+    filePath
+  )}/raw?ref=${encodeURIComponent(ref)}`;
 
   const response = await fetch(url, {
     headers: {
@@ -389,8 +426,14 @@ async function getFileContent(token, host, projectPath, ref, filePath) {
 
 /**
  * 主函數：列出 AI review comments
+ *
+ * @param {string} mrUrl - MR URL
+ * @param {Object} options - 可選參數
+ * @param {Date|null} options.sinceDate - 只返回此日期之後建立的 comments
  */
-async function listAIReviewComments(mrUrl) {
+async function listAIReviewComments(mrUrl, options = {}) {
+  const { sinceDate = null } = options;
+
   const token = getGitLabToken();
   if (!token) {
     throw new Error("未找到 GitLab token，請設置 GITLAB_TOKEN");
@@ -410,8 +453,15 @@ async function listAIReviewComments(mrUrl) {
   const discussions = await getMRDiscussions(token, host, projectPath, mrIid);
   console.log(`📝 總共 ${discussions.length} 個 discussions\n`);
 
-  // 篩選 AI review comments
-  const aiReviewComments = filterAIReviewComments(discussions);
+  // 顯示時間過濾資訊
+  if (sinceDate) {
+    console.log(
+      `🕐 時間過濾: 只顯示 ${sinceDate.toISOString()} 之後的 comments\n`
+    );
+  }
+
+  // 篩選 AI review comments（傳入 sinceDate 參數）
+  const aiReviewComments = filterAIReviewComments(discussions, sinceDate);
 
   if (aiReviewComments.length === 0) {
     console.log("✅ 沒有未解決的 AI review comments\n");
@@ -421,7 +471,9 @@ async function listAIReviewComments(mrUrl) {
     };
   }
 
-  console.log(`⚠️  發現 ${aiReviewComments.length} 個未解決的 AI review comments:\n`);
+  console.log(
+    `⚠️  發現 ${aiReviewComments.length} 個未解決的 AI review comments:\n`
+  );
   console.log("=".repeat(80));
 
   for (let i = 0; i < aiReviewComments.length; i++) {
@@ -431,6 +483,14 @@ async function listAIReviewComments(mrUrl) {
     console.log(`📍 行號: ${comment.lineNumber || "N/A"}`);
     console.log(`🆔 Discussion ID: ${comment.discussionId}`);
     console.log(`📅 建立時間: ${comment.createdAt}`);
+    // 顯示 note 在 discussion 中的位置
+    if (comment.noteIndex > 0) {
+      console.log(
+        `📌 位置: Discussion 中的第 ${
+          comment.noteIndex + 1
+        } 個 note（非首個 comment）`
+      );
+    }
     console.log("-".repeat(80));
     console.log("💬 Comment 內容:");
     console.log(comment.body);
@@ -470,13 +530,17 @@ async function main() {
 📋 fix-comment 腳本使用說明
 
 用法:
-  node fix-comment.mjs list <MR_URL>              列出所有未解決的 AI review comments
+  node fix-comment.mjs list <MR_URL> [--since=<DATE>]  列出所有未解決的 AI review comments
   node fix-comment.mjs reply <MR_URL> <DISCUSSION_ID> <BODY>  回覆指定的 comment
   node fix-comment.mjs resolve <MR_URL> <DISCUSSION_ID>       解決指定的 comment
   node fix-comment.mjs resubmit <MR_URL>          重新提交 AI review
 
+選項:
+  --since=<DATE>    只顯示指定日期之後的 comments（格式：YYYY-MM-DD 或 ISO 8601）
+
 範例:
   node fix-comment.mjs list "https://gitlab.service-hub.tech/frontend/fluid-two/-/merge_requests/3366"
+  node fix-comment.mjs list "https://gitlab.service-hub.tech/frontend/fluid-two/-/merge_requests/3366" --since=2024-12-17
   node fix-comment.mjs reply "https://gitlab.service-hub.tech/frontend/fluid-two/-/merge_requests/3366" "abc123" "已修正"
   node fix-comment.mjs resolve "https://gitlab.service-hub.tech/frontend/fluid-two/-/merge_requests/3366" "abc123"
   node fix-comment.mjs resubmit "https://gitlab.service-hub.tech/frontend/fluid-two/-/merge_requests/3366"
@@ -492,7 +556,21 @@ async function main() {
           console.error("❌ 請提供 MR URL");
           process.exit(1);
         }
-        const result = await listAIReviewComments(mrUrl);
+
+        // 解析 --since 參數
+        let sinceDate = null;
+        const sinceArg = args.find((arg) => arg.startsWith("--since="));
+        if (sinceArg) {
+          const dateStr = sinceArg.replace("--since=", "");
+          sinceDate = new Date(dateStr);
+          if (isNaN(sinceDate.getTime())) {
+            console.error(`❌ 無效的日期格式: ${dateStr}`);
+            console.error("   請使用 YYYY-MM-DD 或 ISO 8601 格式");
+            process.exit(1);
+          }
+        }
+
+        const result = await listAIReviewComments(mrUrl, { sinceDate });
         // 輸出 JSON 格式供 AI 解析
         console.log("\n📤 JSON 輸出（供 AI 解析）:");
         console.log(JSON.stringify(result, null, 2));
@@ -516,7 +594,14 @@ async function main() {
 
         const { host, projectPath, mrIid } = parseMRUrl(mrUrl);
         console.log(`\n💬 正在回覆 discussion ${discussionId}...`);
-        const note = await replyToDiscussion(token, host, projectPath, mrIid, discussionId, body);
+        const note = await replyToDiscussion(
+          token,
+          host,
+          projectPath,
+          mrIid,
+          discussionId,
+          body
+        );
         console.log(`✅ 回覆成功！Note ID: ${note.id}\n`);
         break;
       }
@@ -581,4 +666,3 @@ export {
 };
 
 main();
-
