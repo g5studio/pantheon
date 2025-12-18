@@ -6,14 +6,55 @@ alwaysApply: false
 
 此規則定義了在執行 `start-task` 指令進行開發時，必須遵守的開發原則和流程規範。
 
+## 相關規則
+
+- **行為模式規則**：[operation-modes.mdc](mdc:.cursor/rules/operator/start-task/operation-modes.mdc) - 定義四種行為模式（謹慎、多工、高效、預設）
+- **Jira 檢查規則**：[start-task-jira-check.mdc](mdc:.cursor/rules/operator/start-task/start-task-jira-check.mdc) - 定義 Jira ticket 檢查原則
+
 ## 適用場景
 
 此規則適用於 `start-task` 指令執行過程中的所有開發階段，包括：
+- **行為模式選擇**（新增）
 - 開發計劃確認和執行
 - 代碼修改和實現
 - 開發完成後的報告生成
 - Commit 前的確認流程
 - MR 建立和報告檢附
+
+---
+
+## 🚨 行為模式對開發原則的影響
+
+**CRITICAL**: 不同的行為模式會影響開發原則的執行方式，必須根據選擇的模式調整行為。
+
+### 模式對照表
+
+| 原則 | 謹慎模式 | 多工模式 | 高效模式 | 預設模式 |
+|---|---|---|---|---|
+| **確認流程** | 每步確認 | 僅計劃確認 | 僅開始確認 | 每階段確認 |
+| **開發報告** | 詳細 + 回滾方案 | 每階段摘要 | 簡化 | 標準 |
+| **Commit 時機** | 單次 | 每階段 | 每任務 | 單次 |
+| **MR 策略** | 單一 + 詳細描述 | 統一 + 關聯所有單號 | 每任務獨立 | 單一 |
+| **中斷處理** | 立即停止 | 暫停當前階段 | 記錄並跳過 | 等待確認 |
+
+### 模式特定原則
+
+#### 謹慎模式額外要求
+- 每個代碼修改前必須顯示影響範圍
+- MR Description 必須包含回滾方案
+- 禁止進行任何「順便優化」
+
+#### 多工模式額外要求
+- Git notes 必須記錄當前階段進度
+- 每階段完成後自動 commit（不等待確認）
+- MR Description 必須關聯所有子任務單號
+
+#### 高效模式額外要求
+- 開發計劃不顯示給用戶（內部執行）
+- 錯誤發生時提供跳過選項
+- 全部完成後才發送系統通知
+
+詳細規範請參考：[operation-modes.mdc](mdc:.cursor/rules/operator/start-task/operation-modes.mdc)
 
 ---
 
@@ -45,7 +86,68 @@ alwaysApply: false
   "featureBranch": "feature/IN-107113",
   "startedAt": "2025-12-10T14:30:00+08:00",
   "aiCompleted": true,
-  "developmentReport": null
+  "developmentReport": null,
+  "operationMode": "default",
+  "modeConfig": {}
+}
+```
+
+### 行為模式欄位說明
+
+| 欄位 | 說明 | 可選值 |
+|---|---|---|
+| `operationMode` | 選擇的行為模式 | `cautious`, `multi-task`, `efficient`, `default` |
+| `modeConfig` | 模式特定配置 | 見下方各模式配置 |
+
+**謹慎模式 (cautious) 配置**：
+```json
+{
+  "operationMode": "cautious",
+  "modeConfig": {
+    "confirmEachStep": true,
+    "minimumChanges": true,
+    "rollbackPlan": true
+  }
+}
+```
+
+**多工模式 (multi-task) 配置**：
+```json
+{
+  "operationMode": "multi-task",
+  "modeConfig": {
+    "parentTicket": "FE-1234",
+    "subTasks": ["FE-1234-1", "FE-1234-2"],
+    "currentPhase": 1,
+    "totalPhases": 2,
+    "phaseCommits": ["hash1", "hash2"],
+    "commitPerPhase": true,
+    "singleMR": true
+  }
+}
+```
+
+**高效模式 (efficient) 配置**：
+```json
+{
+  "operationMode": "efficient",
+  "modeConfig": {
+    "tickets": ["FE-1234", "FE-1235", "FE-1236"],
+    "currentIndex": 0,
+    "totalTasks": 3,
+    "completedTasks": [],
+    "skippedTasks": [],
+    "autoProgress": true,
+    "mrPerTask": true
+  }
+}
+```
+
+**預設模式 (default) 配置**：
+```json
+{
+  "operationMode": "default",
+  "modeConfig": {}
 }
 ```
 
@@ -54,7 +156,7 @@ alwaysApply: false
 使用 `.cursor/scripts/operator/save-start-task-info.mjs` 腳本保存：
 
 ```bash
-# 方式 1：使用獨立參數
+# 方式 1：使用獨立參數（包含行為模式）
 node .cursor/scripts/operator/save-start-task-info.mjs \
   --ticket=IN-107113 \
   --summary="[標題]" \
@@ -64,10 +166,19 @@ node .cursor/scripts/operator/save-start-task-info.mjs \
   --priority="Medium" \
   --steps='["步驟1", "步驟2", "步驟3"]' \
   --source-branch=main \
-  --ai-completed=true
+  --ai-completed=true \
+  --operation-mode=default \
+  --mode-config='{}'
 
-# 方式 2：使用完整 JSON
-node .cursor/scripts/operator/save-start-task-info.mjs --json='{...}'
+# 方式 2：使用完整 JSON（包含行為模式）
+node .cursor/scripts/operator/save-start-task-info.mjs --json='{
+  "ticket": "IN-107113",
+  "operationMode": "multi-task",
+  "modeConfig": {
+    "parentTicket": "IN-107113",
+    "subTasks": ["IN-107113-1", "IN-107113-2"]
+  }
+}'
 
 # 驗證保存成功
 node .cursor/scripts/operator/save-start-task-info.mjs --verify
@@ -77,6 +188,10 @@ node .cursor/scripts/operator/save-start-task-info.mjs --read
 
 # 更新現有 notes（合併模式）
 node .cursor/scripts/operator/save-start-task-info.mjs --update --steps='["新步驟"]'
+
+# 更新多工模式的階段進度
+node .cursor/scripts/operator/save-start-task-info.mjs --update \
+  --mode-config='{"currentPhase": 2, "phaseCommits": ["hash1", "hash2"]}'
 ```
 
 ### 強制檢查點
@@ -108,30 +223,44 @@ AI 在以下時機，**必須**確認 Git notes 已保存：
 ### 流程檢查清單
 
 ```
+## 階段 0：模式選擇（新增）
+- [ ] 🚨 顯示行為模式選項給用戶
+- [ ] 識別用戶選擇的模式
+- [ ] 記錄模式到後續流程
+
 ## 階段 1：初始化
 - [ ] 讀取 Jira ticket 資訊
 - [ ] 檢查 RD 建議（for AI 標記）
 - [ ] 分析需求並制定開發計劃
+- [ ] 🚨 根據模式決定是否顯示計劃
 
 ## 階段 2：確認計劃
-- [ ] 顯示開發計劃給用戶
-- [ ] 等待用戶確認
-- [ ] 🚨 保存開發計劃到 Git notes ← 容易遺漏
+- [ ] 顯示開發計劃給用戶（高效模式跳過）
+- [ ] 等待用戶確認（高效模式跳過）
+- [ ] 🚨 保存開發計劃到 Git notes（包含 operationMode）← 容易遺漏
 - [ ] 🚨 驗證保存成功
 
 ## 階段 3：開發執行
 - [ ] 執行開發步驟
 - [ ] 完成代碼修改
+- [ ] 🚨 謹慎模式：每步確認
+- [ ] 🚨 多工模式：每階段獨立 commit
 
 ## 階段 4：完成報告
 - [ ] 生成開發報告（根據 Jira 類型）
-- [ ] 顯示報告給用戶確認
+- [ ] 顯示報告給用戶確認（高效模式跳過）
 - [ ] 更新 Git notes（如有報告）
 
 ## 階段 5：提交 MR
 - [ ] 🚨 檢查 Git notes 存在
-- [ ] 執行 commit
+- [ ] 執行 commit（多工模式已完成）
 - [ ] 建立 MR（自動讀取 notes 生成 description）
+- [ ] 🚨 多工模式：MR 關聯所有子任務單號
+- [ ] 🚨 高效模式：每任務獨立 MR
+
+## 階段 6：通知（新增）
+- [ ] 🚨 高效模式：全部完成後發送系統通知
+- [ ] 多工模式：全部完成後發送系統通知
 ```
 
 ---
