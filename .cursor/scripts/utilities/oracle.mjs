@@ -100,11 +100,15 @@ async function main() {
   console.log("");
   log.info("正在拉取 pantheon 最新內容...");
 
+  const pantheonDir = join(cwd, ".pantheon");
+  let deityName = "prometheus"; // 預設值
+
   try {
-    const pantheonDir = join(cwd, ".pantheon");
     const currentBranch = exec("git rev-parse --abbrev-ref HEAD", {
       cwd: pantheonDir,
     });
+    // 使用分支名稱作為 deity 資料夾名稱
+    deityName = currentBranch;
     log.dim(`pantheon 當前分支: ${currentBranch}`);
 
     // 檢查 pantheon 是否有本地變更
@@ -174,22 +178,22 @@ async function main() {
   }
 
   // ========================================
-  // 4. 建立 prometheus 符號連結
+  // 4. 建立 deity 符號連結
   // ========================================
   console.log("");
-  console.log("🔗 建立 prometheus 符號連結...");
+  console.log(`🔗 建立 ${deityName} 符號連結...`);
 
   const linkConfigs = [
     {
-      link: join(cwd, ".cursor", "commands", "prometheus"),
+      link: join(cwd, ".cursor", "commands", deityName),
       target: "../../.pantheon/.cursor/commands",
     },
     {
-      link: join(cwd, ".cursor", "rules", "prometheus"),
+      link: join(cwd, ".cursor", "rules", deityName),
       target: "../../.pantheon/.cursor/rules",
     },
     {
-      link: join(cwd, ".cursor", "scripts", "prometheus"),
+      link: join(cwd, ".cursor", "scripts", deityName),
       target: "../../.pantheon/.cursor/scripts",
     },
   ];
@@ -246,22 +250,22 @@ async function main() {
   console.log("目錄結構：");
   console.log(".cursor/");
   console.log("├── commands/");
-  console.log("│   └── prometheus/ -> .pantheon/.cursor/commands");
+  console.log(`│   └── ${deityName}/ -> .pantheon/.cursor/commands`);
   console.log("├── rules/");
-  console.log("│   └── prometheus/ -> .pantheon/.cursor/rules");
+  console.log(`│   └── ${deityName}/ -> .pantheon/.cursor/rules`);
   console.log("├── scripts/");
-  console.log("│   └── prometheus/ -> .pantheon/.cursor/scripts");
+  console.log(`│   └── ${deityName}/ -> .pantheon/.cursor/scripts`);
   console.log("└── .env.local");
   console.log("");
 
   // 列出可用的指令
   console.log("可用的指令：");
-  const commandsPath = join(cwd, ".cursor", "commands", "prometheus");
+  const commandsPath = join(cwd, ".cursor", "commands", deityName);
   if (existsSync(commandsPath)) {
     try {
       const dirs = readdirSync(commandsPath, { withFileTypes: true })
         .filter((dirent) => dirent.isDirectory())
-        .map((dirent) => `- commands/prometheus/${dirent.name}/`);
+        .map((dirent) => `- commands/${deityName}/${dirent.name}/`);
 
       if (dirs.length > 0) {
         console.log(dirs.join("\n"));
