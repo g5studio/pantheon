@@ -23,15 +23,13 @@
  */
 
 import { execSync } from "child_process";
-import { fileURLToPath } from "url";
-import { dirname, join, basename } from "path";
+import { join, basename } from "path";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import readline from "readline";
+import { getProjectRoot } from "./env-loader.mjs";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-// 腳本在 .cursor/scripts/utilities/，需要往上三層到項目根目錄
-const projectRoot = join(__dirname, "../../..");
+// 使用 env-loader 提供的 projectRoot
+const projectRoot = getProjectRoot();
 
 // ============================================
 // 工具函數
