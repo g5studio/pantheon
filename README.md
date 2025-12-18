@@ -75,7 +75,7 @@ npm run pantheon:oracle
 
 `pantheon:descend` 執行後會：
 1. Clone Pantheon 到 `.pantheon/` 目錄
-2. 建立 `.cursor/commands/prometheus`、`.cursor/rules/prometheus`、`.cursor/scripts/prometheus` 符號連結
+2. 建立 `.cursor/commands/{deities}`、`.cursor/rules/{deities}`、`.cursor/scripts/{deities}` 符號連結（`{deities}` 為指定的分支名稱，預設為 `prometheus`）
 3. 自動建立 `.cursor/.env.local` 環境變數配置檔（從模板）
 
 `pantheon:oracle` 執行後會：
