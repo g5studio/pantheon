@@ -33,9 +33,59 @@ Pantheon 專案旨在規範開發流程中所有 Agent Operator 的行為與標�
 - **腳本與命令**：可重用的工具腳本，支援快速部署到其他專案
 - **規範文件**：完整的 SOP 文件，供 Agent Master Controller 作為檢視標準
 
-## Submodule 使用說明
+## 安裝方式
 
-Pantheon 專案設計為可以作為 **git submodule** 掛載到其他專案中，並透過 **symbolic link** 進行同步。
+### 1. 添加腳本到目標專案
+
+在目標專案的 `package.json` 中添加以下腳本（跨平台支援 Windows / macOS / Linux）：
+
+```json
+{
+  "scripts": {
+    "pantheon:descend": "node -e \"const b=process.env.npm_config_deities||'prometheus';require('child_process').execSync('git clone -b '+b+' git@gitlab.service-hub.tech:frontend/pantheon.git .pantheon',{stdio:'inherit'});require('child_process').execSync('node .pantheon/.cursor/scripts/utilities/oracle.mjs',{stdio:'inherit'})\"",
+    "pantheon:oracle": "node .pantheon/.cursor/scripts/utilities/oracle.mjs"
+  }
+}
+```
+
+### 2. 執行安裝
+
+```bash
+# 使用預設模型 (prometheus) 安裝
+npm run pantheon:descend
+
+# 或指定其他模型安裝
+npm run pantheon:descend --deities=athena
+```
+
+### 3. 更新 Pantheon
+
+```bash
+npm run pantheon:oracle
+```
+
+### 腳本說明
+
+| 腳本 | 功能 | 平台支援 |
+|---|---|---|
+| `pantheon:descend` | 初始化 Pantheon 並建立 symbolic links（透過 git clone） | Windows / macOS / Linux |
+| `pantheon:oracle` | 更新 Pantheon 到最新版本，重建符號連結，自動建立 `.env.local` | Windows / macOS / Linux |
+
+### 執行效果
+
+`pantheon:descend` 執行後會：
+1. Clone Pantheon 到 `.pantheon/` 目錄
+2. 建立 `.cursor/commands/prometheus`、`.cursor/rules/prometheus`、`.cursor/scripts/prometheus` 符號連結
+3. 自動建立 `.cursor/.env.local` 環境變數配置檔（從模板）
+
+`pantheon:oracle` 執行後會：
+1. 拉取 Pantheon 最新內容
+2. 重建符號連結（確保連結正確）
+3. 檢查並建立 `.env.local`（如不存在）
+
+## 掛載使用說明
+
+Pantheon 專案設計為可以透過 **git clone** 掛載到其他專案中，並透過 **symbolic link** 進行同步。RD 自行初始化後可透過 `pantheon:oracle` 指令更新版本。
 
 ### 掛載後的路徑結構
 
@@ -43,7 +93,7 @@ Pantheon 專案設計為可以作為 **git submodule** 掛載到其他專案中�
 
 ```
 目標專案/
-├── .pantheon/                    # Pantheon submodule 掛載點
+├── .pantheon/                    # Pantheon 掛載點（透過 git clone）
 │   └── .cursor/
 │       ├── commands/             # 命令檔案
 │       ├── rules/                # 規則檔案
@@ -70,7 +120,7 @@ Pantheon 專案設計為可以作為 **git submodule** 掛載到其他專案中�
 2. 如果存在，使用 `.pantheon/.cursor/scripts/...` 路徑
 3. 如果不存在（在 Pantheon 專案本身），使用 `.cursor/scripts/...` 路徑
 
-詳細的路徑規則請參考：`.cursor/rules/submodule-path-guideline.mdc`
+詳細的路徑規則請參考：`.cursor/rules/pantheon-path-guideline.mdc`
 
 ## 開發模式
 

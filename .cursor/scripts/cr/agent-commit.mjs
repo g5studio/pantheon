@@ -6,14 +6,10 @@
  */
 
 import { execSync, spawnSync } from "child_process";
-import { readFileSync } from "fs";
-import { fileURLToPath } from "url";
-import { dirname, join } from "path";
+import { getProjectRoot } from "../utilities/env-loader.mjs";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-// 腳本在 .cursor/scripts/cr/，需要往上三層到項目根目錄
-const projectRoot = join(__dirname, "../../..");
+// 使用 env-loader 提供的 projectRoot
+const projectRoot = getProjectRoot();
 
 function exec(command, options = {}) {
   try {
