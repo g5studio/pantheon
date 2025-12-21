@@ -48,6 +48,11 @@ alwaysApply: false
 - Git notes 必須記錄當前階段進度
 - 每階段完成後自動 commit（不等待確認）
 - MR Description 必須關聯所有子任務單號
+- **必須遵守多工模式 SOP**：包含子任務全量閱讀與排程（僅排程有給 AI 指示的子任務）、Requirement 單號作為 feature branch、Sub-task 單號作為 commit scope、開始前檢查/補填 Original Estimate 並切到「開發中」、完成後切到 Development Review 並留言階段性報告通知 RD、完成一個子任務後自動推進下一個、以及全部排程完成後回到 start-task MR 規範流程。
+- **排程範圍限制（新增）**：多工模式下，每次運作只盤點/排程 **狀態為 To Do** 且 **單內包含 AI 指示** 的子任務；其餘子任務不納入本次自動排程。
+
+請參考：
+- [multi-task-mode-sop.mdc](mdc:.cursor/rules/operator/start-task/multi-task-mode-sop.mdc)
 
 #### 高效模式額外要求
 - 開發計劃不顯示給用戶（內部執行）

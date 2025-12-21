@@ -1,0 +1,145 @@
+---
+description: 定義 start-task 多工模式（Multi-Task Mode）下的強制 SOP，確保子任務排程、分支/commit 規範、工時與狀態流轉、RD 通知與最終 MR 流程一致
+alwaysApply: false
+---
+# Start-Task 多工模式 SOP（Multi-Task Mode）
+
+此規則補齊 `start-task` **多工模式**下的強制 SOP，目標是讓 AI 在處理包含多個 Sub-task 的需求時，能夠「先彙整需求全貌 → 按排程逐一完成子任務（含 Jira 流程）→ 最後依 start-task MR 規範完成後續流程」。
+
+## 適用場景
+
+- 用戶在 `start-task` 選擇 **多工模式 (multi-task)**。
+- 主需求單（Requirement/Parent）底下存在多個 Sub-task，且需要 AI 分階段推進。
+
+## 名詞定義
+
+| 名詞 | 定義 |
+|---|---|
+| **Requirement / Parent** | 主需求單（父任務），多工模式的 feature branch **必須使用此單號** |
+| **Sub-task** | 子任務單，開發與 commit 追蹤單位；commit scope **必須使用子任務單號** |
+| **給 AI 的任務指示** | 在子任務 Description / Comments 中，明確標記要 AI 執行的指示（例如：`for AI` / `to AI` / `AI suggestion` 等；判斷邏輯沿用 `start-task-jira-check.mdc` 的 RD 建議檢查） |
+
+---
+
+## 🚨 多工模式「確保」事項（必做）
+
+### 1) 先彙整需求全貌並安排執行順序
+
+**CRITICAL**：多工模式下，每次運作的「盤點/排程」**只針對**同時符合以下條件的 Sub-task：
+
+- **狀態為 `To Do`**
+- **單內包含 AI 指示**（例如：`for AI` / `to AI` / `AI suggestion` 等；判斷邏輯沿用 `start-task-jira-check.mdc` 的 RD 建議檢查）
+
+在開始任何子任務開發前，AI **必須**先完成「全量閱讀與排程」：
+
+1. 讀取主需求單資訊（標題、描述、狀態、優先級、RD 建議等）。
+2. 讀取**所有 Sub-task** 的內容（至少包含：Summary、Description、Comments、狀態）。
+3. 對每個 Sub-task 同時判斷：
+   - 是否為 `To Do`
+   - 是否存在「給 AI 的任務指示」
+4. 只有同時符合 `To Do` + 「有 AI 指示」的子任務，才納入 AI 排程清單（AI 會自動推進）。
+5. 其餘子任務（非 To Do 或無 AI 指示）**不納入本次排程**（可列為「不在本次範圍/需人工」）。
+4. 依照依賴/風險/先後關係，自動產出**建議執行順序**（只針對「有給 AI 指示」的子任務排程）。
+
+**排程輸出格式（必須使用表格）**：
+
+```
+📋 多工模式：子任務排程完成（僅包含 **To Do** 且 **有給 AI 指示** 的子任務）
+
+| 順序 | 子任務 | 標題 | 狀態 | AI 指示來源 | 備註 |
+|---|---|---|---|---|---|
+| 1 | {SUB_1} | {SUMMARY_1} | {STATUS_1} | Description/Comment | {WHY_FIRST} |
+| 2 | {SUB_2} | {SUMMARY_2} | {STATUS_2} | Comment | {WHY_NEXT} |
+
+⏭️ 不在本次排程範圍（未同時滿足 To Do + AI 指示）：
+| 子任務 | 標題 | 狀態 | 原因 |
+|---|---|---|---|
+| {SUB_X} | {SUMMARY_X} | {STATUS_X} | 無 AI 指示 / 非 To Do |
+```
+
+> **注意**：此階段是「確保需求全貌」，不代表要在此時做實作；目標是先把 AI 需要做的子任務排好順序，避免漏單或順序錯誤。
+
+### 2) Commit 必須對應 Sub-task 單號
+
+**CRITICAL**：多工模式下，每個子任務完成後的 commit，**必須**使用該子任務單號作為 scope：
+
+- 格式：`{type}({SUB_TASK_TICKET}): {subject}`
+- 例如：`feat(FE-1234-1): implement user profile component`
+
+> 若同一子任務需要多次 commit，也必須維持 scope 為該子任務單號。
+
+### 3) 開發時必須確保 feature branch 使用 Requirement 單號
+
+**CRITICAL**：多工模式的 feature branch **必須以 Requirement/Parent 單號命名**：
+
+- `feature/{PARENT_TICKET}`
+
+若 AI 偵測目前不在正確分支（或分支單號不是 parent ticket），**必須立即停止**並要求切換/建立正確分支後才可繼續。
+
+### 4) 開始開發 Sub-task 前：檢查原始預估時間並推進狀態到「開發中」
+
+**CRITICAL**：每次要開始某個 Sub-task 的開發時，AI 必須先做 Jira 前置檢查：
+
+1. 檢查該 Sub-task 是否有填「原始預估時間（Original Estimate）」。
+2. 若沒有填值：
+   - AI **可以**依對該子任務的理解填入合理工時（需在留言/報告中註明「由 AI 估算」與估算依據）。
+3. 完成上述檢查後，AI 必須把該 Sub-task 狀態切換到 **開發中（In Progress / Development）**。
+
+> 指令/腳本細節以 repo 內 Jira scripts 為準（例如：`.cursor/scripts/jira/update-jira.mjs`、`.cursor/scripts/jira/transition-jira-ticket.mjs`）。
+
+### 5) 完成 Sub-task 後：狀態切到 Development Review 並留言階段性開發報告通知 RD
+
+**CRITICAL**：單一 Sub-task 開發完成並完成該子任務對應 commit 後：
+
+1. 將該 Sub-task 狀態切換到 **Development Review**。
+2. 在該 Sub-task 留言「階段性開發報告」，並明確通知 RD 前往檢視成果。
+
+**留言格式（建議，需包含表格）**：
+
+```
+📌 階段性開發報告（Sub-task: {SUB_TASK}）
+
+| 項目 | 內容 |
+|---|---|
+| **分支** | feature/{PARENT_TICKET} |
+| **Commit** | {COMMIT_HASH} |
+| **變更摘要** | {ONE_LINE_SUMMARY} |
+
+### 變更內容
+| 檔案 | 狀態 | 說明 |
+|---|---|---|
+| `path/to/file` | 更新/新增/刪除 | {DESC} |
+
+@RD 請協助於此子任務單內進行 Development Review，若需調整我會依回饋修正。
+```
+
+### 6) 依排程自動開始下一個 Sub-task
+
+**CRITICAL**：在完成「單一 Sub-task 的 commit + 狀態切換 + 留言通知 RD」後，AI **必須自動**依照第 1 點排程，開始下一個「有給 AI 指示」的子任務。
+
+> 若在推進過程中遇到阻塞（例如缺少資訊、需要 RD/用戶決策、無法決定估時），AI 必須停止並回報，等待指示。
+
+### 7) 所有排程項目完成後：依 start-task MR 規範完成後續流程
+
+**CRITICAL**：當所有「已排程（有給 AI 指示）」的 Sub-task 都完成後，AI 必須回到 `start-task` 的 MR 規範流程，完成：
+
+- 開發計畫 / 開發報告 / Git notes 等資訊整理與檢核
+- MR 建立與回報（依專案 MR 規範）
+
+具體格式與內容要求請參考：
+- `development-policy.mdc`
+- `commit-and-mr-guidelines.mdc`
+- `mr-execution-result-report.mdc`
+
+---
+
+## 多工模式檢查清單（必做）
+
+- [ ] 已讀取主需求單與所有 Sub-task（Description + Comments）
+- [ ] 已判斷哪些 Sub-task 有「給 AI 的任務指示」，並輸出排程表（僅排程有指示者）
+- [ ] 已確認 feature branch 為 `feature/{PARENT_TICKET}`
+- [ ] 每個 Sub-task 開始前：已檢查 Original Estimate；必要時已補填；已切到「開發中」
+- [ ] 每個 Sub-task 完成後：已依 Sub-task 單號 commit；已切到 Development Review；已留言報告並通知 RD
+- [ ] 已依排程自動推進下一個 Sub-task，直到排程完成
+- [ ] 排程完成後：已回到 start-task MR 規範流程完成後續
+
