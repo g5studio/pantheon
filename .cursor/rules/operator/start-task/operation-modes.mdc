@@ -133,6 +133,15 @@ alwaysApply: false
 | **獨立 Commit** | 每個子任務完成後獨立 commit |
 | **統一 MR** | 全部完成後才發送一個 MR，關聯所有單號 |
 
+### 🚨 多工模式 SOP（新增，必遵守）
+
+**CRITICAL**：多工模式下，除本檔案的流程外，還必須遵守「確保」SOP（包含：子任務全量閱讀與排程、Requirement 分支、Sub-task commit、工時/狀態流轉、RD 通知、以及排程自動推進）。
+
+**CRITICAL**：多工模式下，每次運作的「盤點/排程」僅針對 **狀態為 To Do** 且 **單內包含 AI 指示** 的子任務。
+
+請參考：
+- [multi-task-mode-sop.mdc](mdc:.cursor/rules/operator/start-task/multi-task-mode-sop.mdc)
+
 ### 行為規範
 
 #### 1. 初始化流程
