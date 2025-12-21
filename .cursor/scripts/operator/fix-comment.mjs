@@ -141,31 +141,67 @@ async function getGitLabUserEmail(hostname = "gitlab.service-hub.tech") {
 }
 
 /**
- * 獲取 MR 的所有 discussions
+ * 獲取 MR 的所有 discussions（支援分頁，最多 500 筆）
  *
  * @param {string} token - GitLab API token
  * @param {string} host - GitLab host
  * @param {string} projectPath - 編碼後的項目路徑
  * @param {number} mrIid - MR IID
+ * @param {number} maxItems - 最大獲取數量，預設 500
  * @returns {Promise<Array>} discussions 列表
  */
-async function getMRDiscussions(token, host, projectPath, mrIid) {
-  const url = `${host}/api/v4/projects/${projectPath}/merge_requests/${mrIid}/discussions`;
+async function getMRDiscussions(
+  token,
+  host,
+  projectPath,
+  mrIid,
+  maxItems = 500
+) {
+  const perPage = 100; // GitLab API 單頁最大值
+  const maxPages = Math.ceil(maxItems / perPage);
+  let allDiscussions = [];
+  let page = 1;
 
-  const response = await fetch(url, {
-    headers: {
-      "PRIVATE-TOKEN": token,
-    },
-  });
+  while (page <= maxPages) {
+    const url = `${host}/api/v4/projects/${projectPath}/merge_requests/${mrIid}/discussions?per_page=${perPage}&page=${page}`;
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `獲取 MR discussions 失敗: ${response.status} ${errorText}`
-    );
+    const response = await fetch(url, {
+      headers: {
+        "PRIVATE-TOKEN": token,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `獲取 MR discussions 失敗: ${response.status} ${errorText}`
+      );
+    }
+
+    const discussions = await response.json();
+
+    // 如果沒有更多資料，結束迴圈
+    if (discussions.length === 0) {
+      break;
+    }
+
+    allDiscussions = allDiscussions.concat(discussions);
+
+    // 如果這一頁的資料少於 perPage，表示已經是最後一頁
+    if (discussions.length < perPage) {
+      break;
+    }
+
+    // 如果已達到最大數量，結束迴圈
+    if (allDiscussions.length >= maxItems) {
+      allDiscussions = allDiscussions.slice(0, maxItems);
+      break;
+    }
+
+    page++;
   }
 
-  return await response.json();
+  return allDiscussions;
 }
 
 /**
