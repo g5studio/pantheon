@@ -1,0 +1,50 @@
+---
+description: Coding Standard - project structure, module boundaries, and utilities responsibilities.
+alwaysApply: true
+---
+
+<!-- cSpell:disable -->
+
+# Coding Standard - Project Structure
+
+## 目錄分類（Project Structure）
+
+為了資料檢索與責任邊界清晰，專案資料夾應依類別分層：
+
+- `assets/`：image、icon、pdf…等靜態資源
+- `modules/`：除 shared 外的所有 module
+- `shared/`：存放「通用共享」的模組（general shared stuff）
+- `styles/`：通用樣式（css/scss…）
+- `utilities/`：不屬於 shared/module 定義、但又是全域需要的功能（api/config/helpers…）
+
+## Module 規範（Module）
+
+### 模組隔離
+
+- **必須**：module 之間 **不得相依**；**禁止**從其他 module import method/model/hook…等。
+- **例外**：可放到 `shared/` 或 `utilities/` 的，才允許跨 module 使用。
+
+### module 內部建議結構
+
+每個 module（除 shared）應包含下列資料夾（視需要可取用）：
+
+- `components/`：僅供該 module 使用的 components
+- `models/`：僅供該 module 使用的 models
+- `constants/`：constants
+- `enums/`：enums
+- `hooks/`：hooks
+- `interfaces/`：interfaces
+- `pages/`：pages
+
+## Utilities 定義（Utilities）
+
+### 為什麼需要 utilities
+
+- 即使已有 `shared/` 來存通用 component/model/hooks…，仍會有一些「不符合 module 定義、也不屬於 shared 類型」但又需要集中管理的內容（例如 api client 設定）。
+
+### utilities 的責任與子資料夾（建議）
+
+- `utilities/api/`：api setting、http client、react query client、api endpoint…等
+- `utilities/config/`：system config、env、routes…等
+- `utilities/helpers/`：一般 helper function（不是 hook）
+

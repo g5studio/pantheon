@@ -1,0 +1,5 @@
+# Cursor 規則檔案
+.cursor/rules/operator/coding-standard/architecture.mdc
+.cursor/rules/operator/coding-standard/components.mdc
+.cursor/rules/operator/coding-standard/naming.mdc
+.cursor/rules/operator/coding-standard/project-structure.mdc

@@ -1,0 +1,32 @@
+---
+description: Coding Standard - architecture principles. Keep business logic out of viewers, introduce internal models to decouple external contracts from UI needs, and avoid circular wait.
+alwaysApply: true
+---
+
+# Coding Standard - Architecture
+
+## Core idea (Design Pattern)
+
+- A UI system is a **state-driven rendering loop**:
+  - State → View → New State → New View
+- For maintainability and stability: **keep business logic away from viewers (components/pages)**; viewers should only handle view logic.
+- To avoid circular wait on external data shape/contract: introduce an **internal data interface layer** that does not depend on any external schema. In this standard, it is called a **Model**.
+
+## Model positioning and design steps
+
+### Purpose
+
+- Transform and isolate between the **external contract** and the **internal interface** that the UI system actually needs.
+- Enable shipping most of the feature even when external data is not ready (by providing complete mock data for the model interface).
+
+### Steps (recommended)
+
+1. Analyze requirements and UI design, then define the **internal model interface** (the shape the system actually uses).
+2. Implement the model following the interface (if external data is not ready, provide complete mock data for all required fields).
+3. Design the transformation/mapping logic between the external data contract and the internal model interface (and the reverse direction if needed).
+
+## Viewer usage rules
+
+- **Avoid** depending on raw external payload structure in viewers; use the model interface as the only data contract for UI rendering.
+- **Ensure** the model is not rebuilt repeatedly when the input data has not changed (use an appropriate caching strategy) to avoid unnecessary render churn and instability.
+

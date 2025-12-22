@@ -1,0 +1,24 @@
+---
+description: Coding Standard - components & pages. Define component boundaries, reusability rules, and how pages should be implemented as special components.
+alwaysApply: true
+---
+
+# Coding Standard - Components
+
+## Definitions
+
+- **Component**: The smallest reusable unit in the project.
+- **Page**: A special kind of component mainly used to **register routes**; it should also host system-level wrappers (e.g. skeleton/loading/base layout styles).
+
+## Rules
+
+### 1. Reuse & extraction
+
+- **Must**: If a piece of UI/logic will be reused across multiple pages or components, extract it into a dedicated component.
+- **Avoid**: Hard-coding reusable parts inside a single page, which leads to copy-paste duplication later.
+
+### 2. Page responsibility boundary
+
+- **Must**: A Page should be a router entry only, and be wrapped by a base component to centralize system-level concerns (skeleton/loading/base layout styles, etc.).
+- **Avoid**: Accumulating large reusable UI in a Page; extract into module/components and compose them in the Page.
+

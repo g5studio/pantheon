@@ -1,0 +1,44 @@
+---
+description: Coding Standard - naming conventions for variables, functions, classes, interfaces, env, and API endpoints / function prefixes.
+alwaysApply: true
+---
+
+<!-- cSpell:disable -->
+
+# Coding Standard - Naming
+
+## Naming Convention
+
+| 類別 | 命名風格 | 範例 | 備註 |
+|---|---|---|---|
+| variable / constant | lowerCamel | `userInfo` |  |
+| function | lowerCamel | `getUserInfo` | **function 必須以動詞開頭** |
+| class | UpperCamel | `UserInfo` |  |
+| interface | UpperCamel | `IUserInfo` | **interface 必須以 `I` 前綴** |
+| env | SNAKE_UPPER | `USER_INFO` |  |
+
+## Function Prefix
+
+以動詞前綴表達語意與回傳型態傾向（用於提升可讀性與一致性）：
+
+| 前綴 | 意義 | 回傳型態傾向 | 範例 |
+|---|---|---|---|
+| `get` | 取得特定結果 | any | `getUserInfo` |
+| `set` | 只做處理、不回傳資料 | void | `setUserInfo` |
+| `chunk` | 產出陣列資料 | array | `chunkUsers` |
+| `validate` | 驗證資料（多為正則/規則） | boolean | `validateEmail` |
+
+## API Endpoint Prefix
+
+### 原則
+
+- **POST endpoint 的 prefix 必須依「實際行為」決定**（不要一律用同一套命名）。
+
+### 對應建議
+
+| Action | HTTP | Function Example | API Example |
+|---|---|---|---|
+| fetch | GET | `fetchMarketTypes` | `platform/user/marketTypes` |
+| update | PUT / PATCH | `updateUserPassword` | `platform/user/accounts/password` |
+| delete | DELETE | `deleteUserDevice` | `platform/user/device` |
+
