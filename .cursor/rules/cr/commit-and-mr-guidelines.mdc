@@ -453,11 +453,55 @@ The `create-mr.mjs` script automatically analyzes changed files and adds the app
 - **Static File**: Must be added when changes only include static resource adjustments (files in `assets/` folder)
 - **Vendor Customization**: Must be added when changes only modify specific existing vendor parameters
 
+### Important Guidelines for Existing MRs
+
+**🚨 CRITICAL**: 若當前 branch 已經有 MR，在更新 MR description 時，**必須**遵守以下重要規範：
+
+1. **取得原始 MR description**：
+   - 在更新 MR 前，必須先透過 GitLab API 取得現有 MR 的 description
+   - 不得直接使用新的開發報告內容覆蓋原始 description
+
+2. **基於原始內容擴充追加**：
+   - 必須保留原始 description 的所有內容
+   - 僅在原始內容的基礎上擴充追加新項目，例如：
+     - 追加影響範圍資訊
+     - 追加關聯單號
+     - 追加風險評估（見下方「風險評估」章節）
+     - 更新變更內容列表
+     - 其他必要的補充資訊
+
+3. **禁止行為**：
+   - ❌ 直接用新的開發報告內容完全覆蓋原始 description
+   - ❌ 刪除原始 description 中的任何既有內容
+   - ❌ 忽略原始 description 中的歷史記錄或重要資訊
+
+4. **執行流程**：
+   ```
+   檢查當前 branch 是否已有 MR
+       ↓
+   如果已有 MR：
+       ↓
+   取得原始 MR description
+       ↓
+   生成新的開發報告內容（或更新內容）
+       ↓
+   合併原始 description + 新內容（擴充追加）
+       ↓
+   更新 MR description
+   ```
+
+5. **AI 執行範例**：
+   - 如果原始 description 包含「關聯單資訊」區塊，應該保留該區塊
+   - 如果原始 description 缺少「風險評估」區塊，應該追加該區塊
+   - 如果變更內容有更新，應該在原始「變更內容」表格中追加新項目，而非替換整個表格
+
 ### Development Report Requirement (MR Description 開發報告)
 
 **🚨 CRITICAL**: 當 AI 執行 `cr single-ticket`、`cr multiple-ticket` 或任何會觸發 `create-mr` 的指令時，**務必**生成開發報告並透過 `--development-report` 參數傳給 `create-mr.mjs` 腳本。
 
 **此規則適用於所有情境**，無論是否透過 `start-task` 流程觸發。
+
+**重要**：如果是更新現有 MR，必須遵循「重要規範」章節中的要求，先取得原始 description 後再擴充追加。
 
 #### 開發報告內容要求
 
@@ -468,6 +512,7 @@ The `create-mr.mjs` script automatically analyzes changed files and adds the app
 | **關聯單資訊** | 單號（含超連結）、標題、類型 | 必須 |
 | **變更摘要** | 變更的目的和主要改動說明 | 必須 |
 | **變更內容** | 檔案列表（新增/更新/刪除）及簡要說明 | 必須 |
+| **風險評估** | 針對每個修改檔案的風險評估（高度/中度/輕度） | 必須 |
 | **預期效果** | Request 類型需說明功能實現後的預期行為 | Request 類型必須 |
 | **影響範圍** | Bug 類型需說明受影響的模組和組件 | Bug 類型必須 |
 | **根本原因** | Bug 類型需說明問題發生的技術原因 | Bug 類型必須 |
@@ -495,20 +540,134 @@ The `create-mr.mjs` script automatically analyzes changed files and adds the app
 |---|---|---|
 | `path/to/file.ts` | 新增/更新/刪除 | 簡要說明 |
 
+---
+
+## ⚠️ 風險評估
+
+| 檔案 | 風險等級 | 評估說明 |
+|---|---|---|
+| `path/to/file.ts` | 高度/中度/輕度 | [具體風險說明，例如：改動前後實際運行邏輯有差別，if(isA) 變成 if(!isA)] |
+
 ### [根據 Jira 類型的額外資訊]
 
 [Bug 類型：影響範圍、根本原因]
 [Request 類型：預期效果、需求覆蓋率]
 ```
 
+### 風險評估標準
+
+#### 🔴 高度風險
+
+符合以下任一條件即為高度風險：
+
+a. **改動前後代碼結構差異過大**
+   - 檔案結構發生重大變化
+   - 函數拆分或合併幅度大
+   - 類別或模組重構幅度大
+
+b. **改動前後實際運行邏輯有差別**
+   - 條件判斷邏輯反轉，例如 `if(isA)` 變成 `if(!isA)`
+   - 業務流程邏輯改變
+   - 數據處理邏輯改變
+
+c. **改動涉及大量 model / context 等 data logic 異動，且 ticket 本身並非需求開發**
+   - 非需求開發任務卻修改了大量數據層邏輯
+   - Model 結構變更
+   - Context/State 管理邏輯變更
+
+d. **改動涉及底層加載順序調整或是可能造成核心商業邏輯異常**
+   - 影響初始化順序
+   - 影響依賴加載順序
+   - 可能影響核心商業邏輯執行
+
+#### 🟡 中度風險
+
+符合以下任一條件即為中度風險：
+
+a. **改動同時影響多個元件/頁面**
+   - 修改共享組件
+   - 修改共用工具函數
+   - 修改共用配置檔案
+
+b. **改動本身無法從 commit message 直接看出**
+   - 改動意圖不明確
+   - 需要深入分析才能理解改動目的
+   - 改動包含隱含的副作用
+
+c. **改動包含主需求/問題無關的連帶修正**
+   - 修正與主要需求無關的問題
+   - 順便修正其他 bug
+   - 調整與主需求無關的代碼風格
+
+#### 🟢 輕度風險
+
+符合以下任一條件即為輕度風險：
+
+a. **改動純 UI 類型調整**
+   - 字體大小調整
+   - 顏色調整
+   - 圖片資源更換
+   - CSS 樣式微調
+
+b. **改動檔案影響範圍單一**
+   - 僅影響單一元件
+   - 僅影響單一頁面
+   - 不影響其他模組
+
+c. **改動不涉及商業邏輯調整**
+   - 純技術性調整
+   - 代碼重構但不改變邏輯
+   - 優化但保持功能一致
+
+d. **改動皆為『新增』，不對既有邏輯造成影響**
+   - 僅新增檔案
+   - 僅新增函數/方法但不修改現有代碼
+   - 新增功能但不影響現有功能
+
+### 風險評估執行要求
+
+**CRITICAL**: AI 在生成開發報告時，**必須**：
+
+1. **針對每個修改檔案進行風險評估**：不得遺漏任何變更檔案
+2. **使用上述標準進行評估**：明確說明符合哪一項風險標準
+3. **提供具體的評估說明**：說明為什麼該檔案屬於此風險等級
+4. **按風險等級排序**：在風險評估表格中，優先列出高度風險的檔案
+5. **標註特殊情況**：如果有檔案同時符合多個風險標準，應在說明中註明
+
+**評估流程範例**：
+```
+分析 git diff
+   ↓
+識別所有修改檔案
+   ↓
+針對每個檔案：
+   ├─ 檢查代碼結構差異
+   ├─ 檢查邏輯差異
+   ├─ 檢查影響範圍
+   └─ 根據標準判斷風險等級
+   ↓
+生成風險評估表格
+   ↓
+按風險等級排序並提供說明
+```
+
 #### AI 執行流程
 
 **CRITICAL**: AI 在執行 `cr single-ticket` 或 `cr multiple-ticket` 前，**必須**：
 
-1. **分析變更內容**：檢查 `git diff` 和 `git status` 獲取變更檔案
-2. **讀取 Jira 資訊**：從 Jira API 獲取 ticket 的標題和類型
-3. **生成開發報告**：根據 Jira 類型（Bug/Request/其他）生成對應格式的報告
-4. **傳入參數**：將報告內容透過 `--development-report` 參數傳給 `create-mr.mjs`
+1. **檢查現有 MR**：如果當前 branch 已經有 MR，先透過 GitLab API 取得原始 MR description
+2. **分析變更內容**：檢查 `git diff` 和 `git status` 獲取變更檔案
+3. **讀取 Jira 資訊**：從 Jira API 獲取 ticket 的標題和類型
+4. **進行風險評估**：
+   - 針對每個修改檔案，分析代碼結構差異、邏輯差異、影響範圍
+   - 根據風險評估標準（高度/中度/輕度）判斷每個檔案的風險等級
+   - 提供具體的評估說明，說明為什麼該檔案屬於此風險等級
+   - 按風險等級排序，優先列出高度風險的檔案
+5. **生成開發報告**：
+   - 根據 Jira 類型（Bug/Request/其他）生成對應格式的報告
+   - **必須包含風險評估區塊**，列出所有修改檔案的風險評估
+   - 如果已有 MR，基於原始 description 擴充追加新內容，而非覆蓋
+6. **傳入參數**：將報告內容透過 `--development-report` 參數傳給 `create-mr.mjs`
 
 **執行範例**：
 ```bash
@@ -522,8 +681,11 @@ node .cursor/scripts/cr/create-mr.mjs \
 
 - ❌ 執行 `create-mr` 時不傳入 `--development-report` 參數
 - ❌ 只傳入 ticket 號碼作為 description
-- ❌ 生成不完整的開發報告（缺少關聯單資訊或變更摘要）
+- ❌ 生成不完整的開發報告（缺少關聯單資訊、變更摘要或風險評估）
 - ❌ 忽略 Jira 類型對應的額外資訊要求
+- ❌ 如果已有 MR，直接用新的開發報告內容覆蓋原始 description
+- ❌ 遺漏任何變更檔案的風險評估
+- ❌ 風險評估說明不具體或不符合標準
 
 #### 例外情況
 
