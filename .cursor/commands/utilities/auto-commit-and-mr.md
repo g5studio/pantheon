@@ -630,7 +630,8 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
    
    | 參數 | 來源 | 必要性 | 說明 |
    |---|---|---|---|
-   | `--development-report` | 根據 Jira 資訊和變更內容生成 | **必須** | 包含關聯單資訊、變更摘要、變更內容 |
+   | `--development-report-file` | 將開發報告輸出為 Markdown 檔案後傳入 | **推薦** | 最穩定，避免 shell quoting / `\n` 跑版 |
+   | `--development-report` | 根據 Jira 資訊和變更內容生成 | **必須（或使用 `--development-report-file` 擇一）** | 直接以字串傳入；避免傳入字面 `\n`（反斜線+n） |
    | `--agent-version` | 從 `version.json` 讀取 | **必須** | 優先順序：`.pantheon/version.json` → `version.json` → `.cursor/version.json` |
    | `--reviewer` | 僅用戶明確指定時傳遞 | 可選 | 未指定時讓腳本使用環境變數或預設值 |
    | `--related-tickets` | 從用戶輸入或自動偵測 | 可選 | 多個單號用逗號分隔 |
@@ -647,7 +648,7 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
    3. 將版本資訊作為 JSON 字串傳遞
    
    **禁止行為：**
-   - ❌ 執行 `create-mr` 時不傳入 `--development-report` 參數
+   - ❌ 執行 `create-mr` 時不傳入 `--development-report` 或 `--development-report-file`
    - ❌ 執行 `create-mr` 時不傳入 `--agent-version` 參數
    - ❌ 生成不完整的開發報告（缺少關聯單資訊或變更摘要）
    
@@ -656,7 +657,7 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
    腳本會自動使用 GitLab CLI (glab) 或 API token 建立 MR：
    
    ```bash
-   node .cursor/scripts/cr/create-mr.mjs --development-report="<開發報告內容>" --agent-version='<版本JSON>' [--reviewer="@username"] [--target=main] [--no-draft] [--no-review] [--related-tickets="IN-1235,IN-1236"] [--no-notify]
+   node .cursor/scripts/cr/create-mr.mjs --development-report-file="development-report.md" --agent-version='<版本JSON>' [--reviewer="@username"] [--target=main] [--no-draft] [--no-review] [--related-tickets="IN-1235,IN-1236"] [--no-notify]
    ```
    
    **參數說明：**

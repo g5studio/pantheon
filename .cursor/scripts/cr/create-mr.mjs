@@ -6,7 +6,7 @@
  */
 
 import { execSync, spawnSync } from "child_process";
-import { join } from "path";
+import { join, isAbsolute } from "path";
 import readline from "readline";
 import { readFileSync, existsSync } from "fs";
 import {
@@ -1247,6 +1247,81 @@ function generateAgentVersionSection(versionInfo) {
   return lines.join("\n");
 }
 
+function resolvePathFromProjectRoot(filePath) {
+  if (!filePath) return null;
+  return isAbsolute(filePath) ? filePath : join(projectRoot, filePath);
+}
+
+function readUtf8FileFromProjectRoot(filePath) {
+  const resolved = resolvePathFromProjectRoot(filePath);
+  if (!resolved) return null;
+  if (!existsSync(resolved)) {
+    throw new Error(`找不到檔案: ${filePath}`);
+  }
+  // 移除 UTF-8 BOM，並保留原始換行
+  return readFileSync(resolved, "utf-8").replace(/^\uFEFF/, "");
+}
+
+function appendSectionIfMissing(base, section) {
+  const baseStr = typeof base === "string" ? base : "";
+  const secStr = typeof section === "string" ? section : "";
+  const trimmedSec = secStr.trim();
+
+  if (!trimmedSec) return baseStr;
+
+  const trimmedBase = baseStr.trimEnd();
+  if (!trimmedBase) return trimmedSec;
+
+  // 避免重複追加完全相同的內容（以完整區塊字串比對）
+  if (trimmedBase.includes(trimmedSec)) return baseStr;
+
+  return `${trimmedBase}\n\n${trimmedSec}\n`;
+}
+
+function mergeExistingMrDescription(
+  existingDescription,
+  sectionsToAppend = []
+) {
+  let merged =
+    typeof existingDescription === "string" ? existingDescription : "";
+  for (const section of sectionsToAppend) {
+    merged = appendSectionIfMissing(merged, section);
+  }
+  return merged;
+}
+
+// 將外部傳入的 markdown（例如 --development-report）轉成適合直接拼接進 MR description 的內容
+// - 支援 JSON string（JSON.parse 後會自動把 \n 轉成真正換行）
+// - 容錯處理字面 "\\n"（避免 GitLab MR description 出現 "\n" 跑版）
+function normalizeExternalMarkdownArg(input) {
+  if (!input) return null;
+
+  let content = input;
+  try {
+    const parsed = JSON.parse(input);
+    if (typeof parsed === "string") {
+      content = parsed;
+    } else {
+      content = JSON.stringify(parsed, null, 2);
+    }
+  } catch {
+    // ignore
+  }
+
+  // 統一換行風格（避免 Windows CRLF 造成表格分隔異常）
+  content = content.replace(/\r\n/g, "\n");
+
+  // 只有在「完全沒有真換行」但出現字面 "\n" 時才轉換，避免影響已經是正常 markdown 的內容
+  if (!content.includes("\n") && /\\n/.test(content)) {
+    content = content.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n");
+  }
+  if (!content.includes("\t") && /\\t/.test(content)) {
+    content = content.replace(/\\t/g, "\t");
+  }
+
+  return content;
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const targetBranchArg = args.find((arg) => arg.startsWith("--target="));
@@ -1286,12 +1361,43 @@ async function main() {
 
   // 解析外部傳入的開發報告（與開發計劃不同，開發報告是完成後的報告）
   // 開發報告包含：影響範圍、根本原因、改動前後邏輯差異（Bug）或預期效果、需求覆蓋率、潛在影響風險（Request）
+  const developmentReportFileArg = args.find((arg) =>
+    arg.startsWith("--development-report-file=")
+  );
+  const externalDevelopmentReportFile = developmentReportFileArg
+    ? developmentReportFileArg.split("=").slice(1).join("=")
+    : null;
+
   const developmentReportArg = args.find((arg) =>
     arg.startsWith("--development-report=")
   );
-  const externalDevelopmentReport = developmentReportArg
-    ? developmentReportArg.split("=").slice(1).join("=")
+  const externalDevelopmentReportFromArg = developmentReportArg
+    ? normalizeExternalMarkdownArg(
+        developmentReportArg.split("=").slice(1).join("=")
+      )
     : null;
+
+  let externalDevelopmentReport = null;
+  if (externalDevelopmentReportFile) {
+    try {
+      externalDevelopmentReport = readUtf8FileFromProjectRoot(
+        externalDevelopmentReportFile
+      )?.replace(/\r\n/g, "\n");
+    } catch (error) {
+      console.error("\n❌ 無法讀取 --development-report-file\n");
+      console.error(`📁 檔案: ${externalDevelopmentReportFile}`);
+      console.error(`🧾 錯誤: ${error.message}\n`);
+      process.exit(1);
+    }
+
+    if (externalDevelopmentReportFromArg) {
+      console.log(
+        "⚠️  同時提供了 --development-report 與 --development-report-file，將優先使用檔案內容\n"
+      );
+    }
+  } else {
+    externalDevelopmentReport = externalDevelopmentReportFromArg;
+  }
 
   // 檢查是否有未提交的變更
   const uncommittedChanges = getGitStatus();
@@ -1530,6 +1636,12 @@ async function main() {
 
   // 構建 description
   let description = "";
+  // 這些區塊用於「更新既有 MR」時做擴充追加（不可覆蓋原 description）
+  let developmentPlanSectionToAppend = null;
+  let developmentReportSectionToAppend = null;
+  let relatedTicketsSectionToAppend = null;
+  let agentVersionSectionToAppend = null;
+
   if (relatedTicketsArg) {
     const relatedTickets = relatedTicketsArg
       .split(/[,\s]+/)
@@ -1560,6 +1672,7 @@ async function main() {
     if (externalDevelopmentPlan.raw) {
       // 外部傳入完整計劃，直接使用
       console.log("📋 使用外部傳入的完整開發計劃\n");
+      developmentPlanSectionToAppend = externalDevelopmentPlan.raw;
       description = description
         ? `${description}\n\n${externalDevelopmentPlan.raw}`
         : externalDevelopmentPlan.raw;
@@ -1570,6 +1683,7 @@ async function main() {
       );
       if (planSection) {
         console.log("📋 檢測到開發計劃，將添加到 MR description\n");
+        developmentPlanSectionToAppend = planSection;
         description = description
           ? `${description}\n\n${planSection}`
           : planSection;
@@ -1581,6 +1695,7 @@ async function main() {
       const planSection = generateDevelopmentPlanSection(startTaskInfo);
       if (planSection) {
         console.log("📋 檢測到開發計劃，將添加到 MR description\n");
+        developmentPlanSectionToAppend = planSection;
         description = description
           ? `${description}\n\n${planSection}`
           : planSection;
@@ -1594,6 +1709,7 @@ async function main() {
   // - 開發報告（--development-report）：開發完成後的報告，包含影響範圍、根本原因、改動差異等
   if (externalDevelopmentReport) {
     console.log("📊 使用外部傳入的開發報告\n");
+    developmentReportSectionToAppend = externalDevelopmentReport;
     description = description
       ? `${description}\n\n${externalDevelopmentReport}`
       : externalDevelopmentReport;
@@ -1604,6 +1720,7 @@ async function main() {
     const relatedTicketsSection = generateRelatedTicketsSection(startTaskInfo);
     if (relatedTicketsSection) {
       console.log("📋 添加關聯單資訊到 MR description\n");
+      relatedTicketsSectionToAppend = relatedTicketsSection;
       description = description
         ? `${description}\n\n${relatedTicketsSection}`
         : relatedTicketsSection;
@@ -1615,6 +1732,7 @@ async function main() {
     const versionSection = generateAgentVersionSection(agentVersionInfo);
     if (versionSection) {
       console.log("🤖 檢測到 Agent 版本資訊，將添加到 MR description 最下方\n");
+      agentVersionSectionToAppend = versionSection;
       description = description
         ? `${description}\n\n${versionSection}`
         : versionSection;
@@ -1750,6 +1868,31 @@ async function main() {
         .join(", ");
       console.log(`ℹ️  現有 MR 已有 reviewer: ${existingReviewers}`);
       console.log(`   用戶未明確指定 reviewer，將保留現有 reviewer\n`);
+    }
+  }
+
+  // 🚨 CRITICAL: 若當前 branch 已有 MR，更新 description 時必須先取得原始 description 後擴充追加（不可覆蓋）
+  if (existingMRDetails) {
+    const existingDescription =
+      typeof existingMRDetails.description === "string"
+        ? existingMRDetails.description
+        : "";
+
+    const sectionsToAppend = [
+      developmentPlanSectionToAppend,
+      developmentReportSectionToAppend,
+      relatedTicketsSectionToAppend,
+      agentVersionSectionToAppend,
+    ].filter(Boolean);
+
+    if (existingDescription && sectionsToAppend.length > 0) {
+      console.log(
+        "🧩 檢測到現有 MR description，將基於原始內容擴充追加（不覆蓋）\n"
+      );
+      description = mergeExistingMrDescription(
+        existingDescription,
+        sectionsToAppend
+      );
     }
   }
 
