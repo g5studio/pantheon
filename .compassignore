@@ -1,3 +1,6 @@
+# Cursor 指令檔案
+.cursor/commands/operator/reverse-engineering.md
+
 # Cursor 規則檔案
 .cursor/rules/operator/coding-standard/architecture.mdc
 .cursor/rules/operator/coding-standard/components.mdc
