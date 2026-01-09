@@ -1,0 +1,103 @@
+---
+description: 定義 reverse-engineering 指令的專屬執行規範：推導結果需用戶確認後才能留言 Jira，且留言後必須視同 start-task 謹慎模式並完整遵循其流程
+alwaysApply: false
+---
+
+# Reverse-Engineering 專屬執行規範
+
+此規則用於約束 `reverse-engineering` 指令在 Cursor chat 中的執行行為，確保：
+1. **用戶確認推導結果後**才將報告留言到 Jira
+2. **留言完畢後**轉入 `start-task` 時，必須**視同用戶透過 start-task 選擇「謹慎模式」**處理同一張 Jira card，且**後續流程需完全相同**
+
+---
+
+## 適用範圍
+
+- 當用戶輸入 `reverse-engineering` 且完成四步驟（定位/盤點/情搜/推導）後
+- 當 AI 準備將「逆向工程報告」留言到 Jira 前
+- 當 AI 留言成功後準備轉入 `start-task` 時
+
+---
+
+## 規範 1：留言 Jira 前必須用戶確認推導結果（強制停止點）
+
+**CRITICAL**：在執行任何 Jira 留言動作前，AI 必須先輸出「最終推導結論 + 即將留言的完整報告內容」，並要求用戶回覆 `confirm`。
+
+### 必要條件
+
+- 用戶需明確回覆 `confirm`
+- 若用戶要求調整內容：AI 必須先更新報告，再重新請用戶 `confirm`
+
+### 禁止行為
+
+- ❌ 未經用戶 `confirm` 直接留言 Jira
+- ❌ 只貼結論、不貼完整報告內容就請用戶確認
+- ❌ 用戶要求修改後仍用舊內容留言
+
+---
+
+## 規範 2：留言 Jira 的執行與錯誤處理
+
+### 指定腳本
+
+留言必須使用以下腳本：
+
+```bash
+node .cursor/scripts/jira/add-jira-comment.mjs <TICKET> "<REPORT_CONTENT>"
+```
+
+若專案是以 submodule 形式掛載 Pantheon，改用：
+
+```bash
+node .pantheon/.cursor/scripts/jira/add-jira-comment.mjs <TICKET> "<REPORT_CONTENT>"
+```
+
+### 成功條件
+
+- 腳本回傳 `success: true`
+- AI 必須在 chat 中回報「留言成功」並保留關鍵資訊（ticket、commentId 或 commentUrl）
+
+### 失敗處理（停止點）
+
+若腳本回傳 error 或非 0 exit code：
+- **必須立即停止**
+- 在 chat 中完整呈現錯誤資訊
+- 等待用戶指示（例如：重試、改短內容、改成分段留言、或先不留言）
+
+---
+
+## 規範 3：留言後轉進 start-task（視同謹慎模式，且流程需完全相同）
+
+### 模式判定
+
+**CRITICAL**：一旦 reverse-engineering 報告已留言成功，後續轉進 `start-task` 時必須視同：
+- 用戶已在 `start-task` 的「模式選擇」階段輸入 `1`（謹慎模式）
+- 因此「模式選擇」不再是可選分支（已確定為謹慎模式）
+
+### 流程對齊要求（完全相同）
+
+**CRITICAL**：除「模式已確定」外，後續流程必須完整遵循：
+- [`start-task.md`](mdc:.cursor/commands/operator/start-task.md)
+- [`operation-modes.mdc`](mdc:.cursor/rules/operator/start-task/operation-modes.mdc)
+- [`development-policy.mdc`](mdc:.cursor/rules/operator/start-task/development-policy.mdc)
+
+包含但不限於：
+- start-task 的所有**強制停止點**
+- 謹慎模式的「最小風險改動」原則
+- 每次修改前的影響範圍說明與逐步確認
+- 不可在謹慎模式中「順便優化/額外重構」
+
+### 禁止行為
+
+- ❌ 留言後直接進入「修 code」而跳過 start-task 的確認/停止點
+- ❌ 因為已在 reverse-engineering 流程中分析過，就省略 start-task 謹慎模式要求的每步確認
+
+---
+
+## 相關文件
+
+- [reverse-engineering.md](mdc:.cursor/commands/operator/reverse-engineering.md)
+- [start-task.md](mdc:.cursor/commands/operator/start-task.md)
+- [operation-modes.mdc](mdc:.cursor/rules/operator/start-task/operation-modes.mdc)
+- [development-policy.mdc](mdc:.cursor/rules/operator/start-task/development-policy.mdc)
+

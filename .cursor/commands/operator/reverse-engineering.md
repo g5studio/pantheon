@@ -213,9 +213,35 @@ API 1 → 數據轉換 1 → API 2 → 數據轉換 2 → ... → 終端顯示
 [總結所有分析結果，提供最終的修正建議]
 ```
 
-### 5. 將報告留言到 Jira 單內
+### 5. 🚨 強制停止點：用戶確認推導結果（留言前）
 
-**CRITICAL**: 完成上述步驟後，**必須**將報告留言到 Jira 單內。
+**CRITICAL**：在將報告留言到 Jira 之前，必須先讓用戶確認推導結果與要留言的最終報告內容。
+
+**必須輸出的格式**（需完整呈現，供用戶確認）：
+```
+✅ 已完成逆向工程推導，以下為最終推導結論與報告內容預覽：
+
+📌 最終推導結論（Deduction Summary）
+- 錯誤節點：{NODE}
+- 最可能原因（Top 1）：{CAUSE}
+- 建議修正方向：{SUGGESTION}
+
+📝 即將留言到 Jira 的完整報告（請確認）
+============================================================
+{REPORT_CONTENT}
+============================================================
+
+❓ 請回覆「confirm」確認留言到 Jira。
+（若需要調整內容，請直接指出要修改的段落/句子，我會更新後再請你 confirm）
+```
+
+**禁止行為**：
+- ❌ 未經用戶明確回覆 `confirm` 就留言到 Jira
+- ❌ 未經用戶確認就轉進 start-task
+
+### 6. 將報告留言到 Jira 單內
+
+**CRITICAL**：用戶回覆 `confirm` 後，**必須**將報告留言到 Jira 單內。
 
 使用腳本將報告留言到 Jira：
 ```bash
@@ -227,14 +253,23 @@ node .cursor/scripts/jira/add-jira-comment.mjs <TICKET> "<報告內容>"
 node .pantheon/.cursor/scripts/jira/add-jira-comment.mjs <TICKET> "<報告內容>"
 ```
 
-### 6. 轉進 start-task 流程
+**CRITICAL**：若留言失敗（腳本回傳 error），必須立即停止並在 chat 中呈現錯誤資訊，等待用戶指示後續處理方式。
 
-**CRITICAL**: 完成報告留言後，**必須**轉進 start-task 流程，**直接使用謹慎模式**開始修復。
+### 7. 轉進 start-task 流程（視同「start-task + 謹慎模式」）
+
+**CRITICAL**：完成報告留言後，**必須**轉進 start-task 流程，並且**視同用戶是透過 `start-task` 並選擇「謹慎模式」**來處理同一張 Jira card。
+
+這代表：
+- **行為模式**：已確定為「謹慎模式」，等同於用戶在 start-task 的模式選擇輸入 `1`
+- **後續流程**：必須**完全與執行 start-task 謹慎模式時相同**（包含所有強制停止點、每步確認、最小改動與影響範圍說明等）
+- **不得走捷徑**：除了「模式選擇已被確定」這件事外，其餘流程不得省略
 
 執行方式：
-- 在 chat 中提示用戶：「報告已留言到 Jira，現在轉進 start-task 流程使用謹慎模式開始修復」
-- 自動執行 `start-task` 流程，**強制使用謹慎模式**（不詢問用戶選擇模式）
-- 使用當前 Jira ticket 作為 start-task 的輸入
+- 在 chat 中提示用戶：「報告已留言到 Jira，現在轉進 start-task 流程（視同謹慎模式）開始修復」
+- 後續交互依照 [`start-task.md`](mdc:.cursor/commands/operator/start-task.md) 與 [`operation-modes.mdc`](mdc:.cursor/rules/operator/start-task/operation-modes.mdc) 的謹慎模式規範執行
+
+詳細執行規範請參考：
+- [reverse-engineering-execution.mdc](mdc:.cursor/rules/operator/reverse-engineering-execution.mdc)
 
 ## 使用方式
 
@@ -267,10 +302,14 @@ AI: 📖 正在讀取 Jira ticket IN-101061...
     [執行推導步驟...]
     
     ✅ 生成完整報告...
-    💬 正在將報告留言到 Jira 單內...
+    ❓ 請回覆「confirm」確認留言到 Jira
+    
+用戶輸入: confirm
+
+AI: 💬 正在將報告留言到 Jira 單內...
     ✅ 報告已留言到 Jira
     
-    🔄 轉進 start-task 流程（謹慎模式）...
+    🔄 轉進 start-task 流程（視同謹慎模式）...
     [執行 start-task 流程]
 ```
 
@@ -286,4 +325,5 @@ AI: 📖 正在讀取 Jira ticket IN-101061...
 
 - [start-task.md](mdc:.cursor/commands/operator/start-task.md)：start-task 流程規範
 - [operation-modes.mdc](mdc:.cursor/rules/operator/start-task/operation-modes.mdc)：行為模式規範（謹慎模式）
+- [reverse-engineering-execution.mdc](mdc:.cursor/rules/operator/reverse-engineering-execution.mdc)：reverse-engineering 專屬執行規範（留言前確認、留言後等同謹慎模式）
 
