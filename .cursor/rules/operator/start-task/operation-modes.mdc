@@ -2,6 +2,9 @@
 description: 定義 start-task 流程中的行為模式，包含謹慎模式、多工模式、高效模式和預設模式
 alwaysApply: false
 ---
+
+<!-- cSpell:disable -->
+
 # Start-Task 行為模式
 
 此規則定義了 `start-task` 流程中可選擇的行為模式，讓用戶可以根據不同的開發場景選擇最適合的工作風格。
@@ -32,10 +35,13 @@ alwaysApply: false
 3️⃣ **高效模式** (Efficient)
    支援多單號批次處理，自動推進不中斷，適合大量小項目
 
-4️⃣ **預設模式** (Default)
+4️⃣ **快速模式** (Fast)
+   批次排程，目標導向自動推進，適合大量獨立小項目
+
+5️⃣ **預設模式** (Default)
    標準流程，每階段確認
 
-請輸入數字 (1-4) 或模式名稱，直接 Enter 使用預設模式：
+請輸入數字 (1-5) 或模式名稱，直接 Enter 使用預設模式：
 ```
 
 ### 模式識別
@@ -45,7 +51,8 @@ alwaysApply: false
 | `1`、`謹慎`、`cautious`、`hotfix` | 謹慎模式 |
 | `2`、`多工`、`multi`、`multi-task` | 多工模式 |
 | `3`、`高效`、`efficient`、`batch` | 高效模式 |
-| `4`、`預設`、`default`、直接 Enter | 預設模式 |
+| `4`、`快速`、`fast`、`quick` | 快速模式 |
+| `5`、`預設`、`default`、直接 Enter | 預設模式 |
 
 ---
 
@@ -432,7 +439,44 @@ alwaysApply: false
 
 ---
 
-## 模式四：預設模式 (Default Mode)
+## 模式四：快速模式 (Fast Mode)
+
+### 適用場景
+- 大量獨立小項目批次處理
+- 需要「排程確認後」目標導向自動推進的情況
+- 希望全部完成後一次性回報給用戶確認
+
+### 核心原則
+
+| 原則 | 說明 |
+|---|---|
+| **排程確認** | 開始前先與用戶確認排程清單是否完整，是否要追加 |
+| **目標導向推進** | 排程確認後自動推進，不做逐步確認 |
+| **獨立分支** | 每張單使用獨立分支，完成一張後切回 main 再開下一張 |
+| **最終通知** | 全部完成後才通知用戶回來確認總結 |
+
+### 行為規範
+
+快速模式的完整 SOP 請參考：
+- [fast-mode.mdc](mdc:.cursor/rules/operator/start-task/fast-mode.mdc)
+
+### 顯示格式
+
+```
+⚡ 快速模式已啟用
+
+📋 此模式特點：
+- ✅ 先確認排程清單（可追加）
+- ✅ 排程確認後目標導向自動推進
+- ✅ 每張單獨立分支（完成後切回 main 再開下一張）
+- ✅ 全部完成後統一通知
+
+📋 請提供 Jira 單號（支援多個，用逗號或空格分隔）：
+```
+
+---
+
+## 模式五：預設模式 (Default Mode)
 
 ### 適用場景
 - 一般開發任務
@@ -474,7 +518,7 @@ alwaysApply: false
 ```json
 {
   "ticket": "FE-1234",
-  "operationMode": "cautious|multi-task|efficient|default",
+  "operationMode": "cautious|multi-task|efficient|fast|default",
   "modeConfig": {
     // 模式特定配置
   },
@@ -525,6 +569,21 @@ alwaysApply: false
 }
 ```
 
+#### 快速模式
+```json
+{
+  "operationMode": "fast",
+  "modeConfig": {
+    "tickets": ["FE-1234", "FE-1235", "FE-1236"],
+    "currentIndex": 0,
+    "totalTasks": 3,
+    "autoProgress": true,
+    "branchNameStrategy": "ticket-only",
+    "notifyAfterAll": true
+  }
+}
+```
+
 #### 預設模式
 ```json
 {
@@ -537,15 +596,15 @@ alwaysApply: false
 
 ## 模式對照表
 
-| 特性 | 謹慎模式 | 多工模式 | 高效模式 | 預設模式 |
-|---|---|---|---|---|
-| **適用場景** | Hotfix | 大項目 | 批次小項目 | 一般開發 |
-| **輸入方式** | 單一單號 | 單一主單號 | 多個單號 | 單一單號 |
-| **確認頻率** | 每步確認 | 計劃確認 | 僅開始確認 | 階段確認 |
-| **Commit 策略** | 單一 Commit | 每階段 Commit | 每任務 Commit | 單一 Commit |
-| **MR 策略** | 單一 MR | 統一 MR | 每任務 MR | 單一 MR |
-| **通知時機** | 每步驟 | 全部完成 | 全部完成 | 每階段 |
-| **風險等級** | 🟢 最低 | 🟡 中等 | 🟡 中等 | 🟢 低 |
+| 特性 | 謹慎模式 | 多工模式 | 高效模式 | 快速模式 | 預設模式 |
+|---|---|---|---|---|---|
+| **適用場景** | Hotfix | 大項目 | 批次小項目 | 獨立小項目排程 | 一般開發 |
+| **輸入方式** | 單一單號 | 單一主單號 | 多個單號 | 多個單號 | 單一單號 |
+| **確認頻率** | 每步確認 | 計劃確認 | 僅開始確認 | 僅排程確認 | 階段確認 |
+| **Commit 策略** | 單一 Commit | 每階段 Commit | 每任務 Commit | 每任務 Commit | 單一 Commit |
+| **MR 策略** | 單一 MR | 統一 MR | 每任務 MR | 每任務 MR | 單一 MR |
+| **通知時機** | 每步驟 | 全部完成 | 全部完成 | 全部完成 | 每階段 |
+| **風險等級** | 🟢 最低 | 🟡 中等 | 🟡 中等 | 🟡 中等 | 🟢 低 |
 
 ---
 
