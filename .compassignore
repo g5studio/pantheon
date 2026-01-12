@@ -1,5 +1,6 @@
 # Cursor 指令檔案
 .cursor/commands/operator/reverse-engineering.md
+.cursor/commands/operator/start-task.md
 
 # Cursor 規則檔案
 .cursor/rules/operator/reverse-engineering-execution.mdc
@@ -7,5 +8,6 @@
 .cursor/rules/operator/coding-standard/components.mdc
 .cursor/rules/operator/coding-standard/naming.mdc
 .cursor/rules/operator/coding-standard/project-structure.mdc
+.cursor/rules/operator/start-task/development-policy.mdc
 .cursor/rules/operator/start-task/fast-mode.mdc
 .cursor/rules/operator/start-task/operation-modes.mdc

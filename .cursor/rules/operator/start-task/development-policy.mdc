@@ -8,7 +8,7 @@ alwaysApply: false
 
 ## 相關規則
 
-- **行為模式規則**：[operation-modes.mdc](mdc:.cursor/rules/operator/start-task/operation-modes.mdc) - 定義四種行為模式（謹慎、多工、高效、預設）
+- **行為模式規則**：[operation-modes.mdc](mdc:.cursor/rules/operator/start-task/operation-modes.mdc) - 定義四種行為模式（謹慎、多工、快速、預設）
 - **Jira 檢查規則**：[start-task-jira-check.mdc](mdc:.cursor/rules/operator/start-task/start-task-jira-check.mdc) - 定義 Jira ticket 檢查原則
 
 ## 適用場景
@@ -29,13 +29,13 @@ alwaysApply: false
 
 ### 模式對照表
 
-| 原則 | 謹慎模式 | 多工模式 | 高效模式 | 預設模式 |
+| 原則 | 謹慎模式 | 多工模式 | 快速模式 | 預設模式 |
 |---|---|---|---|---|
-| **確認流程** | 每步確認 | 僅計劃確認 | 僅開始確認 | 每階段確認 |
-| **開發報告** | 詳細 + 回滾方案 | 每階段摘要 | 簡化 | 標準 |
+| **確認流程** | 每步確認 | 僅計劃確認 | 僅排程確認 | 每階段確認 |
+| **開發報告** | 詳細 + 回滾方案 | 每階段摘要 | 簡化（批次總結） | 標準 |
 | **Commit 時機** | 單次 | 每階段 | 每任務 | 單次 |
 | **MR 策略** | 單一 + 詳細描述 | 統一 + 關聯所有單號 | 每任務獨立 | 單一 |
-| **中斷處理** | 立即停止 | 暫停當前階段 | 記錄並跳過 | 等待確認 |
+| **中斷處理** | 立即停止 | 暫停當前階段 | 停止並讓用戶選擇（跳過/暫停/取消） | 等待確認 |
 
 ### 模式特定原則
 
@@ -54,9 +54,10 @@ alwaysApply: false
 請參考：
 - [multi-task-mode-sop.mdc](mdc:.cursor/rules/operator/start-task/multi-task-mode-sop.mdc)
 
-#### 高效模式額外要求
+#### 快速模式額外要求
+- 開始前先與用戶確認「排程清單」（授權點）
 - 開發計劃不顯示給用戶（內部執行）
-- 錯誤發生時提供跳過選項
+- 錯誤發生時提供跳過/暫停/取消選項
 - 全部完成後才發送系統通知
 
 詳細規範請參考：[operation-modes.mdc](mdc:.cursor/rules/operator/start-task/operation-modes.mdc)
@@ -101,7 +102,7 @@ alwaysApply: false
 
 | 欄位 | 說明 | 可選值 |
 |---|---|---|
-| `operationMode` | 選擇的行為模式 | `cautious`, `multi-task`, `efficient`, `default` |
+| `operationMode` | 選擇的行為模式 | `cautious`, `multi-task`, `fast`, `default` |
 | `modeConfig` | 模式特定配置 | 見下方各模式配置 |
 
 **謹慎模式 (cautious) 配置**：
@@ -132,10 +133,10 @@ alwaysApply: false
 }
 ```
 
-**高效模式 (efficient) 配置**：
+**快速模式 (fast) 配置**：
 ```json
 {
-  "operationMode": "efficient",
+  "operationMode": "fast",
   "modeConfig": {
     "tickets": ["FE-1234", "FE-1235", "FE-1236"],
     "currentIndex": 0,
@@ -143,7 +144,9 @@ alwaysApply: false
     "completedTasks": [],
     "skippedTasks": [],
     "autoProgress": true,
-    "mrPerTask": true
+    "mrPerTask": true,
+    "branchNameStrategy": "ticket-only",
+    "notifyAfterAll": true
   }
 }
 ```
@@ -203,7 +206,7 @@ node .cursor/scripts/operator/save-start-task-info.mjs --update \
 
 AI 在以下時機，**必須**確認 Git notes 已保存：
 
-- [ ] **用戶確認開發計劃後** → 立即執行 `save-start-task-info.mjs`
+- [ ] **用戶確認開發計劃後（快速模式：用戶確認排程清單後）** → 立即執行 `save-start-task-info.mjs`
 - [ ] **執行 `--verify` 驗證** → 確認保存成功
 - [ ] **開發完成準備 commit 前** → 檢查 notes 存在
 - [ ] **執行 `cr` 指令前** → 再次驗證 notes 存在
@@ -240,8 +243,8 @@ AI 在以下時機，**必須**確認 Git notes 已保存：
 - [ ] 🚨 根據模式決定是否顯示計劃
 
 ## 階段 2：確認計劃
-- [ ] 顯示開發計劃給用戶（高效模式跳過）
-- [ ] 等待用戶確認（高效模式跳過）
+- [ ] 顯示開發計劃給用戶（快速模式跳過）
+- [ ] 等待用戶確認（快速模式跳過）
 - [ ] 🚨 保存開發計劃到 Git notes（包含 operationMode）← 容易遺漏
 - [ ] 🚨 驗證保存成功
 
@@ -253,7 +256,7 @@ AI 在以下時機，**必須**確認 Git notes 已保存：
 
 ## 階段 4：完成報告
 - [ ] 生成開發報告（根據 Jira 類型）
-- [ ] 顯示報告給用戶確認（高效模式跳過）
+- [ ] 顯示報告給用戶確認（快速模式跳過）
 - [ ] 更新 Git notes（如有報告）
 
 ## 階段 5：提交 MR
@@ -261,10 +264,10 @@ AI 在以下時機，**必須**確認 Git notes 已保存：
 - [ ] 執行 commit（多工模式已完成）
 - [ ] 建立 MR（自動讀取 notes 生成 description）
 - [ ] 🚨 多工模式：MR 關聯所有子任務單號
-- [ ] 🚨 高效模式：每任務獨立 MR
+- [ ] 🚨 快速模式：每任務獨立 MR
 
 ## 階段 6：通知（新增）
-- [ ] 🚨 高效模式：全部完成後發送系統通知
+- [ ] 🚨 快速模式：全部完成後發送系統通知
 - [ ] 多工模式：全部完成後發送系統通知
 ```
 
