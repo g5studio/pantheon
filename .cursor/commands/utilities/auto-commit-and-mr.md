@@ -15,6 +15,7 @@ description: 自動執行 commit 和建立 MR 的完整流程
 4. 執行 commit 並推送到遠端
 5. 自動建立 MR（包含 FE Board label、reviewer、draft 狀態、delete source branch）
 6. **自動提交 AI review**（`cr multiple-ticket` 指令強制包含送審功能，無法略過）
+7. **MR description 格式回歸檢查（CRITICAL）**：在提交/更新 MR 前，`create-mr.mjs` 會驗證 MR description 是否包含規範要求的開發報告格式（關聯單資訊/變更摘要/變更內容表格/風險評估表格；若可辨識為 Bug，需包含影響範圍與根本原因）。不符合將中止流程並提示補齊方式。
 
 **多 Ticket 驗證流程：**
 

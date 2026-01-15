@@ -15,6 +15,7 @@ description: 快速執行 commit 並建立 MR，略過關聯單號詢問（強�
 8. **Bug 類型強制追溯來源**：如果 Jira ticket 類型為 Bug，AI 必須在生成開發報告前執行 `git log` 追溯問題來源，並在報告中包含「造成問題的單號」區塊。詳細流程請參考 [auto-commit-and-mr.md](../utilities/auto-commit-and-mr.md) 中的「步驟 4.6. Bug 類型強制追溯來源」章節。
 9. **生成開發報告（CRITICAL）**：在建立 MR 前，**必須**根據 Jira ticket 資訊和變更內容生成開發報告，並傳遞給 `create-mr.mjs`。**推薦使用 `--development-report-file`**（避免 shell escape 導致 MR description 出現字面 `\n` 跑版）；仍可使用 `--development-report`。詳細格式與注意事項請參考 [commit-and-mr-guidelines.mdc](mdc:.cursor/rules/cr/commit-and-mr-guidelines.mdc) 中的「Development Report Requirement」章節。
 10. **讀取 Agent 版本（CRITICAL）**：在建立 MR 前，**必須**讀取 `version.json`（優先順序：`.pantheon/version.json` → `version.json` → `.cursor/version.json`）並透過 `--agent-version` 參數傳遞給 `create-mr.mjs`。
+11. **MR description 格式回歸檢查（CRITICAL）**：在提交/更新 MR 前，`create-mr.mjs` 會驗證 MR description 是否包含規範要求的開發報告格式（關聯單資訊/變更摘要/變更內容表格/風險評估表格；若可辨識為 Bug，需包含影響範圍與根本原因）。不符合將中止流程並提示補齊方式。
 
 **重要**：必須遵守 [ai-decision-making-priorities.mdc](mdc:.cursor/rules/ai-decision-making-priorities.mdc) 規則：當檢測到需要修改代碼的問題時，**必須立即停止並詢問用戶**，不能自動修復。**先詢問再修改 > 完成任務**。
 

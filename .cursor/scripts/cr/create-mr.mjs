@@ -1322,6 +1322,65 @@ function normalizeExternalMarkdownArg(input) {
   return content;
 }
 
+function hasMarkdownTable(content, expectedHeaderLine) {
+  if (!content) return false;
+  // normalizeExternalMarkdownArg 已將 CRLF 統一成 LF；這裡只做簡單判斷
+  const headerIdx = content.indexOf(expectedHeaderLine);
+  if (headerIdx === -1) return false;
+  const afterHeader = content.slice(headerIdx);
+  // 必須包含分隔線，且至少有一行資料列（簡單用 "\n|" 判斷）
+  return afterHeader.includes("\n|---|") && /(\n\|.+\|)/.test(afterHeader);
+}
+
+function validateMrDescriptionFormat(description, startTaskInfo) {
+  const desc = typeof description === "string" ? description : "";
+  const missing = [];
+
+  // 1) 關聯單資訊（必須）
+  if (
+    !desc.includes("## 📋 關聯單資訊") ||
+    !hasMarkdownTable(desc, "| 項目 | 值 |")
+  ) {
+    missing.push("## 📋 關聯單資訊（含表格）");
+  }
+
+  // 2) 變更摘要（必須）
+  if (!desc.includes("## 📝 變更摘要")) {
+    missing.push("## 📝 變更摘要");
+  }
+
+  // 3) 變更內容（必須：表格）
+  if (
+    !desc.includes("### 變更內容") ||
+    !hasMarkdownTable(desc, "| 檔案 | 狀態 | 說明 |")
+  ) {
+    missing.push("### 變更內容（含檔案表格：| 檔案 | 狀態 | 說明 |）");
+  }
+
+  // 4) 風險評估（必須：表格）
+  if (
+    !desc.includes("## ⚠️ 風險評估") ||
+    !hasMarkdownTable(desc, "| 檔案 | 風險等級 | 評估說明 |")
+  ) {
+    missing.push("## ⚠️ 風險評估（含表格：| 檔案 | 風險等級 | 評估說明 |）");
+  }
+
+  // 5) Bug 類型（若可辨識為 Bug，強制）
+  const issueType = startTaskInfo?.issueType;
+  const isBug =
+    typeof issueType === "string" && issueType.toLowerCase().includes("bug");
+  if (isBug) {
+    if (!desc.includes("## 影響範圍")) {
+      missing.push("## 影響範圍（Bug 類型必須）");
+    }
+    if (!desc.includes("## 根本原因")) {
+      missing.push("## 根本原因（Bug 類型必須）");
+    }
+  }
+
+  return { ok: missing.length === 0, missing, isBug };
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const targetBranchArg = args.find((arg) => arg.startsWith("--target="));
@@ -1894,6 +1953,36 @@ async function main() {
         sectionsToAppend
       );
     }
+  }
+
+  // 🚨 CRITICAL: MR description 開發報告格式回歸檢查（提交/更新 MR 前必須通過）
+  // - 規範來源：.cursor/rules/cr/commit-and-mr-guidelines.mdc（Development Report Requirement）
+  // - 若不符合，直接中止並提示使用 --development-report-file/--development-report 補齊
+  const descriptionValidation = validateMrDescriptionFormat(
+    description,
+    startTaskInfo
+  );
+  if (!descriptionValidation.ok) {
+    console.error("\n❌ MR description 開發報告格式不符合規範，已中止建立/更新 MR\n");
+    console.error("📋 缺少以下必要區塊：");
+    descriptionValidation.missing.forEach((m) => console.error(`- ${m}`));
+    console.error("");
+    if (descriptionValidation.isBug) {
+      console.error(
+        "💡 已偵測到 issueType 為 Bug，因此額外要求：## 影響範圍、## 根本原因\n"
+      );
+    }
+    console.error("✅ 修正方式建議（擇一）：");
+    console.error(
+      "1) 推薦：使用 --development-report-file 提供完整開發報告（避免 shell quoting / \\n 跑版）"
+    );
+    console.error("2) 或使用 --development-report 直接傳入 markdown 字串");
+    console.error("");
+    console.error("ℹ️  也可先更新 Git notes 的開發報告：");
+    console.error(
+      '   node .cursor/scripts/operator/update-development-report.mjs --report-file="development-report.md"\n'
+    );
+    process.exit(1);
   }
 
   if (existingMR) {
