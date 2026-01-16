@@ -2158,7 +2158,11 @@ async function main() {
           }
           console.log("");
 
-          if (!skipReview) {
+          if (skipReview) {
+            console.log("⏭️  跳過 AI review（--no-review）\n");
+          } else if (!getCompassApiToken()) {
+            console.log("⏭️  跳過 AI review（缺少 COMPASS_API_TOKEN）\n");
+          } else {
             console.log("🤖 正在提交 AI review...");
             try {
               await submitAIReview(mrUrl);
@@ -2183,8 +2187,6 @@ async function main() {
             } catch (error) {
               console.error(`⚠️  AI review 提交失敗: ${error.message}\n`);
             }
-          } else {
-            console.log("⏭️  跳過 AI review（--no-review）\n");
           }
         } else {
           console.log(result);
@@ -2302,7 +2304,11 @@ async function main() {
     }
     console.log("");
 
-    if (!skipReview) {
+    if (skipReview) {
+      console.log("⏭️  跳過 AI review（--no-review）\n");
+    } else if (!getCompassApiToken()) {
+      console.log("⏭️  跳過 AI review（缺少 COMPASS_API_TOKEN）\n");
+    } else {
       console.log("🤖 正在提交 AI review...");
       try {
         await submitAIReview(mr.web_url);
@@ -2326,8 +2332,6 @@ async function main() {
       } catch (error) {
         console.error(`⚠️  AI review 提交失敗: ${error.message}\n`);
       }
-    } else {
-      console.log("⏭️  跳過 AI review（--no-review）\n");
     }
   } catch (error) {
     console.error(`\n❌ ${error.message}\n`);

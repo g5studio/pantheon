@@ -12,6 +12,7 @@ description: 更新現有 MR（不產生實體檔案、merge 內容避免重複�
 - 開發報告一律透過 `--development-report` 傳入，**不得產出任何實體檔案**
 - 更新 description 以 merge 的概念進行（marker-based），避免報告重複
 - **用戶可要求不審核**（`--no-review`）
+- **若缺少 `COMPASS_API_TOKEN`，則會自動跳過 AI review**（其餘 MR 更新流程照常）
 - **未特別說明時預設要審核**，但前提是「相對於上次已送審狀態」有 new commit；否則不送
 
 ## 使用方式

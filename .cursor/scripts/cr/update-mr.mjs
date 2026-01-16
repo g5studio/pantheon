@@ -143,7 +143,8 @@ async function submitAIReview(mrUrl) {
   if (!apiKey) throw new Error("無法獲取 COMPASS_API_TOKEN");
 
   const email = await getAIReviewEmail();
-  if (!email) throw new Error("無法獲取 email（需 GitLab email 或 JIRA_EMAIL）");
+  if (!email)
+    throw new Error("無法獲取 email（需 GitLab email 或 JIRA_EMAIL）");
 
   const apiUrl =
     "https://mac09demac-mini.balinese-python.ts.net/api/workflows/jobs";
@@ -279,7 +280,13 @@ async function getMRDetails(token, host, projectPath, mrIid) {
   }
 }
 
-async function updateMRDescription(token, host, projectPath, mrIid, description) {
+async function updateMRDescription(
+  token,
+  host,
+  projectPath,
+  mrIid,
+  description
+) {
   const url = `${host}/api/v4/projects/${projectPath}/merge_requests/${mrIid}`;
   const body = { description };
   const response = await fetch(url, {
@@ -331,16 +338,25 @@ function validateMrDescriptionFormat(description, startTaskInfo) {
   const desc = typeof description === "string" ? description : "";
   const missing = [];
 
-  if (!desc.includes("## 📋 關聯單資訊") || !hasMarkdownTable(desc, "| 項目 | 值 |")) {
+  if (
+    !desc.includes("## 📋 關聯單資訊") ||
+    !hasMarkdownTable(desc, "| 項目 | 值 |")
+  ) {
     missing.push("## 📋 關聯單資訊（含表格）");
   }
   if (!desc.includes("## 📝 變更摘要")) {
     missing.push("## 📝 變更摘要");
   }
-  if (!desc.includes("### 變更內容") || !hasMarkdownTable(desc, "| 檔案 | 狀態 | 說明 |")) {
+  if (
+    !desc.includes("### 變更內容") ||
+    !hasMarkdownTable(desc, "| 檔案 | 狀態 | 說明 |")
+  ) {
     missing.push("### 變更內容（含檔案表格：| 檔案 | 狀態 | 說明 |）");
   }
-  if (!desc.includes("## ⚠️ 風險評估") || !hasMarkdownTable(desc, "| 檔案 | 風險等級 | 評估說明 |")) {
+  if (
+    !desc.includes("## ⚠️ 風險評估") ||
+    !hasMarkdownTable(desc, "| 檔案 | 風險等級 | 評估說明 |")
+  ) {
     missing.push("## ⚠️ 風險評估（含表格：| 檔案 | 風險等級 | 評估說明 |）");
   }
 
@@ -348,8 +364,10 @@ function validateMrDescriptionFormat(description, startTaskInfo) {
   const isBug =
     typeof issueType === "string" && issueType.toLowerCase().includes("bug");
   if (isBug) {
-    if (!desc.includes("## 影響範圍")) missing.push("## 影響範圍（Bug 類型必須）");
-    if (!desc.includes("## 根本原因")) missing.push("## 根本原因（Bug 類型必須）");
+    if (!desc.includes("## 影響範圍"))
+      missing.push("## 影響範圍（Bug 類型必須）");
+    if (!desc.includes("## 根本原因"))
+      missing.push("## 根本原因（Bug 類型必須）");
   }
 
   return { ok: missing.length === 0, missing, isBug };
@@ -381,10 +399,19 @@ async function listMrNotes(token, host, projectPath, mrIid, perPage = 100) {
   return await response.json();
 }
 
-async function upsertAiReviewMarkerNote(token, host, projectPath, mrIid, headSha) {
+async function upsertAiReviewMarkerNote(
+  token,
+  host,
+  projectPath,
+  mrIid,
+  headSha
+) {
   const notes = await listMrNotes(token, host, projectPath, mrIid, 100);
   const body = buildAiReviewMarkerBody(headSha);
-  const existing = notes.find((n) => typeof n.body === "string" && n.body.includes(AI_REVIEW_MARKER_PREFIX));
+  const existing = notes.find(
+    (n) =>
+      typeof n.body === "string" && n.body.includes(AI_REVIEW_MARKER_PREFIX)
+  );
 
   if (existing?.id) {
     const url = `${host}/api/v4/projects/${projectPath}/merge_requests/${mrIid}/notes/${existing.id}`;
@@ -419,7 +446,8 @@ async function upsertAiReviewMarkerNote(token, host, projectPath, mrIid, headSha
 }
 
 function upsertDevelopmentReport(existingDescription, reportMarkdown) {
-  const base = typeof existingDescription === "string" ? existingDescription : "";
+  const base =
+    typeof existingDescription === "string" ? existingDescription : "";
   const reportBlock = `${REPORT_START}\n${reportMarkdown.trim()}\n${REPORT_END}`;
 
   // Case 1: marker 已存在 → replace
@@ -507,13 +535,28 @@ async function main() {
   const projectInfo = getProjectInfo();
 
   if (!mrIid && token) {
-    const mr = await findExistingMR(token, projectInfo.host, projectInfo.projectPath, currentBranch);
+    const mr = await findExistingMR(
+      token,
+      projectInfo.host,
+      projectInfo.projectPath,
+      currentBranch
+    );
     if (mr) {
       mrIid = mr.iid;
-      mrDetails = await getMRDetails(token, projectInfo.host, projectInfo.projectPath, mrIid);
+      mrDetails = await getMRDetails(
+        token,
+        projectInfo.host,
+        projectInfo.projectPath,
+        mrIid
+      );
     }
   } else if (mrIid && !mrDetails && token) {
-    mrDetails = await getMRDetails(token, projectInfo.host, projectInfo.projectPath, mrIid);
+    mrDetails = await getMRDetails(
+      token,
+      projectInfo.host,
+      projectInfo.projectPath,
+      mrIid
+    );
   }
 
   if (!mrIid || !mrDetails) {
@@ -526,13 +569,21 @@ async function main() {
   // merge description（避免重複）
   const existingDescription =
     typeof mrDetails.description === "string" ? mrDetails.description : "";
-  const mergedDescription = upsertDevelopmentReport(existingDescription, externalReport);
+  const mergedDescription = upsertDevelopmentReport(
+    existingDescription,
+    externalReport
+  );
 
   // 格式驗證（回歸檢查）
   const startTaskInfo = readStartTaskInfo();
-  const validation = validateMrDescriptionFormat(mergedDescription, startTaskInfo);
+  const validation = validateMrDescriptionFormat(
+    mergedDescription,
+    startTaskInfo
+  );
   if (!validation.ok) {
-    console.error("\n❌ MR description 開發報告格式不符合規範，已中止更新 MR\n");
+    console.error(
+      "\n❌ MR description 開發報告格式不符合規範，已中止更新 MR\n"
+    );
     console.error("📋 缺少以下必要區塊：");
     validation.missing.forEach((m) => console.error(`- ${m}`));
     console.error("");
@@ -546,9 +597,19 @@ async function main() {
       process.exit(1);
     }
     // 如果 glab 已登入但沒 token，仍可嘗試要求用戶輸入 token 以走 API（避免 glab update flags 差異）
-    console.log("\n🔐 請輸入 GitLab Personal Access Token 以更新 MR（需要 api 權限）\n");
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    token = await new Promise((resolve) => rl.question("Token: ", (t) => { rl.close(); resolve(t.trim()); }));
+    console.log(
+      "\n🔐 請輸入 GitLab Personal Access Token 以更新 MR（需要 api 權限）\n"
+    );
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    token = await new Promise((resolve) =>
+      rl.question("Token: ", (t) => {
+        rl.close();
+        resolve(t.trim());
+      })
+    );
     if (!token) process.exit(1);
     try {
       if (hasGlab() && !isGlabAuthenticated(hostname)) {
@@ -559,7 +620,13 @@ async function main() {
     }
   }
 
-  const updated = await updateMRDescription(token, projectInfo.host, projectInfo.projectPath, mrIid, mergedDescription);
+  const updated = await updateMRDescription(
+    token,
+    projectInfo.host,
+    projectInfo.projectPath,
+    mrIid,
+    mergedDescription
+  );
 
   console.log("\n✅ MR 更新成功！\n");
   console.log(`🔗 MR 連結: [MR !${updated.iid}](${updated.web_url})`);
@@ -574,6 +641,13 @@ async function main() {
     return;
   }
 
+  // 若未配置 COMPASS_API_TOKEN，視為環境不支援 AI review：僅跳過送審，其餘流程照常
+  // 並且不進行任何 new commit / SHA / marker 判斷（避免不必要的耦合）
+  if (!getCompassApiToken()) {
+    console.log("\n⏭️  跳過 AI review（缺少 COMPASS_API_TOKEN）\n");
+    return;
+  }
+
   const mrWebUrl = mrDetails?.web_url || updated?.web_url;
   const mrHeadSha = mrDetails?.diff_refs?.head_sha || mrDetails?.sha || null;
   if (!mrHeadSha) {
@@ -584,7 +658,13 @@ async function main() {
   // 取得上次已送審的 head sha（從 MR notes 的 marker）
   let lastReviewedSha = null;
   try {
-    const notes = await listMrNotes(token, projectInfo.host, projectInfo.projectPath, mrIid, 100);
+    const notes = await listMrNotes(
+      token,
+      projectInfo.host,
+      projectInfo.projectPath,
+      mrIid,
+      100
+    );
     for (const n of notes) {
       const sha = extractAiReviewShaFromText(n?.body);
       if (sha) {
@@ -597,7 +677,9 @@ async function main() {
   }
 
   if (lastReviewedSha && lastReviewedSha === mrHeadSha) {
-    console.log("\n⏭️  未偵測到 new commit（MR head SHA 與上次已送審 SHA 相同），跳過 AI review\n");
+    console.log(
+      "\n⏭️  未偵測到 new commit（MR head SHA 與上次已送審 SHA 相同），跳過 AI review\n"
+    );
     return;
   }
 
@@ -607,7 +689,9 @@ async function main() {
     const localHead = getLocalHeadSha();
     const originHead = getOriginHeadSha(currentBranch);
     if (originHead !== localHead) {
-      console.error("\n❌ 偵測到本地有新 commit 尚未推送，請先 push 後再更新/送審\n");
+      console.error(
+        "\n❌ 偵測到本地有新 commit 尚未推送，請先 push 後再更新/送審\n"
+      );
       process.exit(1);
     }
   } catch {
@@ -629,7 +713,13 @@ async function main() {
   }
 
   try {
-    await upsertAiReviewMarkerNote(token, projectInfo.host, projectInfo.projectPath, mrIid, mrHeadSha);
+    await upsertAiReviewMarkerNote(
+      token,
+      projectInfo.host,
+      projectInfo.projectPath,
+      mrIid,
+      mrHeadSha
+    );
     console.log(`🧷 已更新 AI_REVIEW_SHA 狀態: ${mrHeadSha}\n`);
   } catch (error) {
     console.error(`\n❌ 無法寫入 AI_REVIEW_SHA 狀態: ${error.message}\n`);
@@ -641,5 +731,3 @@ main().catch((error) => {
   console.error(`\n❌ 發生錯誤: ${error.message}\n`);
   process.exit(1);
 });
-
-

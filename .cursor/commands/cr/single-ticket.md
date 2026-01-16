@@ -10,7 +10,7 @@ description: 快速執行 commit 並建立 MR，略過關聯單號詢問（預�
 3. 執行 commit 並推送到遠端
 4. **略過關聯單號詢問環節**，直接使用當前分支單號
 5. 自動建立 MR（包含 FE Board label、reviewer、draft 狀態、delete source branch）
-6. **預設提交 AI review**（用戶可用 `--no-review` 明確跳過；若為更新既有 MR，會由 `update-mr.mjs` 依「new commit gate」決定是否送審）
+6. **預設提交 AI review**（用戶可用 `--no-review` 明確跳過；若缺少 `COMPASS_API_TOKEN` 則會自動跳過 AI review；若為更新既有 MR，會由 `update-mr.mjs` 決定是否送審）
 7. **自動檢查 Cursor rules**：在執行 commit 之前，AI 會檢查代碼是否符合 Cursor rules。如果檢測到違規，會自動顯示系統通知（macOS/Windows）並自動切換到 Cursor，停止 commit 流程
 8. **Bug 類型強制追溯來源**：如果 Jira ticket 類型為 Bug，AI 必須在生成開發報告前執行 `git log` 追溯問題來源，並在報告中包含「造成問題的單號」區塊。詳細流程請參考 [auto-commit-and-mr.md](../utilities/auto-commit-and-mr.md) 中的「步驟 4.6. Bug 類型強制追溯來源」章節。
 9. **生成開發報告（CRITICAL）**：在建立 MR 前，**必須**根據 Jira ticket 資訊和變更內容生成開發報告，並透過 `--development-report` 傳遞給 `create-mr.mjs`。**CRITICAL**：Agent 必須確保傳入的是「不跑版」的 Markdown（避免出現字面 `\n`）。
