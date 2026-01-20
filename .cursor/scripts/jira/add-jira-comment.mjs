@@ -34,11 +34,109 @@ function parseJiraUrl(url) {
  * @param {string} text - 純文字內容
  * @returns {Object} ADF 格式的文件物件
  */
+function normalizePipeRowCells(line) {
+  // 支援以下格式：
+  // | a | b |
+  // a | b
+  // | a | b
+  // a | b |
+  const trimmed = (line ?? "").trim();
+  if (!trimmed.includes("|")) return null;
+
+  const parts = trimmed.split("|").map((s) => s.trim());
+  // 移除因 leading/trailing pipe 造成的空白 cell
+  if (parts.length > 0 && parts[0] === "") parts.shift();
+  if (parts.length > 0 && parts[parts.length - 1] === "") parts.pop();
+
+  if (parts.length === 0) return null;
+  return parts;
+}
+
+function isMarkdownTableSeparatorLine(line, expectedCols) {
+  const cells = normalizePipeRowCells(line);
+  if (!cells) return false;
+  if (typeof expectedCols === "number" && cells.length !== expectedCols) {
+    return false;
+  }
+  return cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
+function makeAdfTextParagraph(text) {
+  const trimmed = (text ?? "").trim();
+  if (!trimmed) {
+    // 空 cell：用空段落，避免 ADF schema 不接受完全空 content
+    return { type: "paragraph", content: [] };
+  }
+  return {
+    type: "paragraph",
+    content: [{ type: "text", text: trimmed }],
+  };
+}
+
+function markdownPipeTableToADF(paragraph) {
+  const lines = (paragraph ?? "")
+    .split(/\n/)
+    .map((l) => l.trimEnd())
+    .filter((l) => l.length > 0);
+
+  // 最小結構：header + separator
+  if (lines.length < 2) return null;
+
+  const headerCells = normalizePipeRowCells(lines[0]);
+  if (!headerCells) return null;
+
+  // 第二行必須是 separator line
+  if (!isMarkdownTableSeparatorLine(lines[1], headerCells.length)) return null;
+
+  // 後續每一行也必須是 table row（pipe row）
+  const bodyRowCells = [];
+  for (let i = 2; i < lines.length; i++) {
+    const row = normalizePipeRowCells(lines[i]);
+    if (!row) return null;
+    bodyRowCells.push(row);
+  }
+
+  const colCount = headerCells.length;
+
+  const headerRow = {
+    type: "tableRow",
+    content: headerCells.map((cell) => ({
+      type: "tableHeader",
+      content: [makeAdfTextParagraph(cell)],
+    })),
+  };
+
+  const rows = bodyRowCells.map((cells) => {
+    const normalized = cells.slice(0, colCount);
+    while (normalized.length < colCount) normalized.push("");
+
+    return {
+      type: "tableRow",
+      content: normalized.map((cell) => ({
+        type: "tableCell",
+        content: [makeAdfTextParagraph(cell)],
+      })),
+    };
+  });
+
+  return {
+    type: "table",
+    // attrs 可省略；保留最小可用結構，避免不同 Jira schema 差異
+    content: [headerRow, ...rows],
+  };
+}
+
 function textToADF(text) {
   // 將文字按換行符分割成段落
   const paragraphs = text.split(/\n\n+/);
 
   const content = paragraphs.map((paragraph) => {
+    // 1) 優先嘗試：Markdown pipe table → ADF table
+    const tableNode = markdownPipeTableToADF(paragraph);
+    if (tableNode) {
+      return tableNode;
+    }
+
     // 處理段落內的換行（單個換行符）
     const lines = paragraph.split(/\n/);
 
@@ -228,6 +326,11 @@ function showHelp() {
   -c, --comment=<value> 指定評論內容
   -i, --internal        設為內部評論（僅 Jira Service Management 有效）
   -h, --help            顯示此說明
+
+支援格式:
+  - ✅ 多行純文字（段落 + 換行）
+  - ✅ Markdown pipe table（例如 | a | b | / |---|---|），會轉成 Jira 表格
+  - ❌ 其他 Markdown（如標題、清單、code block）目前仍以純文字呈現
 
 範例:
   # 基本用法

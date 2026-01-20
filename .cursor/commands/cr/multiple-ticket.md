@@ -1,5 +1,5 @@
 ---
-description: 快速執行 commit 並建立 MR 的完整流程，必須提供多於一個 Jira ticket（強制包含送審）
+description: 快速執行 commit 並建立 MR 的完整流程，必須提供多於一個 Jira ticket（預設送審，可用 --no-review 跳過）
 ---
 
 請參考 [auto-commit-and-mr.md](../auto-commit-and-mr.md) 中的 `cr multiple-ticket` 指令說明。
@@ -16,11 +16,12 @@ description: 快速執行 commit 並建立 MR 的完整流程，必須提供多�
 3. 從上下文推斷 commit 信息（type, ticket, message）
 4. 執行 commit 並推送到遠端
 5. 自動建立 MR（包含 FE Board label、reviewer、draft 狀態、delete source branch）
-6. **自動提交 AI review**（`cr multiple-ticket` 指令強制包含送審功能，無法略過）
+6. **預設提交 AI review**（用戶可用 `--no-review` 明確跳過；若缺少 `COMPASS_API_TOKEN` 則會自動跳過 AI review；若為更新既有 MR，會由 `update-mr.mjs` 決定是否送審）
 7. **自動檢查 Cursor rules**：在執行 commit 之前，AI 會檢查代碼是否符合 Cursor rules
 8. **Bug 類型強制追溯來源**：如果 Jira ticket 類型為 Bug，AI 必須在生成開發報告前執行 `git log` 追溯問題來源，並在報告中包含「造成問題的單號」區塊。詳細流程請參考 [auto-commit-and-mr.md](../utilities/auto-commit-and-mr.md) 中的「步驟 4.6. Bug 類型強制追溯來源」章節。
-9. **生成開發報告（CRITICAL）**：在建立 MR 前，**必須**根據 Jira ticket 資訊和變更內容生成開發報告，並透過 `--development-report` 參數傳遞給 `create-mr.mjs`。詳細格式請參考 [commit-and-mr-guidelines.mdc](mdc:.cursor/rules/cr/commit-and-mr-guidelines.mdc) 中的「Development Report Requirement」章節。
+9. **生成開發報告（CRITICAL）**：在建立 MR 前，**必須**根據 Jira ticket 資訊和變更內容生成開發報告，並透過 `--development-report` 傳遞給 `create-mr.mjs`。**CRITICAL**：Agent 必須確保傳入的是「不跑版」的 Markdown（避免出現字面 `\n`）。
 10. **讀取 Agent 版本（CRITICAL）**：在建立 MR 前，**必須**讀取 `version.json`（優先順序：`.pantheon/version.json` → `version.json` → `.cursor/version.json`）並透過 `--agent-version` 參數傳遞給 `create-mr.mjs`。
+11. **MR description 格式回歸檢查（CRITICAL）**：在建立/更新 MR 前，腳本會驗證 MR description 是否包含規範要求的開發報告格式（關聯單資訊/變更摘要/變更內容表格/風險評估表格；若可辨識為 Bug，需包含影響範圍與根本原因）。不符合將中止流程並提示補齊方式（`create-mr.mjs` 僅用於建立；更新請使用 `update-mr.mjs`）。
 
 ## 多 Ticket 驗證流程
 
@@ -111,6 +112,7 @@ AI 提示:
   - **重要**：AI 自動執行 `cr multiple-ticket` 命令時，**不應傳遞 `--reviewer` 參數**，讓腳本自動從環境變數讀取或使用預設值
 - `cr multiple-ticket --target=branch-name`：指定目標分支（預設: "main"）
 - `cr multiple-ticket --no-draft`：不使用 draft 狀態（預設為 draft）
+- `cr multiple-ticket --no-review`：明確跳過 AI review（不送審）
 - `cr multiple-ticket --related-tickets="IN-1235,IN-1236"`：指定關聯單號（多個單號用逗號分隔）
 - `cr multiple-ticket --no-notify`：停用所有系統通知功能（預設為開啟）
 
@@ -152,4 +154,4 @@ AI 提示:
 
 - `cr multiple-ticket` 指令**必須**有多於一個 Jira ticket（當前分支單號 + 至少一個關聯單號）
 - 如果只需要使用單一 ticket，請使用 `cr single-ticket` 指令
-- `cr multiple-ticket` 指令無法略過送審步驟。如需不送審的流程，請使用 `commit-and-push` 指令
+- `cr multiple-ticket` 指令預設會送審；如需不送審，請使用 `--no-review`

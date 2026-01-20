@@ -6,7 +6,7 @@
  */
 
 import { execSync, spawnSync } from "child_process";
-import { join } from "path";
+import { join, isAbsolute } from "path";
 import readline from "readline";
 import { readFileSync, existsSync } from "fs";
 import {
@@ -969,6 +969,120 @@ async function submitAIReview(mrUrl) {
   }
 }
 
+const AI_REVIEW_MARKER_PREFIX = "PANTHEON_AI_REVIEW_SHA:";
+
+function buildAiReviewMarkerBody(headSha) {
+  return `${AI_REVIEW_MARKER_PREFIX} ${headSha}`;
+}
+
+async function listMrNotesWithToken(
+  token,
+  host,
+  projectPath,
+  mrIid,
+  perPage = 100
+) {
+  const url = `${host}/api/v4/projects/${projectPath}/merge_requests/${mrIid}/notes?per_page=${perPage}&sort=desc&order_by=updated_at`;
+  const response = await fetch(url, { headers: { "PRIVATE-TOKEN": token } });
+  if (!response.ok) return [];
+  return await response.json();
+}
+
+async function upsertAiReviewMarkerNoteWithToken(
+  token,
+  host,
+  projectPath,
+  mrIid,
+  headSha
+) {
+  const notes = await listMrNotesWithToken(
+    token,
+    host,
+    projectPath,
+    mrIid,
+    100
+  );
+  const body = buildAiReviewMarkerBody(headSha);
+  const existing = notes.find(
+    (n) =>
+      typeof n.body === "string" && n.body.includes(AI_REVIEW_MARKER_PREFIX)
+  );
+
+  if (existing?.id) {
+    const url = `${host}/api/v4/projects/${projectPath}/merge_requests/${mrIid}/notes/${existing.id}`;
+    const response = await fetch(url, {
+      method: "PUT",
+      headers: {
+        "PRIVATE-TOKEN": token,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ body }),
+    });
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`更新 AI_REVIEW_SHA note 失敗: ${err}`);
+    }
+    return;
+  }
+
+  const createUrl = `${host}/api/v4/projects/${projectPath}/merge_requests/${mrIid}/notes`;
+  const createRes = await fetch(createUrl, {
+    method: "POST",
+    headers: {
+      "PRIVATE-TOKEN": token,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ body }),
+  });
+  if (!createRes.ok) {
+    const err = await createRes.text();
+    throw new Error(`建立 AI_REVIEW_SHA note 失敗: ${err}`);
+  }
+}
+
+function glabApiJson(path) {
+  const output = exec(`glab api "${path}"`, { silent: true }).trim();
+  return output ? JSON.parse(output) : null;
+}
+
+function glabApiRequest(method, path, fields = {}) {
+  const fieldArgs = Object.entries(fields)
+    .map(([k, v]) => `-f ${k}=${JSON.stringify(v)}`)
+    .join(" ");
+  const cmd = `glab api -X ${method} "${path}" ${fieldArgs}`.trim();
+  const output = exec(cmd, { silent: true }).trim();
+  return output ? JSON.parse(output) : null;
+}
+
+async function upsertAiReviewMarkerNoteWithGlab(projectPath, mrIid, headSha) {
+  const notes = glabApiJson(
+    `projects/${projectPath}/merge_requests/${mrIid}/notes?per_page=100&sort=desc&order_by=updated_at`
+  );
+  const body = buildAiReviewMarkerBody(headSha);
+  const list = Array.isArray(notes) ? notes : [];
+  const existing = list.find(
+    (n) =>
+      typeof n.body === "string" && n.body.includes(AI_REVIEW_MARKER_PREFIX)
+  );
+
+  if (existing?.id) {
+    glabApiRequest(
+      "PUT",
+      `projects/${projectPath}/merge_requests/${mrIid}/notes/${existing.id}`,
+      { body }
+    );
+    return;
+  }
+
+  glabApiRequest(
+    "POST",
+    `projects/${projectPath}/merge_requests/${mrIid}/notes`,
+    {
+      body,
+    }
+  );
+}
+
 // 更新 MR
 async function updateMR(
   token,
@@ -1247,6 +1361,140 @@ function generateAgentVersionSection(versionInfo) {
   return lines.join("\n");
 }
 
+function resolvePathFromProjectRoot(filePath) {
+  if (!filePath) return null;
+  return isAbsolute(filePath) ? filePath : join(projectRoot, filePath);
+}
+
+function readUtf8FileFromProjectRoot(filePath) {
+  const resolved = resolvePathFromProjectRoot(filePath);
+  if (!resolved) return null;
+  if (!existsSync(resolved)) {
+    throw new Error(`找不到檔案: ${filePath}`);
+  }
+  // 移除 UTF-8 BOM，並保留原始換行
+  return readFileSync(resolved, "utf-8").replace(/^\uFEFF/, "");
+}
+
+function appendSectionIfMissing(base, section) {
+  const baseStr = typeof base === "string" ? base : "";
+  const secStr = typeof section === "string" ? section : "";
+  const trimmedSec = secStr.trim();
+
+  if (!trimmedSec) return baseStr;
+
+  const trimmedBase = baseStr.trimEnd();
+  if (!trimmedBase) return trimmedSec;
+
+  // 避免重複追加完全相同的內容（以完整區塊字串比對）
+  if (trimmedBase.includes(trimmedSec)) return baseStr;
+
+  return `${trimmedBase}\n\n${trimmedSec}\n`;
+}
+
+function mergeExistingMrDescription(
+  existingDescription,
+  sectionsToAppend = []
+) {
+  let merged =
+    typeof existingDescription === "string" ? existingDescription : "";
+  for (const section of sectionsToAppend) {
+    merged = appendSectionIfMissing(merged, section);
+  }
+  return merged;
+}
+
+// 將外部傳入的 markdown（例如 --development-report）轉成適合直接拼接進 MR description 的內容
+// - 支援 JSON string（JSON.parse 後會自動把 \n 轉成真正換行）
+// - 容錯處理字面 "\\n"（避免 GitLab MR description 出現 "\n" 跑版）
+function normalizeExternalMarkdownArg(input) {
+  if (!input) return null;
+
+  let content = input;
+  try {
+    const parsed = JSON.parse(input);
+    if (typeof parsed === "string") {
+      content = parsed;
+    } else {
+      content = JSON.stringify(parsed, null, 2);
+    }
+  } catch {
+    // ignore
+  }
+
+  // 統一換行風格（避免 Windows CRLF 造成表格分隔異常）
+  content = content.replace(/\r\n/g, "\n");
+
+  // 只有在「完全沒有真換行」但出現字面 "\n" 時才轉換，避免影響已經是正常 markdown 的內容
+  if (!content.includes("\n") && /\\n/.test(content)) {
+    content = content.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n");
+  }
+  if (!content.includes("\t") && /\\t/.test(content)) {
+    content = content.replace(/\\t/g, "\t");
+  }
+
+  return content;
+}
+
+function hasMarkdownTable(content, expectedHeaderLine) {
+  if (!content) return false;
+  // normalizeExternalMarkdownArg 已將 CRLF 統一成 LF；這裡只做簡單判斷
+  const headerIdx = content.indexOf(expectedHeaderLine);
+  if (headerIdx === -1) return false;
+  const afterHeader = content.slice(headerIdx);
+  // 必須包含分隔線，且至少有一行資料列（簡單用 "\n|" 判斷）
+  return afterHeader.includes("\n|---|") && /(\n\|.+\|)/.test(afterHeader);
+}
+
+function validateMrDescriptionFormat(description, startTaskInfo) {
+  const desc = typeof description === "string" ? description : "";
+  const missing = [];
+
+  // 1) 關聯單資訊（必須）
+  if (
+    !desc.includes("## 📋 關聯單資訊") ||
+    !hasMarkdownTable(desc, "| 項目 | 值 |")
+  ) {
+    missing.push("## 📋 關聯單資訊（含表格）");
+  }
+
+  // 2) 變更摘要（必須）
+  if (!desc.includes("## 📝 變更摘要")) {
+    missing.push("## 📝 變更摘要");
+  }
+
+  // 3) 變更內容（必須：表格）
+  if (
+    !desc.includes("### 變更內容") ||
+    !hasMarkdownTable(desc, "| 檔案 | 狀態 | 說明 |")
+  ) {
+    missing.push("### 變更內容（含檔案表格：| 檔案 | 狀態 | 說明 |）");
+  }
+
+  // 4) 風險評估（必須：表格）
+  if (
+    !desc.includes("## ⚠️ 風險評估") ||
+    !hasMarkdownTable(desc, "| 檔案 | 風險等級 | 評估說明 |")
+  ) {
+    missing.push("## ⚠️ 風險評估（含表格：| 檔案 | 風險等級 | 評估說明 |）");
+  }
+
+  // 5) Bug 類型（若可辨識為 Bug，強制）
+  const issueType = startTaskInfo?.issueType;
+  const isBug =
+    typeof issueType === "string" && issueType.toLowerCase().includes("bug");
+  if (isBug) {
+    if (!desc.includes("## 影響範圍")) {
+      missing.push("## 影響範圍（Bug 類型必須）");
+    }
+    if (!desc.includes("## 根本原因")) {
+      missing.push("## 根本原因（Bug 類型必須）");
+    }
+  }
+
+  return { ok: missing.length === 0, missing, isBug };
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const targetBranchArg = args.find((arg) => arg.startsWith("--target="));
@@ -1289,9 +1537,13 @@ async function main() {
   const developmentReportArg = args.find((arg) =>
     arg.startsWith("--development-report=")
   );
-  const externalDevelopmentReport = developmentReportArg
-    ? developmentReportArg.split("=").slice(1).join("=")
+  const externalDevelopmentReportFromArg = developmentReportArg
+    ? normalizeExternalMarkdownArg(
+        developmentReportArg.split("=").slice(1).join("=")
+      )
     : null;
+
+  const externalDevelopmentReport = externalDevelopmentReportFromArg;
 
   // 檢查是否有未提交的變更
   const uncommittedChanges = getGitStatus();
@@ -1530,6 +1782,12 @@ async function main() {
 
   // 構建 description
   let description = "";
+  // 這些區塊用於「更新既有 MR」時做擴充追加（不可覆蓋原 description）
+  let developmentPlanSectionToAppend = null;
+  let developmentReportSectionToAppend = null;
+  let relatedTicketsSectionToAppend = null;
+  let agentVersionSectionToAppend = null;
+
   if (relatedTicketsArg) {
     const relatedTickets = relatedTicketsArg
       .split(/[,\s]+/)
@@ -1560,6 +1818,7 @@ async function main() {
     if (externalDevelopmentPlan.raw) {
       // 外部傳入完整計劃，直接使用
       console.log("📋 使用外部傳入的完整開發計劃\n");
+      developmentPlanSectionToAppend = externalDevelopmentPlan.raw;
       description = description
         ? `${description}\n\n${externalDevelopmentPlan.raw}`
         : externalDevelopmentPlan.raw;
@@ -1570,6 +1829,7 @@ async function main() {
       );
       if (planSection) {
         console.log("📋 檢測到開發計劃，將添加到 MR description\n");
+        developmentPlanSectionToAppend = planSection;
         description = description
           ? `${description}\n\n${planSection}`
           : planSection;
@@ -1581,6 +1841,7 @@ async function main() {
       const planSection = generateDevelopmentPlanSection(startTaskInfo);
       if (planSection) {
         console.log("📋 檢測到開發計劃，將添加到 MR description\n");
+        developmentPlanSectionToAppend = planSection;
         description = description
           ? `${description}\n\n${planSection}`
           : planSection;
@@ -1594,6 +1855,7 @@ async function main() {
   // - 開發報告（--development-report）：開發完成後的報告，包含影響範圍、根本原因、改動差異等
   if (externalDevelopmentReport) {
     console.log("📊 使用外部傳入的開發報告\n");
+    developmentReportSectionToAppend = externalDevelopmentReport;
     description = description
       ? `${description}\n\n${externalDevelopmentReport}`
       : externalDevelopmentReport;
@@ -1604,6 +1866,7 @@ async function main() {
     const relatedTicketsSection = generateRelatedTicketsSection(startTaskInfo);
     if (relatedTicketsSection) {
       console.log("📋 添加關聯單資訊到 MR description\n");
+      relatedTicketsSectionToAppend = relatedTicketsSection;
       description = description
         ? `${description}\n\n${relatedTicketsSection}`
         : relatedTicketsSection;
@@ -1615,6 +1878,7 @@ async function main() {
     const versionSection = generateAgentVersionSection(agentVersionInfo);
     if (versionSection) {
       console.log("🤖 檢測到 Agent 版本資訊，將添加到 MR description 最下方\n");
+      agentVersionSectionToAppend = versionSection;
       description = description
         ? `${description}\n\n${versionSection}`
         : versionSection;
@@ -1735,6 +1999,17 @@ async function main() {
     }
   }
 
+  // 🚨 CRITICAL: create-mr 僅用於「建立新 MR」；若已存在 MR，必須改用 update-mr 更新
+  if (existingMRId) {
+    console.error("\n❌ 已存在 MR，create-mr 不會更新既有 MR\n");
+    console.error(`📋 當前分支: ${currentBranch}`);
+    console.error(`📊 現有 MR: !${existingMRId}`);
+    console.error(
+      '✅ 請改用：node .cursor/scripts/cr/update-mr.mjs --development-report="<markdown>"\n'
+    );
+    process.exit(1);
+  }
+
   // 檢查是否應該更新 reviewer
   if (existingMRDetails) {
     const hasExistingReviewers =
@@ -1753,11 +2028,41 @@ async function main() {
     }
   }
 
-  if (existingMR) {
-    console.log("🔄 更新現有 Merge Request...\n");
-  } else {
-    console.log("\n🔨 建立 Merge Request...\n");
+  // 🚨 CRITICAL: MR description 開發報告格式回歸檢查（提交/更新 MR 前必須通過）
+  // - 規範來源：.cursor/rules/cr/commit-and-mr-guidelines.mdc（Development Report Requirement）
+  // - 若不符合，直接中止並提示補齊 --development-report
+  const descriptionValidation = validateMrDescriptionFormat(
+    description,
+    startTaskInfo
+  );
+  if (!descriptionValidation.ok) {
+    console.error(
+      "\n❌ MR description 開發報告格式不符合規範，已中止建立/更新 MR\n"
+    );
+    console.error("📋 缺少以下必要區塊：");
+    descriptionValidation.missing.forEach((m) => console.error(`- ${m}`));
+    console.error("");
+    if (descriptionValidation.isBug) {
+      console.error(
+        "💡 已偵測到 issueType 為 Bug，因此額外要求：## 影響範圍、## 根本原因\n"
+      );
+    }
+    console.error("✅ 修正方式建議（擇一）：");
+    console.error(
+      "1) 使用 --development-report 傳入完整 markdown（需確保不跑版）"
+    );
+    console.error(
+      "2) 若你是用 shell 傳參，建議使用 heredoc 或傳入 JSON string（讓腳本自動轉成真正換行）"
+    );
+    console.error("");
+    console.error("ℹ️  也可先更新 Git notes 的開發報告：");
+    console.error(
+      '   node .cursor/scripts/operator/update-development-report.mjs --report-file="development-report.md"\n'
+    );
+    process.exit(1);
   }
+
+  console.log("\n🔨 建立 Merge Request...\n");
 
   console.log(`🌿 來源分支: ${currentBranch}`);
   console.log(`🎯 目標分支: ${targetBranch}`);
@@ -1822,117 +2127,79 @@ async function main() {
     }
 
     if (isGlabAuthenticated(hostname)) {
-      if (existingMR) {
-        console.log("✅ 使用 GitLab CLI (glab) 更新 MR...\n");
-        try {
-          const result = updateMRWithGlab(
-            existingMRId,
-            null,
-            description,
-            draft,
-            reviewer,
-            labels,
-            shouldUpdateReviewer
-          );
+      console.log("✅ 使用 GitLab CLI (glab) 建立 MR...\n");
+      try {
+        const result = createMRWithGlab(
+          currentBranch,
+          targetBranch,
+          mrTitle,
+          description,
+          draft,
+          reviewer,
+          assignee,
+          labels
+        );
 
-          console.log("\n✅ MR 更新成功！\n");
+        console.log("\n✅ MR 建立成功！\n");
 
-          const mrUrlMatch = result.match(
-            /https:\/\/[^\s]+merge_requests\/(\d+)/
-          );
-          if (mrUrlMatch) {
-            const mrUrl = mrUrlMatch[0];
-            const mrId = mrUrlMatch[1];
-            console.log(`🔗 MR 連結: [MR !${mrId}](${mrUrl})`);
-            console.log(`📊 MR ID: !${mrId}`);
+        const mrUrlMatch = result.match(
+          /https:\/\/[^\s]+merge_requests\/(\d+)/
+        );
+        if (mrUrlMatch) {
+          const mrUrl = mrUrlMatch[0];
+          const mrId = mrUrlMatch[1];
+          console.log(`🔗 MR 連結: [MR !${mrId}](${mrUrl})`);
+          console.log(`📊 MR ID: !${mrId}`);
 
-            const jiraTickets = extractJiraTickets(description);
-            if (jiraTickets.length > 0) {
-              const jiraLinks = formatJiraTicketsAsLinks(jiraTickets);
-              console.log(`🎫 關聯 Jira: ${jiraLinks}`);
-            }
-            console.log("");
+          const jiraTickets = extractJiraTickets(description);
+          if (jiraTickets.length > 0) {
+            const jiraLinks = formatJiraTicketsAsLinks(jiraTickets);
+            console.log(`🎫 關聯 Jira: ${jiraLinks}`);
+          }
+          console.log("");
 
-            if (!skipReview) {
-              console.log("🤖 正在提交 AI review...");
-              try {
-                await submitAIReview(mrUrl);
-                console.log("✅ AI review 已提交\n");
-              } catch (error) {
-                console.error(`⚠️  AI review 提交失敗: ${error.message}\n`);
-              }
-            } else {
-              console.log("⏭️  跳過 AI review（--no-review）\n");
-            }
+          if (skipReview) {
+            console.log("⏭️  跳過 AI review（--no-review）\n");
+          } else if (!getCompassApiToken()) {
+            console.log("⏭️  跳過 AI review（缺少 COMPASS_API_TOKEN）\n");
           } else {
-            console.log(result);
-            if (!skipReview) {
-              console.log("⚠️  無法提取 MR URL，跳過 AI review 提交\n");
-            } else {
-              console.log("⏭️  跳過 AI review（--no-review）\n");
+            console.log("🤖 正在提交 AI review...");
+            try {
+              await submitAIReview(mrUrl);
+              console.log("✅ AI review 已提交\n");
+
+              try {
+                const projectInfoForNote = getProjectInfo();
+                const headSha = exec("git rev-parse HEAD", {
+                  silent: true,
+                }).trim();
+                await upsertAiReviewMarkerNoteWithGlab(
+                  projectInfoForNote.projectPath,
+                  mrId,
+                  headSha
+                );
+                console.log(`🧷 已寫入 AI_REVIEW_SHA 狀態: ${headSha}\n`);
+              } catch (error) {
+                console.error(
+                  `⚠️  AI_REVIEW_SHA 狀態寫入失敗（不影響 MR 建立）: ${error.message}\n`
+                );
+              }
+            } catch (error) {
+              console.error(`⚠️  AI review 提交失敗: ${error.message}\n`);
             }
           }
-          return;
-        } catch (error) {
-          console.error(`\n❌ glab 更新失敗: ${error.message}\n`);
-          console.log("嘗試使用 API token 方式...\n");
-        }
-      } else {
-        console.log("✅ 使用 GitLab CLI (glab) 建立 MR...\n");
-        try {
-          const result = createMRWithGlab(
-            currentBranch,
-            targetBranch,
-            mrTitle,
-            description,
-            draft,
-            reviewer,
-            assignee,
-            labels
-          );
-
-          console.log("\n✅ MR 建立成功！\n");
-
-          const mrUrlMatch = result.match(
-            /https:\/\/[^\s]+merge_requests\/(\d+)/
-          );
-          if (mrUrlMatch) {
-            const mrUrl = mrUrlMatch[0];
-            const mrId = mrUrlMatch[1];
-            console.log(`🔗 MR 連結: [MR !${mrId}](${mrUrl})`);
-            console.log(`📊 MR ID: !${mrId}`);
-
-            const jiraTickets = extractJiraTickets(description);
-            if (jiraTickets.length > 0) {
-              const jiraLinks = formatJiraTicketsAsLinks(jiraTickets);
-              console.log(`🎫 關聯 Jira: ${jiraLinks}`);
-            }
-            console.log("");
-
-            if (!skipReview) {
-              console.log("🤖 正在提交 AI review...");
-              try {
-                await submitAIReview(mrUrl);
-                console.log("✅ AI review 已提交\n");
-              } catch (error) {
-                console.error(`⚠️  AI review 提交失敗: ${error.message}\n`);
-              }
-            } else {
-              console.log("⏭️  跳過 AI review（--no-review）\n");
-            }
+        } else {
+          console.log(result);
+          if (!skipReview) {
+            console.log("⚠️  無法提取 MR URL，跳過 AI review 提交\n");
           } else {
-            console.log(result);
-            if (!skipReview) {
-              console.log("⚠️  無法提取 MR URL，跳過 AI review 提交\n");
-            } else {
-              console.log("⏭️  跳過 AI review（--no-review）\n");
-            }
+            console.log("⏭️  跳過 AI review（--no-review）\n");
           }
-          return;
-        } catch (error) {
-          console.error(`\n❌ glab 執行失敗: ${error.message}\n`);
-          console.log("嘗試使用 API token 方式...\n");
         }
+        return;
+      } catch (error) {
+        console.error(`\n❌ glab 執行失敗: ${error.message}\n`);
+        console.log("嘗試使用 API token 方式...\n");
       }
     }
   }
@@ -2000,110 +2267,75 @@ async function main() {
     }
   }
 
-  // 建立或更新 MR
-  if (existingMR) {
-    console.log("🚀 正在更新 MR...");
-    try {
-      const mr = await updateMR(
-        token,
-        projectInfo.host,
-        projectInfo.projectPath,
-        existingMRId,
-        null,
-        description,
-        draft,
-        reviewerId,
-        labels,
-        shouldUpdateReviewer
-      );
+  // create-mr 僅用於建立新 MR（更新請用 update-mr）
+  console.log("🚀 正在建立 MR...");
+  try {
+    const mr = await createMR(
+      token,
+      projectInfo.host,
+      projectInfo.projectPath,
+      currentBranch,
+      targetBranch,
+      mrTitle,
+      description,
+      draft,
+      reviewerId,
+      assigneeId,
+      labels
+    );
 
-      console.log("\n✅ MR 更新成功！\n");
-      console.log(`🔗 MR 連結: [MR !${mr.iid}](${mr.web_url})`);
-      console.log(`📊 MR ID: !${mr.iid}`);
-      console.log(`📝 標題: ${mr.title}`);
-      console.log(`📋 狀態: ${mr.work_in_progress ? "Draft" : "Open"}`);
-      if (labels.length > 0) {
-        console.log(`🏷️  Labels: ${labels.join(", ")}`);
-      }
-      if (mr.reviewers && mr.reviewers.length > 0) {
-        console.log(
-          `👤 Reviewers: ${mr.reviewers.map((r) => r.username).join(", ")}`
-        );
-      }
-      const jiraTickets = extractJiraTickets(description);
-      if (jiraTickets.length > 0) {
-        const jiraLinks = formatJiraTicketsAsLinks(jiraTickets);
-        console.log(`🎫 關聯 Jira: ${jiraLinks}`);
-      }
-      console.log("");
-
-      if (!skipReview) {
-        console.log("🤖 正在提交 AI review...");
-        try {
-          await submitAIReview(mr.web_url);
-          console.log("✅ AI review 已提交\n");
-        } catch (error) {
-          console.error(`⚠️  AI review 提交失敗: ${error.message}\n`);
-        }
-      } else {
-        console.log("⏭️  跳過 AI review（--no-review）\n");
-      }
-    } catch (error) {
-      console.error(`\n❌ ${error.message}\n`);
-      process.exit(1);
+    console.log("\n✅ MR 建立成功！\n");
+    console.log(`🔗 MR 連結: [MR !${mr.iid}](${mr.web_url})`);
+    console.log(`📊 MR ID: !${mr.iid}`);
+    console.log(`📝 標題: ${mr.title}`);
+    console.log(`📋 狀態: ${mr.work_in_progress ? "Draft" : "Open"}`);
+    if (labels.length > 0) {
+      console.log(`🏷️  Labels: ${labels.join(", ")}`);
     }
-  } else {
-    console.log("🚀 正在建立 MR...");
-    try {
-      const mr = await createMR(
-        token,
-        projectInfo.host,
-        projectInfo.projectPath,
-        currentBranch,
-        targetBranch,
-        mrTitle,
-        description,
-        draft,
-        reviewerId,
-        assigneeId,
-        labels
+    if (mr.reviewers && mr.reviewers.length > 0) {
+      console.log(
+        `👤 Reviewers: ${mr.reviewers.map((r) => r.username).join(", ")}`
       );
-
-      console.log("\n✅ MR 建立成功！\n");
-      console.log(`🔗 MR 連結: [MR !${mr.iid}](${mr.web_url})`);
-      console.log(`📊 MR ID: !${mr.iid}`);
-      console.log(`📝 標題: ${mr.title}`);
-      console.log(`📋 狀態: ${mr.work_in_progress ? "Draft" : "Open"}`);
-      if (labels.length > 0) {
-        console.log(`🏷️  Labels: ${labels.join(", ")}`);
-      }
-      if (mr.reviewers && mr.reviewers.length > 0) {
-        console.log(
-          `👤 Reviewers: ${mr.reviewers.map((r) => r.username).join(", ")}`
-        );
-      }
-      const jiraTickets = extractJiraTickets(description);
-      if (jiraTickets.length > 0) {
-        const jiraLinks = formatJiraTicketsAsLinks(jiraTickets);
-        console.log(`🎫 關聯 Jira: ${jiraLinks}`);
-      }
-      console.log("");
-
-      if (!skipReview) {
-        console.log("🤖 正在提交 AI review...");
-        try {
-          await submitAIReview(mr.web_url);
-          console.log("✅ AI review 已提交\n");
-        } catch (error) {
-          console.error(`⚠️  AI review 提交失敗: ${error.message}\n`);
-        }
-      } else {
-        console.log("⏭️  跳過 AI review（--no-review）\n");
-      }
-    } catch (error) {
-      console.error(`\n❌ ${error.message}\n`);
-      process.exit(1);
     }
+    const jiraTickets = extractJiraTickets(description);
+    if (jiraTickets.length > 0) {
+      const jiraLinks = formatJiraTicketsAsLinks(jiraTickets);
+      console.log(`🎫 關聯 Jira: ${jiraLinks}`);
+    }
+    console.log("");
+
+    if (skipReview) {
+      console.log("⏭️  跳過 AI review（--no-review）\n");
+    } else if (!getCompassApiToken()) {
+      console.log("⏭️  跳過 AI review（缺少 COMPASS_API_TOKEN）\n");
+    } else {
+      console.log("🤖 正在提交 AI review...");
+      try {
+        await submitAIReview(mr.web_url);
+        console.log("✅ AI review 已提交\n");
+
+        try {
+          const headSha = exec("git rev-parse HEAD", { silent: true }).trim();
+          await upsertAiReviewMarkerNoteWithToken(
+            token,
+            projectInfo.host,
+            projectInfo.projectPath,
+            mr.iid,
+            headSha
+          );
+          console.log(`🧷 已寫入 AI_REVIEW_SHA 狀態: ${headSha}\n`);
+        } catch (error) {
+          console.error(
+            `⚠️  AI_REVIEW_SHA 狀態寫入失敗（不影響 MR 建立）: ${error.message}\n`
+          );
+        }
+      } catch (error) {
+        console.error(`⚠️  AI review 提交失敗: ${error.message}\n`);
+      }
+    }
+  } catch (error) {
+    console.error(`\n❌ ${error.message}\n`);
+    process.exit(1);
   }
 }
 
