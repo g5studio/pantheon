@@ -41,7 +41,7 @@ alwaysApply: true
 - **標題**: MR 的標題（包含 Draft 前綴，如果適用）
 - **狀態**: MR 的狀態（如 `Draft`）
 - **Reviewer**: MR 的 reviewer（如 `@royng`）
-- **Labels**: MR 的 labels（如 `FE Board`, `AI`, `3.0UI`, `4.0UI` 等）
+- **Labels**: MR 的 labels（如 `FE Board`, `AI` 等）
 - **關聯 Jira**: 關聯的 Jira ticket，**必須使用超連結格式**（如 `[FE-7846](https://innotech.atlassian.net/browse/FE-7846)`）。如果有多個 ticket，每個都必須以超連結格式顯示，用逗號分隔（如 `[FE-7846](https://innotech.atlassian.net/browse/FE-7846), [IN-1234](https://innotech.atlassian.net/browse/IN-1234)`）
 - **AI Review**: AI review 的提交狀態（如 `已自動提交` 或 `未提交`）
 
