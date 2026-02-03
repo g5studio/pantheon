@@ -770,7 +770,7 @@ node .cursor/scripts/utilities/oracle.mjs
 | 檢核項目 | 規範要求 | 實際結果 | 狀態 |
 |---|---|---|---|
 | Description | 包含開發報告 | ✅ 已包含關聯單資訊、變更摘要 | ✅ |
-| Labels | 正確的 UI 版本標籤 | 4.0UI, FE Board | ✅ |
+| Labels | 正確的 labels | FE Board, AI | ✅ |
 | Assignee | 設定當前用戶 | @current.user | ✅ |
 | Reviewer | 依優先順序設定 | @william.chiang | ✅ |
 | Agent Version | 顯示在 Description 底部 | pantheon: 0.0.3 | ✅ |

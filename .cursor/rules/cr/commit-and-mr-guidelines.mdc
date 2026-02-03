@@ -341,8 +341,7 @@ Action:
 - Stop MR creation
 - Notify user: "無法自動判斷 UI 版本標籤，請確認：
   1. 變更的檔案路徑是否正確
-  2. 檔案是否包含 .v3. 或 .v4. 標記
-  3. 是否需要手動指定標籤"
+  2. 是否需要手動指定標籤"
 - Send system notification
 - Wait for user to resolve or manually specify labels
 ```
@@ -430,10 +429,7 @@ The MR creation process must follow this validation flow:
     4. Automatically updating the target branch if hotfix is detected
 
 ### Labels
-- **MUST**: MRs must have appropriate UI version labels based on affected files:
-  - **4.0UI**: When changes affect v4 UI only
-  - **3.0UI**: When changes affect v3 UI only
-  - No specific UI label: When changes affect both v3 and v4 UI
+- **MUST**: MRs must have appropriate labels based on the ticket type and the actual scope of changes.
 
 **CRITICAL**: Label determination **MUST** be based on the **comprehensive analysis of ALL change history**, not just the latest commit. This means:
 - Analyze ALL commits in the MR (from base branch to HEAD)
@@ -441,12 +437,7 @@ The MR creation process must follow this validation flow:
 - If a file was added then deleted, it should NOT affect the label
 - The label should reflect the **net effect** of all changes combined
 
-The `create-mr.mjs` script automatically analyzes changed files and adds the appropriate labels:
-- Files with `.v4.` or `/v4/` in path → `4.0UI`
-- Files with `.v3.` or `/v3/` in path → `3.0UI`
-- Files in `src/shared/` or `src/utilities/` → Both versions (no specific label)
-- Files with `SystemLayout.International` or `isV4()` → `4.0UI`
-- Files with `SystemLayout.Asia` or `isV3()` → `3.0UI`
+The `create-mr.mjs` script automatically analyzes changed files and adds the appropriate labels.
 
 ### Additional Labels
 - **FE Board**: Automatically added when Jira ticket starts with `FE-`
