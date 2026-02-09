@@ -65,6 +65,51 @@ run_terminal_cmd(
 - 如果使用 `required_permissions: ["all"]` 後仍然失敗，應停止並報告錯誤，等待用戶處理
 - 此處理方式不需要在 chat 中特別說明，但可以在執行後簡要記錄（可選）
 
+### 用例 2：Node 記憶體不足導致 eslint --fix（format-and-lint）階段中斷（JS heap out of memory）
+
+**問題描述**：
+- 在執行 `agent-commit` 流程時，lint 階段會跑 `pnpm run format-and-lint`
+- 於 `eslint --fix ...` 過程中，Node v18 因預設 heap 限制/機器可用記憶體不足而爆掉
+- 常見錯誤訊息：`FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory`
+- **這不是程式碼錯誤**：流程中斷，因此**沒有產生 commit**；你的檔案變更仍停在 working tree
+
+**判斷標準**：
+- 失敗發生在 lint / format 階段（`pnpm run format-and-lint`）
+- 錯誤訊息包含 `heap out of memory` / `Reached heap limit` / `Allocation failed`
+- `git status` 仍顯示大量檔案變更（表示未 commit）
+
+**處理方式**：
+- **立即採用**：用加大 Node heap 的方式重跑 lint，讓 `agent-commit` 能走完並產生 commit
+- 建議使用：
+  - `NODE_OPTIONS=--max-old-space-size=8192 pnpm run format-and-lint`
+- lint 成功後，再重新執行原本的 `agent-commit`
+
+**執行範例**：
+
+**錯誤情況**（示意）：
+```bash
+pnpm run agent-commit --type=feat --ticket=FE-1234 --message="..."
+# ... eslint --fix ...
+# FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory
+# -> 流程中斷，未產生 commit
+```
+
+**正確處理**：
+```bash
+# 1) 確認變更仍在 working tree（避免誤以為變更遺失）
+git status
+
+# 2) 加大 heap 重跑 lint（讓 eslint --fix 跑完）
+NODE_OPTIONS=--max-old-space-size=8192 pnpm run format-and-lint
+
+# 3) 回到原流程重跑 agent-commit
+pnpm run agent-commit --type=feat --ticket=FE-1234 --message="..."
+```
+
+**注意事項**：
+- 如果 `8192` 仍不足，可視機器資源調整（例如 12288 / 16384），但請避免超過可用記憶體造成系統換頁（swap）反而更慢或卡死
+- 若只在 CI / 特定機器發生，優先視為該環境資源限制問題，而非程式碼或 ESLint 規則錯誤
+
 ## 使用流程
 
 當 AI 遇到問題時，應遵循以下流程：
