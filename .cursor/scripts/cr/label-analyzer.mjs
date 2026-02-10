@@ -8,6 +8,8 @@
  */
 
 import { execSync } from "child_process";
+import { existsSync, readFileSync, statSync } from "fs";
+import { isAbsolute, join } from "path";
 import {
   getProjectRoot,
   getJiraConfig,
@@ -16,6 +18,25 @@ import {
 
 // 使用 env-loader 提供的 projectRoot
 const projectRoot = getProjectRoot();
+
+const DEFAULT_START_TASK_INFO_FILE = join(
+  projectRoot,
+  ".cursor",
+  "tmp",
+  "start-task-info.json"
+);
+const DEFAULT_DEVELOPMENT_PLAN_FILE = join(
+  projectRoot,
+  ".cursor",
+  "tmp",
+  "development-plan.md"
+);
+const DEFAULT_DEVELOPMENT_REPORT_FILE = join(
+  projectRoot,
+  ".cursor",
+  "tmp",
+  "development-report.md"
+);
 
 function exec(command, options = {}) {
   try {
@@ -31,6 +52,58 @@ function exec(command, options = {}) {
     }
     throw error;
   }
+}
+
+function resolvePathFromProjectRoot(filePath) {
+  if (!filePath) return null;
+  return isAbsolute(filePath) ? filePath : join(projectRoot, filePath);
+}
+
+function safeJsonParse(text) {
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function hasNonEmptyFile(filePath) {
+  const resolved = resolvePathFromProjectRoot(filePath);
+  if (!resolved) return false;
+  try {
+    if (!existsSync(resolved)) return false;
+    const st = statSync(resolved);
+    return st.isFile() && st.size > 0;
+  } catch {
+    return false;
+  }
+}
+
+function isSameTicket(a, b) {
+  const ta = typeof a === "string" ? a.trim().toUpperCase() : "";
+  const tb = typeof b === "string" ? b.trim().toUpperCase() : "";
+  return !!ta && !!tb && ta === tb;
+}
+
+function hasAIDevelopmentPlan(taskInfo, options = {}) {
+  if (!taskInfo) return false;
+  if (taskInfo.aiDevelopmentPlan === false) return false;
+  const filePath =
+    options.developmentPlanFile ||
+    taskInfo.developmentPlanFile ||
+    DEFAULT_DEVELOPMENT_PLAN_FILE;
+  return hasNonEmptyFile(filePath);
+}
+
+function hasAIDevelopmentReport(taskInfo, options = {}) {
+  if (!taskInfo) return false;
+  if (taskInfo.aiDevelopmentReport === false) return false;
+  const filePath =
+    options.developmentReportFile ||
+    taskInfo.developmentReportFile ||
+    DEFAULT_DEVELOPMENT_REPORT_FILE;
+  return hasNonEmptyFile(filePath);
 }
 
 // 獲取 Jira ticket 的 fix version
@@ -161,51 +234,15 @@ export function isHotfixVersion(fixVersion) {
   return false;
 }
 
-// 讀取 start-task 開發計劃（從 Git notes）
-export function readStartTaskInfo() {
+// 讀取 start-task 資訊（預設從 .cursor/tmp/start-task-info.json；可用參數覆蓋）
+export function readStartTaskInfo(options = {}) {
   try {
-    const currentCommit = exec("git rev-parse HEAD", { silent: true }).trim();
-    try {
-      const noteContent = exec(
-        `git notes --ref=start-task show ${currentCommit}`,
-        { silent: true }
-      ).trim();
-      if (noteContent) {
-        return JSON.parse(noteContent);
-      }
-    } catch (error) {
-      // 當前 commit 沒有 Git notes
-    }
-
-    try {
-      const parentCommit = exec("git rev-parse HEAD^", { silent: true }).trim();
-      const noteContent = exec(
-        `git notes --ref=start-task show ${parentCommit}`,
-        { silent: true }
-      ).trim();
-      if (noteContent) {
-        return JSON.parse(noteContent);
-      }
-    } catch (error) {
-      // 父 commit 沒有 Git notes
-    }
-
-    try {
-      const baseCommit = exec("git merge-base HEAD main", {
-        silent: true,
-      }).trim();
-      const noteContent = exec(
-        `git notes --ref=start-task show ${baseCommit}`,
-        { silent: true }
-      ).trim();
-      if (noteContent) {
-        return JSON.parse(noteContent);
-      }
-    } catch (error) {
-      // base commit 沒有 Git notes
-    }
-
-    return null;
+    const filePath =
+      options.startTaskInfoFile || DEFAULT_START_TASK_INFO_FILE;
+    const resolved = resolvePathFromProjectRoot(filePath);
+    if (!resolved || !existsSync(resolved)) return null;
+    const raw = readFileSync(resolved, "utf-8").replace(/^\uFEFF/, "").trim();
+    return safeJsonParse(raw);
   } catch (error) {
     return null;
   }
@@ -220,18 +257,41 @@ export function readStartTaskInfo() {
  * @param {string} ticket - Jira ticket 編號
  * @param {object} options - 選項
  * @param {object} options.startTaskInfo - start-task 開發計劃信息
+ * @param {string} options.startTaskInfoFile - start-task-info.json 路徑（可相對於專案根目錄）
+ * @param {string} options.developmentPlanFile - development-plan.md 路徑（可相對於專案根目錄）
+ * @param {string} options.developmentReportFile - development-report.md 路徑（可相對於專案根目錄）
  * @returns {Promise<{labels: string[], releaseBranch: string|null}>}
  */
 export async function determineLabels(ticket, options = {}) {
-  const { startTaskInfo = null } = options;
+  const {
+    startTaskInfo = null,
+    startTaskInfoFile = null,
+    developmentPlanFile = null,
+    developmentReportFile = null,
+  } = options;
   const labels = [];
   let releaseBranch = null;
 
-  // 檢查是否由 start-task 啟動（透過傳入的參數或讀取 Git notes）
-  const taskInfo = startTaskInfo || readStartTaskInfo();
-  if (taskInfo) {
+  // 檢查是否需要加 AI label：
+  // - 必須同 ticket
+  // - 必須存在 start-task 產生的 AI 開發計畫或開發報告檔案（以檔案存在為主）
+  const taskInfo =
+    startTaskInfo || readStartTaskInfo({ startTaskInfoFile });
+  const sameTicket = isSameTicket(taskInfo?.ticket, ticket);
+  const hasPlan = hasAIDevelopmentPlan(taskInfo, { developmentPlanFile });
+  const hasReport = hasAIDevelopmentReport(taskInfo, { developmentReportFile });
+
+  if (sameTicket && (hasPlan || hasReport)) {
     labels.push("AI");
-    console.log("🤖 檢測到由 start-task 啟動，將添加 AI label\n");
+    console.log("🤖 檢測到同 ticket 且存在 AI plan/report，將添加 AI label\n");
+  } else if (taskInfo && !sameTicket) {
+    console.log(
+      `ℹ️  偵測到 start-task-info 但 ticket 不一致（taskInfo: ${taskInfo?.ticket} / current: ${ticket}），不添加 AI label\n`
+    );
+  } else if (taskInfo && sameTicket && !hasPlan && !hasReport) {
+    console.log(
+      "ℹ️  偵測到 start-task-info 但未找到 AI plan/report 檔案，不添加 AI label\n"
+    );
   }
 
   // 如果 Jira ticket 開頭是 FE，添加 FE Board label
