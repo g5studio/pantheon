@@ -1,0 +1,12 @@
+# 開發工具腳本（打包時不會使用）
+.cursor/scripts/
+
+# Cursor 命令檔案
+.cursor/commands/
+
+# Cursor 規則檔案
+.cursor/rules/
+
+# 工具設定檔案 / 範本
+.cursor/.env.example
+
