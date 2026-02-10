@@ -7,7 +7,7 @@ description: 批次檢查/合併 MR，並切換 Jira 狀態（可自訂參數）
 此指令用於批次處理符合條件的 GitLab MR，流程包含：
 
 - 檢查 MR 是否有衝突（conflict）
-- 檢查 MR version label 是否與 Jira 主單版本相符（從 Jira summary 推導 `3.0UI` / `4.0UI`）
+- 檢查 **MR 版本 label（例如 `v5.38`）是否與 Jira fix version 相符**（不符則略過）
 - 檢查是否已通過 approve（可要求必須包含指定 user 的核准）
 - **符合條件才合併**
 - 合併後將 Jira 主單狀態切到指定狀態（預設：`PENDING DEPLOY STG`）

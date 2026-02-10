@@ -3,7 +3,7 @@
 /**
  * 批次處理 Merge Requests：
  * - 檢查衝突
- * - 檢查 version label 與 Jira 主單版本是否相符（由 Jira summary 推導 3.0/4.0）
+ * - 檢查 MR 版本 label（例如 v5.38）是否與 Jira fix version 相符（不符則略過）
  * - 檢查 approvals（可要求特定使用者必須在 approved_by 中）
  * - 符合條件才合併，並將 Jira 狀態切到指定狀態（預設 PENDING DEPLOY STG）
  *
@@ -227,21 +227,47 @@ function buildProjectRef(project) {
 
 function extractJiraTicketFromMr(mr) {
   const text = `${mr?.title || ""}\n${mr?.description || ""}`;
-  const m = text.match(/\b(IN-\d+)\b/);
+  const m = text.match(/\b((?:FE|IN)-\d+)\b/);
   return m ? m[1] : "";
 }
 
-function expectedUiLabelFromJiraSummary(summary) {
-  if (!summary) return "";
-  const m = summary.match(/\[\s*([34])\.0\s*\]/);
-  if (m?.[1] === "3") return "3.0UI";
-  if (m?.[1] === "4") return "4.0UI";
-  if (/\b4\.0\b/.test(summary)) return "4.0UI";
-  if (/\b3\.0\b/.test(summary)) return "3.0UI";
-  return "";
+function normalizeVersionLabel(input) {
+  if (!input) return "";
+  const m = String(input).match(/\bv?\s*(\d+)\.(\d+)\b/i);
+  if (!m) return "";
+  const major = Number(m[1]);
+  const minor = Number(m[2]);
+  if (!Number.isFinite(major) || !Number.isFinite(minor)) return "";
+  return `v${major}.${minor}`;
 }
 
-async function readJiraSummary(ticket) {
+function getMrVersionLabels(labels) {
+  const out = new Set();
+  for (const l of Array.isArray(labels) ? labels : []) {
+    const normalized = normalizeVersionLabel(l);
+    if (normalized) out.add(normalized);
+  }
+  return [...out];
+}
+
+function getJiraVersionLabelsFromFixVersions(fixVersions) {
+  const out = new Set();
+  for (const fv of Array.isArray(fixVersions) ? fixVersions : []) {
+    const normalized = normalizeVersionLabel(fv?.name);
+    if (normalized) out.add(normalized);
+  }
+  return [...out];
+}
+
+function intersects(a, b) {
+  const setA = new Set(Array.isArray(a) ? a : []);
+  for (const x of Array.isArray(b) ? b : []) {
+    if (setA.has(x)) return true;
+  }
+  return false;
+}
+
+async function readJiraFields(ticket) {
   const config = getJiraConfig();
   const auth = Buffer.from(`${config.email}:${config.apiToken}`).toString(
     "base64"
@@ -249,7 +275,7 @@ async function readJiraSummary(ticket) {
   const baseUrl = config.baseUrl.endsWith("/")
     ? config.baseUrl.slice(0, -1)
     : config.baseUrl;
-  const apiUrl = `${baseUrl}/rest/api/3/issue/${ticket}?fields=summary,status`;
+  const apiUrl = `${baseUrl}/rest/api/3/issue/${ticket}?fields=fixVersions`;
 
   const res = await fetch(apiUrl, {
     headers: {
@@ -267,8 +293,7 @@ async function readJiraSummary(ticket) {
 
   const data = await res.json();
   return {
-    summary: data.fields?.summary || "",
-    status: data.fields?.status?.name || "",
+    fixVersions: data.fields?.fixVersions || [],
   };
 }
 
@@ -474,7 +499,7 @@ async function main() {
 
       let jira;
       try {
-        jira = await readJiraSummary(ticket);
+        jira = await readJiraFields(ticket);
       } catch {
         result.skipped.push({
           iid: mrFull.iid,
@@ -484,23 +509,48 @@ async function main() {
         continue;
       }
 
-      const expected = expectedUiLabelFromJiraSummary(jira.summary);
-      if (!expected) {
+      // fix version label check vs Jira fixVersions
+      const mrVersionLabels = getMrVersionLabels(labels);
+      if (mrVersionLabels.length === 0) {
         result.skipped.push({
           iid: mrFull.iid,
           url: webUrl,
-          reason: `CANNOT_DETERMINE_VERSION(${ticket})`,
+          reason: "NO_MR_VERSION_LABEL",
         });
         continue;
       }
 
-      if (!labels.includes(expected)) {
+      const jiraFixVersionNames = Array.isArray(jira.fixVersions)
+        ? jira.fixVersions.map((x) => x?.name).filter(Boolean)
+        : [];
+      if (jiraFixVersionNames.length === 0) {
         result.skipped.push({
           iid: mrFull.iid,
           url: webUrl,
-          reason: `LABEL_MISMATCH(expected=${expected}, actual=${labels.join(
+          reason: `NO_JIRA_FIX_VERSION(${ticket})`,
+        });
+        continue;
+      }
+
+      const jiraVersionLabels = getJiraVersionLabelsFromFixVersions(jira.fixVersions);
+      if (jiraVersionLabels.length === 0) {
+        result.skipped.push({
+          iid: mrFull.iid,
+          url: webUrl,
+          reason: `CANNOT_PARSE_JIRA_FIX_VERSION(ticket=${ticket}, fixVersions=${jiraFixVersionNames.join(
             "|"
-          )}, ticket=${ticket})`,
+          )})`,
+        });
+        continue;
+      }
+
+      if (!intersects(mrVersionLabels, jiraVersionLabels)) {
+        result.skipped.push({
+          iid: mrFull.iid,
+          url: webUrl,
+          reason: `FIX_VERSION_MISMATCH(expected=${jiraVersionLabels.join(
+            "|"
+          )}, actual=${mrVersionLabels.join("|")}, ticket=${ticket})`,
         });
         continue;
       }
