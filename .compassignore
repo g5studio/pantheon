@@ -1,13 +1,12 @@
-# Cursor 指令檔案
-.cursor/commands/operator/reverse-engineering.md
-.cursor/commands/operator/start-task.md
+# 開發工具腳本（打包時不會使用）
+.cursor/scripts/
+
+# Cursor 命令檔案
+.cursor/commands/
 
 # Cursor 規則檔案
-.cursor/rules/operator/reverse-engineering-execution.mdc
-.cursor/rules/operator/coding-standard/architecture.mdc
-.cursor/rules/operator/coding-standard/components.mdc
-.cursor/rules/operator/coding-standard/naming.mdc
-.cursor/rules/operator/coding-standard/project-structure.mdc
-.cursor/rules/operator/start-task/development-policy.mdc
-.cursor/rules/operator/start-task/fast-mode.mdc
-.cursor/rules/operator/start-task/operation-modes.mdc
+.cursor/rules/
+
+# 工具設定檔案 / 範本
+.cursor/.env.example
+

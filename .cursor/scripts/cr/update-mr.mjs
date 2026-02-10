@@ -25,6 +25,7 @@ import {
   getGitLabToken as getGitLabTokenFromEnvLoader,
 } from "../utilities/env-loader.mjs";
 import { determineLabels, readStartTaskInfo } from "./label-analyzer.mjs";
+import { appendAgentSignature } from "../utilities/agent-signature.mjs";
 
 const projectRoot = getProjectRoot();
 
@@ -32,19 +33,19 @@ const DEFAULT_START_TASK_INFO_FILE = join(
   projectRoot,
   ".cursor",
   "tmp",
-  "start-task-info.json"
+  "start-task-info.json",
 );
 const DEFAULT_DEVELOPMENT_PLAN_FILE = join(
   projectRoot,
   ".cursor",
   "tmp",
-  "development-plan.md"
+  "development-plan.md",
 );
 const DEFAULT_DEVELOPMENT_REPORT_FILE = join(
   projectRoot,
   ".cursor",
   "tmp",
-  "development-report.md"
+  "development-report.md",
 );
 
 function exec(command, options = {}) {
@@ -343,7 +344,7 @@ function findExistingMRWithGlab(sourceBranch) {
   try {
     const result = exec(
       `glab mr list --source-branch ${sourceBranch} --state opened`,
-      { silent: true }
+      { silent: true },
     );
     const match = result.match(/!(\d+)/);
     return match ? match[1] : null;
@@ -365,7 +366,7 @@ function getMRDetailsWithGlab(mrId) {
 async function findExistingMR(token, host, projectPath, sourceBranch) {
   try {
     const url = `${host}/api/v4/projects/${projectPath}/merge_requests?source_branch=${encodeURIComponent(
-      sourceBranch
+      sourceBranch,
     )}&state=opened`;
     const response = await fetch(url, {
       headers: { "PRIVATE-TOKEN": token },
@@ -397,7 +398,7 @@ async function updateMRDescription(
   projectPath,
   mrIid,
   description,
-  labels = null
+  labels = null,
 ) {
   const url = `${host}/api/v4/projects/${projectPath}/merge_requests/${mrIid}`;
   const body = { description };
@@ -519,13 +520,13 @@ async function upsertAiReviewMarkerNote(
   host,
   projectPath,
   mrIid,
-  headSha
+  headSha,
 ) {
   const notes = await listMrNotes(token, host, projectPath, mrIid, 100);
-  const body = buildAiReviewMarkerBody(headSha);
+  const body = appendAgentSignature(buildAiReviewMarkerBody(headSha));
   const existing = notes.find(
     (n) =>
-      typeof n.body === "string" && n.body.includes(AI_REVIEW_MARKER_PREFIX)
+      typeof n.body === "string" && n.body.includes(AI_REVIEW_MARKER_PREFIX),
   );
 
   if (existing?.id) {
@@ -611,13 +612,13 @@ async function main() {
 
   // start-task 相關參數（供上層 start-task 流程控制；update-mr 本身不做任何互動）
   const startTaskInfoFileArg = args.find((a) =>
-    a.startsWith("--start-task-info-file=")
+    a.startsWith("--start-task-info-file="),
   );
   const developmentPlanFileArg = args.find((a) =>
-    a.startsWith("--development-plan-file=")
+    a.startsWith("--development-plan-file="),
   );
   const developmentReportFileArg = args.find((a) =>
-    a.startsWith("--development-report-file=")
+    a.startsWith("--development-report-file="),
   );
   const startTaskInfoFile = startTaskInfoFileArg
     ? startTaskInfoFileArg.split("=").slice(1).join("=")
@@ -629,8 +630,9 @@ async function main() {
     ? developmentReportFileArg.split("=").slice(1).join("=")
     : null;
 
-  const cleanupStartTaskArtifactsEnabled =
-    !args.includes("--no-cleanup-start-task-artifacts");
+  const cleanupStartTaskArtifactsEnabled = !args.includes(
+    "--no-cleanup-start-task-artifacts",
+  );
 
   const reportArg = args.find((a) => a.startsWith("--development-report="));
   let externalReport = reportArg
@@ -691,7 +693,7 @@ async function main() {
       token,
       projectInfo.host,
       projectInfo.projectPath,
-      currentBranch
+      currentBranch,
     );
     if (mr) {
       mrIid = mr.iid;
@@ -699,7 +701,7 @@ async function main() {
         token,
         projectInfo.host,
         projectInfo.projectPath,
-        mrIid
+        mrIid,
       );
     }
   } else if (mrIid && !mrDetails && token) {
@@ -707,7 +709,7 @@ async function main() {
       token,
       projectInfo.host,
       projectInfo.projectPath,
-      mrIid
+      mrIid,
     );
   }
 
@@ -723,7 +725,7 @@ async function main() {
     typeof mrDetails.description === "string" ? mrDetails.description : "";
   const mergedDescription = upsertDevelopmentReport(
     existingDescription,
-    externalReport
+    externalReport,
   );
 
   // 格式驗證（回歸檢查）
@@ -731,11 +733,11 @@ async function main() {
   const startTaskInfo = readStartTaskInfo({ startTaskInfoFile });
   const validation = validateMrDescriptionFormat(
     mergedDescription,
-    startTaskInfo
+    startTaskInfo,
   );
   if (!validation.ok) {
     console.error(
-      "\n❌ MR description 開發報告格式不符合規範，已中止更新 MR\n"
+      "\n❌ MR description 開發報告格式不符合規範，已中止更新 MR\n",
     );
     console.error("📋 缺少以下必要區塊：");
     validation.missing.forEach((m) => console.error(`- ${m}`));
@@ -774,7 +776,7 @@ async function main() {
     }
     // 如果 glab 已登入但沒 token，仍可嘗試要求用戶輸入 token 以走 API（避免 glab update flags 差異）
     console.log(
-      "\n🔐 請輸入 GitLab Personal Access Token 以更新 MR（需要 api 權限）\n"
+      "\n🔐 請輸入 GitLab Personal Access Token 以更新 MR（需要 api 權限）\n",
     );
     const rl = readline.createInterface({
       input: process.stdin,
@@ -784,7 +786,7 @@ async function main() {
       rl.question("Token: ", (t) => {
         rl.close();
         resolve(t.trim());
-      })
+      }),
     );
     if (!token) process.exit(1);
     try {
@@ -802,7 +804,7 @@ async function main() {
     projectInfo.projectPath,
     mrIid,
     mergedDescription,
-    nextLabels
+    nextLabels,
   );
 
   console.log("\n✅ MR 更新成功！\n");
@@ -850,7 +852,7 @@ async function main() {
       projectInfo.host,
       projectInfo.projectPath,
       mrIid,
-      100
+      100,
     );
     for (const n of notes) {
       const sha = extractAiReviewShaFromText(n?.body);
@@ -865,7 +867,7 @@ async function main() {
 
   if (lastReviewedSha && lastReviewedSha === mrHeadSha) {
     console.log(
-      "\n⏭️  未偵測到 new commit（MR head SHA 與上次已送審 SHA 相同），跳過 AI review\n"
+      "\n⏭️  未偵測到 new commit（MR head SHA 與上次已送審 SHA 相同），跳過 AI review\n",
     );
     return;
   }
@@ -877,7 +879,7 @@ async function main() {
     const originHead = getOriginHeadSha(currentBranch);
     if (originHead !== localHead) {
       console.error(
-        "\n❌ 偵測到本地有新 commit 尚未推送，請先 push 後再更新/送審\n"
+        "\n❌ 偵測到本地有新 commit 尚未推送，請先 push 後再更新/送審\n",
       );
       process.exit(1);
     }
@@ -905,7 +907,7 @@ async function main() {
       projectInfo.host,
       projectInfo.projectPath,
       mrIid,
-      mrHeadSha
+      mrHeadSha,
     );
     console.log(`🧷 已更新 AI_REVIEW_SHA 狀態: ${mrHeadSha}\n`);
   } catch (error) {

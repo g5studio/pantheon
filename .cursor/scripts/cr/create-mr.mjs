@@ -27,6 +27,7 @@ import {
   extractReleaseBranch,
   readStartTaskInfo,
 } from "./label-analyzer.mjs";
+import { appendAgentSignature } from "../utilities/agent-signature.mjs";
 
 // 使用 env-loader 提供的 projectRoot
 const projectRoot = getProjectRoot();
@@ -1020,7 +1021,7 @@ async function upsertAiReviewMarkerNoteWithToken(
     mrIid,
     100
   );
-  const body = buildAiReviewMarkerBody(headSha);
+  const body = appendAgentSignature(buildAiReviewMarkerBody(headSha));
   const existing = notes.find(
     (n) =>
       typeof n.body === "string" && n.body.includes(AI_REVIEW_MARKER_PREFIX)
@@ -1076,7 +1077,7 @@ async function upsertAiReviewMarkerNoteWithGlab(projectPath, mrIid, headSha) {
   const notes = glabApiJson(
     `projects/${projectPath}/merge_requests/${mrIid}/notes?per_page=100&sort=desc&order_by=updated_at`
   );
-  const body = buildAiReviewMarkerBody(headSha);
+  const body = appendAgentSignature(buildAiReviewMarkerBody(headSha));
   const list = Array.isArray(notes) ? notes : [];
   const existing = list.find(
     (n) =>

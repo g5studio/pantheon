@@ -108,7 +108,7 @@ export function guideJiraConfig() {
 
   console.error("**2. 設置 Jira API Token:**");
   console.error(
-    "   1. 前往: https://id.atlassian.com/manage-profile/security/api-tokens"
+    "   1. 前往: https://id.atlassian.com/manage-profile/security/api-tokens",
   );
   console.error('   2. 點擊 "Create API token"');
   console.error('   3. 填寫 Label（例如: "fluid-project"）');
@@ -123,7 +123,7 @@ export function guideJiraConfig() {
   console.error("💡 提示：");
   console.error("   - .env.local 文件可位於項目根目錄或 .cursor 目錄");
   console.error(
-    "   - 如果沒有 .env.local 文件，可以參考 .env.development 範本"
+    "   - 如果沒有 .env.local 文件，可以參考 .env.development 範本",
   );
   console.error("   - 設置完成後，請重新執行命令\n");
 }
@@ -219,12 +219,28 @@ export function getMRReviewer() {
 }
 
 /**
- * 獲取 Figma Access Token（從環境變數或 .env.local）
+ * 獲取個性化 agent 顯示名稱（從環境變數或 .env.local）
  *
- * @param {string} defaultToken - 預設 token（可選）
- * @returns {string|null} Figma Access Token 或 null
+ * - 未設置 / 空字串：回傳 null（視同無此功能，行為保持既有不變）
+ * - 建議限制長度：預設最多 40 字元（超過則截斷）
+ *
+ * @param {Object} options
+ * @param {number} options.maxLength - 最大長度（預設 40）
+ * @returns {string|null}
  */
-export function getFigmaToken(defaultToken = null) {
+export function getAgentDisplayName(options = {}) {
   const envLocal = loadEnvLocal();
-  return process.env.FIGMA_ACCESS_TOKEN || envLocal.FIGMA_ACCESS_TOKEN || defaultToken;
+  const raw = process.env.AGENT_DISPLAY_NAME ?? envLocal.AGENT_DISPLAY_NAME;
+  if (typeof raw !== "string") return null;
+
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const maxLength =
+    typeof options.maxLength === "number" && options.maxLength > 0
+      ? options.maxLength
+      : 40;
+
+  if (trimmed.length > maxLength) return trimmed.slice(0, maxLength);
+  return trimmed;
 }
