@@ -5,11 +5,15 @@
  */
 
 import { execSync, spawnSync } from "child_process";
+import { existsSync, mkdirSync, writeFileSync } from "fs";
+import { join } from "path";
 import readline from "readline";
 import { getProjectRoot, getJiraConfig } from "../utilities/env-loader.mjs";
 
 // 使用 env-loader 提供的 projectRoot
 const projectRoot = getProjectRoot();
+
+const TMP_ROOT = join(projectRoot, ".cursor", "tmp");
 
 function exec(command, options = {}) {
   try {
@@ -25,6 +29,64 @@ function exec(command, options = {}) {
     }
     throw error;
   }
+}
+
+function ensureDir(dirPath) {
+  if (!existsSync(dirPath)) {
+    mkdirSync(dirPath, { recursive: true });
+  }
+}
+
+function buildDevelopmentPlanTemplate({ ticket, summary, issueType }) {
+  // 只提供模板骨架，讓後續 start-task 擴充可以自行填內容
+  return [
+    "## 🎯 開發計劃",
+    "",
+    `- Ticket: ${ticket}`,
+    `- Summary: ${summary}`,
+    `- Issue Type: ${issueType}`,
+    "",
+    "### Steps",
+    "",
+    "- [ ] step 1",
+    "- [ ] step 2",
+    "- [ ] step 3",
+    "",
+  ].join("\n");
+}
+
+function buildDevelopmentReportTemplate({ ticket, summary, issueType }) {
+  // 對齊 create-mr 的開發報告格式驗證（關聯單資訊、變更摘要、變更內容表格、風險評估表格）
+  return [
+    "## 📋 關聯單資訊",
+    "",
+    "| 項目 | 值 |",
+    "|---|---|",
+    `| **單號** | [${ticket}](https://innotech.atlassian.net/browse/${ticket}) |`,
+    `| **標題** | ${summary} |`,
+    `| **類型** | ${issueType} |`,
+    "",
+    "---",
+    "",
+    "## 📝 變更摘要",
+    "",
+    "<請填寫本次變更目的與摘要>",
+    "",
+    "### 變更內容",
+    "",
+    "| 檔案 | 狀態 | 說明 |",
+    "|---|---|---|",
+    "| `path/to/file` | 更新 | <說明> |",
+    "",
+    "---",
+    "",
+    "## ⚠️ 風險評估",
+    "",
+    "| 檔案 | 風險等級 | 評估說明 |",
+    "|---|---|---|",
+    "| `path/to/file` | 輕度 | <說明> |",
+    "",
+  ].join("\n");
 }
 
 // 獲取 Jira ticket 信息
@@ -266,6 +328,34 @@ async function main() {
     if (confirm.toLowerCase() === "y") {
       console.log("\n✅ 計劃已確認，可以開始開發！\n");
 
+      // 產出實體檔案到 .cursor/tmp/<ticket>/（避免污染其他 ticket）
+      const taskDir = join(TMP_ROOT, ticket);
+      ensureDir(taskDir);
+
+      const startTaskInfoFile = join(taskDir, "start-task-info.json");
+      const developmentPlanFile = join(taskDir, "development-plan.md");
+      const developmentReportFile = join(taskDir, "development-report.md");
+
+      // 寫入 plan / report 模板
+      writeFileSync(
+        developmentPlanFile,
+        buildDevelopmentPlanTemplate({
+          ticket,
+          summary: analysis.summary,
+          issueType: analysis.issueType,
+        }),
+        "utf-8"
+      );
+      writeFileSync(
+        developmentReportFile,
+        buildDevelopmentReportTemplate({
+          ticket,
+          summary: analysis.summary,
+          issueType: analysis.issueType,
+        }),
+        "utf-8"
+      );
+
       const startTaskInfo = {
         ticket,
         summary: analysis.summary,
@@ -277,29 +367,30 @@ async function main() {
         startedAt: new Date().toISOString(),
         sourceBranch: sourceBranchTrimmed,
         featureBranch: `feature/${ticket}`,
-        // developmentReport 將由 AI 在開發完成後填充
-        developmentReport: null,
+        // 檔案化產物路徑（供 create-mr / update-mr 透過參數串接）
+        developmentPlanFile,
+        developmentReportFile,
+        aiDevelopmentPlan: true,
+        aiDevelopmentReport: true,
+        // Gate 欄位：create-mr 會在 rebase/push 前檢查（同 ticket 才生效）
+        planConfirmed: true,
+        resultVerified: false,
+        updatedAt: new Date().toISOString(),
       };
 
-      try {
-        const noteContent = JSON.stringify(startTaskInfo, null, 2);
-        const result = spawnSync(
-          "git",
-          ["notes", "--ref=start-task", "add", "-f", "-F", "-"],
-          {
-            cwd: projectRoot,
-            input: noteContent,
-            encoding: "utf-8",
-            stdio: ["pipe", "pipe", "pipe"],
-          }
-        );
+      writeFileSync(startTaskInfoFile, JSON.stringify(startTaskInfo, null, 2), {
+        encoding: "utf-8",
+      });
 
-        if (result.status === 0) {
-          console.log("💾 已保存開發計劃到 Git notes\n");
-        }
-      } catch (error) {
-        console.log(`⚠️  無法保存開發計劃: ${error.message}\n`);
-      }
+      console.log("💾 已建立 start-task 暫存檔案（檔案化，不使用 Git notes）\n");
+      console.log(`   - ${startTaskInfoFile}`);
+      console.log(`   - ${developmentPlanFile}`);
+      console.log(`   - ${developmentReportFile}\n`);
+
+      console.log("ℹ️  後續對接 create-mr / update-mr 時，可傳入以下參數：");
+      console.log(`   --start-task-info-file="${startTaskInfoFile}"`);
+      console.log(`   --development-plan-file="${developmentPlanFile}"`);
+      console.log(`   --development-report-file="${developmentReportFile}"\n`);
     } else {
       console.log("\n💡 如需調整計劃，請告知具體需求\n");
     }
