@@ -304,7 +304,6 @@ function createMRWithGlab(
     draft ? `Draft: ${title}` : title,
     "--description",
     description,
-    "--remove-source-branch",
   ];
 
   if (draft) {
@@ -1238,6 +1237,148 @@ async function findUserId(token, host, username) {
   }
 }
 
+// 獲取專案的可用 label 清單（包含完整資訊）
+async function getProjectLabels(token, host, projectPath) {
+  try {
+    const url = `${host}/api/v4/projects/${projectPath}/labels`;
+    const response = await fetch(url, {
+      headers: {
+        "PRIVATE-TOKEN": token,
+      },
+    });
+
+    if (!response.ok) {
+      console.error(
+        `⚠️  無法獲取專案 labels 清單: ${response.status} ${response.statusText}`
+      );
+      return null;
+    }
+
+    const labels = await response.json();
+    // 返回完整的 label 物件陣列（包含 name 和 description）
+    return labels;
+  } catch (error) {
+    console.error(`⚠️  獲取專案 labels 失敗: ${error.message}`);
+    return null;
+  }
+}
+
+// 使用 glab 獲取專案的可用 label 清單（包含完整資訊）
+function getProjectLabelsWithGlab(projectPath) {
+  try {
+    const result = exec(
+      `glab api "projects/${projectPath}/labels"`,
+      { silent: true }
+    );
+    if (result && result.trim()) {
+      const labels = JSON.parse(result);
+      // 返回完整的 label 物件陣列
+      return labels;
+    }
+    return null;
+  } catch (error) {
+    return null;
+  }
+}
+
+// 驗證並過濾 labels
+function validateAndFilterLabels(
+  labelsToValidate,
+  availableLabels,
+  labelSource = "外部傳入"
+) {
+  if (!availableLabels || availableLabels.length === 0) {
+    // 如果無法獲取可用 labels，發出警告但不阻止
+    console.log(
+      `⚠️  無法獲取專案可用 labels 清單，將跳過驗證（建議檢查網路連線或 API 權限）\n`
+    );
+    return { valid: labelsToValidate, invalid: [] };
+  }
+
+  // 將 label 物件陣列轉換為名稱陣列，用於驗證
+  const availableLabelNames = availableLabels.map((label) =>
+    typeof label === "string" ? label : label.name
+  );
+
+  const valid = [];
+  const invalid = [];
+
+  for (const label of labelsToValidate) {
+    if (availableLabelNames.includes(label)) {
+      valid.push(label);
+    } else {
+      invalid.push(label);
+    }
+  }
+
+  if (invalid.length > 0) {
+    console.error(
+      `\n❌ 以下 ${labelSource} 的 labels 在專案中不存在，已過濾：\n`
+    );
+    invalid.forEach((label) => {
+      console.error(`   - ${label}`);
+    });
+
+    // 檢查是否有帶描述的 labels
+    const labelsWithDescription = availableLabels.filter(
+      (label) =>
+        typeof label === "object" &&
+        label.description &&
+        label.description.trim().length > 0
+    );
+
+    console.error(`\n💡 專案可用 labels 清單（前 30 個）：`);
+    const sampleLabels = availableLabels.slice(0, 30);
+    sampleLabels.forEach((label) => {
+      const labelName = typeof label === "string" ? label : label.name;
+      const labelDesc =
+        typeof label === "object" && label.description
+          ? ` - ${label.description}`
+          : "";
+      console.error(`   - ${labelName}${labelDesc}`);
+    });
+    if (availableLabels.length > 30) {
+      console.error(`   ... 還有 ${availableLabels.length - 30} 個 labels`);
+    }
+
+    if (labelsWithDescription.length > 0) {
+      console.error(
+        `\n📋 【重要提醒】AI 在傳入 --labels 參數前，必須：\n`
+      );
+      console.error(
+        `   1. 先查看當前專案內所有 labels 的添加規則和描述（如上所示）\n`
+      );
+      console.error(
+        `   2. 依照專案的 label 規範描述判定要添加哪些額外 label\n`
+      );
+      console.error(
+        `   3. 僅使用專案中存在的 labels，不存在的 labels 將被自動過濾，不會添加到 MR\n`
+      );
+      console.error(
+        `   4. 不可自行創建新 label，必須使用專案已定義的 labels\n`
+      );
+    } else {
+      console.error(
+        `\n📋 【重要提醒】AI 在傳入 --labels 參數前，必須：\n`
+      );
+      console.error(
+        `   1. 先查看當前專案內所有可用的 labels 清單（如上所示）\n`
+      );
+      console.error(
+        `   2. 依照專案的 label 添加規則（若有）判定要添加哪些額外 label\n`
+      );
+      console.error(
+        `   3. 僅使用專案中存在的 labels，不存在的 labels 將被自動過濾，不會添加到 MR\n`
+      );
+      console.error(
+        `   4. 不可自行創建新 label，必須使用專案已定義的 labels\n`
+      );
+    }
+  }
+
+  return { valid, invalid };
+}
+
 // 生成開發計劃區塊（純開發步驟，不含關聯單資訊）
 function generateDevelopmentPlanSection(taskInfo) {
   if (!taskInfo) return null;
@@ -1561,6 +1702,9 @@ async function main() {
   }
 
   let currentBranch = getCurrentBranch();
+
+  // 獲取專案資訊（在函數開始時宣告，供後續使用）
+  const projectInfo = getProjectInfo();
 
   // 檢查遠端分支是否存在
   let remoteBranchExists = false;
@@ -1906,14 +2050,47 @@ async function main() {
     console.log(`🏷️  自動產生的 labels: ${labels.join(", ")}\n`);
   }
 
-  // 合併外部傳入的 labels（去重）
+  // 獲取專案可用 labels 清單並驗證外部傳入的 labels
+  let availableLabelsData = null;
+  
+  // 優先使用 glab，否則使用 API token
+  if (hasGlab() && isGlabAuthenticated("gitlab.service-hub.tech")) {
+    availableLabelsData = getProjectLabelsWithGlab(projectInfo.projectPath);
+  }
+
+  if (!availableLabelsData) {
+    const token = getGitLabToken();
+    if (token) {
+      availableLabelsData = await getProjectLabels(
+        token,
+        projectInfo.host,
+        projectInfo.projectPath
+      );
+    }
+  }
+
+  // 驗證並過濾外部傳入的 labels
   if (externalLabels.length > 0) {
     console.log(`🏷️  外部傳入的 labels: ${externalLabels.join(", ")}`);
-    for (const label of externalLabels) {
+    const validationResult = validateAndFilterLabels(
+      externalLabels,
+      availableLabelsData,
+      "外部傳入"
+    );
+
+    // 只合併有效的 labels（去重）
+    for (const label of validationResult.valid) {
       if (!labels.includes(label)) {
         labels.push(label);
       }
     }
+
+    if (validationResult.invalid.length > 0) {
+      console.log(
+        `\n⚠️  已過濾 ${validationResult.invalid.length} 個不存在的 labels，僅使用有效的 labels\n`
+      );
+    }
+
     console.log(`🏷️  最終 labels: ${labels.join(", ")}\n`);
   } else if (labels.length > 0) {
     console.log(`🏷️  將添加 labels: ${labels.join(", ")}\n`);
@@ -1975,7 +2152,6 @@ async function main() {
   if (!existingMR || (existingMR && !existingMRDetails)) {
     const token = getGitLabToken();
     if (token) {
-      const projectInfo = getProjectInfo();
       if (!existingMR) {
         existingMR = await findExistingMR(
           token,
@@ -2237,8 +2413,6 @@ async function main() {
 
     process.exit(1);
   }
-
-  const projectInfo = getProjectInfo();
 
   console.log(`📍 項目: ${projectInfo.fullPath}`);
 

@@ -709,9 +709,7 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
    3. **重複步驟 1-2**，直到找到有效的 reviewer 或用戶選擇使用預設 reviewer
    
    **注意**：系統會強制設置 reviewer，無法跳過。必須找到有效的 reviewer 或使用預設 reviewer 才能繼續。
-   **注意：** 所有通過 `create-mr` 腳本建立的 MR 都會自動檢查改動檔案是否有特定版本標記：
-   - 若改動檔案**沒有特定版本標記**，則同時添加 `3.0UI` 和 `4.0UI` label
-   - 若改動檔案**有特定版本標記**，則根據影響範圍添加對應的 UI label
+  **注意：** 所有通過 `create-mr` 腳本建立的 MR，都會基於改動內容自動判斷並添加對應的 labels。
    
    **FE Board Label 添加規則：**
    - **CRITICAL**: 只有當前分支使用的單號（從分支名稱提取的單號）是 `FE-` 開頭時，才添加 `FE Board` label
@@ -755,7 +753,7 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
    - 優先使用 GitLab CLI (glab)，使用用戶的 GitLab 帳號權限
    - 如果 glab 不可用，嘗試使用 API token
    - **自動設置為 Draft 狀態**（除非使用 `--no-draft`）
-   - **自動分析改動檔案並添加 4.0UI 或 3.0UI label**（根據影響範圍）
+  - **自動分析改動檔案並添加對應的 labels**（根據影響範圍）
    - 自動添加 reviewer
    - 使用當前分支和 commit message 作為 MR 標題
    - **自動設定 delete source branch**（MR 合併後自動刪除來源分支）
