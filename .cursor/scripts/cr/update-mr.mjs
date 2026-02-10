@@ -25,6 +25,7 @@ import {
   getGitLabToken as getGitLabTokenFromEnvLoader,
 } from "../utilities/env-loader.mjs";
 import { determineLabels, readStartTaskInfo } from "./label-analyzer.mjs";
+import { appendAgentSignature } from "../utilities/agent-signature.mjs";
 
 const projectRoot = getProjectRoot();
 
@@ -522,7 +523,7 @@ async function upsertAiReviewMarkerNote(
   headSha
 ) {
   const notes = await listMrNotes(token, host, projectPath, mrIid, 100);
-  const body = buildAiReviewMarkerBody(headSha);
+  const body = appendAgentSignature(buildAiReviewMarkerBody(headSha));
   const existing = notes.find(
     (n) =>
       typeof n.body === "string" && n.body.includes(AI_REVIEW_MARKER_PREFIX)

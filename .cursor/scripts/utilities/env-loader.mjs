@@ -217,3 +217,30 @@ export function getMRReviewer() {
   const envLocal = loadEnvLocal();
   return process.env.MR_REVIEWER || envLocal.MR_REVIEWER || null;
 }
+
+/**
+ * 獲取個性化 agent 顯示名稱（從環境變數或 .env.local）
+ *
+ * - 未設置 / 空字串：回傳 null（視同無此功能，行為保持既有不變）
+ * - 建議限制長度：預設最多 40 字元（超過則截斷）
+ *
+ * @param {Object} options
+ * @param {number} options.maxLength - 最大長度（預設 40）
+ * @returns {string|null}
+ */
+export function getAgentDisplayName(options = {}) {
+  const envLocal = loadEnvLocal();
+  const raw = process.env.AGENT_DISPLAY_NAME ?? envLocal.AGENT_DISPLAY_NAME;
+  if (typeof raw !== "string") return null;
+
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const maxLength =
+    typeof options.maxLength === "number" && options.maxLength > 0
+      ? options.maxLength
+      : 40;
+
+  if (trimmed.length > maxLength) return trimmed.slice(0, maxLength);
+  return trimmed;
+}
