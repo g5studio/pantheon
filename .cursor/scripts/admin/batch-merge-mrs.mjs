@@ -2,15 +2,17 @@
 
 /**
  * 批次處理 Merge Requests：
- * - 檢查衝突
- * - 檢查 MR 版本 label（例如 v5.38）是否與 Jira fix version 相符（不符則略過）
+ * - 檢查衝突（has_conflicts / detailed_merge_status）
+ * - 依 `--labels` 過濾（例如 v5.38）
+ * - 從 MR title/description 抓 ticket（FE-/IN-）
+ * - 讀 Jira fixVersion → 推導預期 version label（vX.Y）→ 與 MR labels 比對（不符略過）
  * - 檢查 approvals（可要求特定使用者必須在 approved_by 中）
- * - 符合條件才合併，並將 Jira 狀態切到指定狀態（預設 PENDING DEPLOY STG）
+ * - 符合條件才合併
+ * - 合併後將 Jira 主單狀態切到指定狀態（預設 PENDING DEPLOY STG）
  *
- * 特色：
- * - 每次只取 100 筆（GitLab per_page 上限通常為 100）
- * - 每筆合併前 sleep 1.5s（可調整），避免 GitLab 瞬間壓力過大
- * - 允許自訂參數：labels/state/orderBy/sort/perPage/delay/jiraStatus/approvedBy/dryRun/maxIterations
+ * 監控機制：
+ * - `--progress`：每處理一筆 MR，輸出一行 `BATCH_MERGE_PROGRESS {json}` 到 stderr
+ *   用於 AI 在 chat 中逐筆回報（MR / ticket 超連結、作者、fix version、reason/reasonDetail）
  */
 
 import { spawnSync } from "child_process";
@@ -29,7 +31,7 @@ function usage() {
     "- either --dry-run OR --execute",
     "",
     "Examples:",
-    '  node .cursor/scripts/admin/batch-merge-mrs.mjs --labels=v5.38 --approved-by=william.chiang --jira-to="PENDING DEPLOY STG" --dry-run',
+    '  node .cursor/scripts/admin/batch-merge-mrs.mjs --labels=v5.38 --approved-by=william.chiang --jira-to=\"PENDING DEPLOY STG\" --dry-run',
     "  node .cursor/scripts/admin/batch-merge-mrs.mjs --labels=v5.38 --no-approval-check --no-jira-transition --dry-run",
     "",
     "After reviewing dry-run output, re-run with --execute to actually merge.",
@@ -54,10 +56,11 @@ function parseArgs(argv) {
     requireApprovedBy: "william.chiang",
     // behavior
     skipDraft: true,
+    progress: false,
     dryRun: false,
-    // loop guard: when list keeps changing
+    // loop guard
     maxIterations: 1000,
-    // optional upper bound of how many MRs to *attempt* (after filtering)
+    // upper bound
     maxProcess: 0,
   };
 
@@ -73,13 +76,16 @@ function parseArgs(argv) {
     const arg = raw.trim();
     if (!arg) continue;
 
+    if (arg === "--progress") {
+      opt.progress = true;
+      continue;
+    }
     if (arg === "--dry-run") {
       opt.dryRun = true;
       provided.action = "dry-run";
       continue;
     }
     if (arg === "--execute") {
-      // Explicitly allow real merges (dryRun stays false).
       opt.dryRun = false;
       provided.action = "execute";
       continue;
@@ -138,6 +144,7 @@ function parseArgs(argv) {
     }
     if (arg.startsWith("--approved-by=")) {
       opt.requireApprovedBy = arg.split("=").slice(1).join("=");
+      opt.requireApproved = true;
       provided.hasApprovalChoice = true;
       continue;
     }
@@ -154,7 +161,7 @@ function parseArgs(argv) {
   }
 
   if (!Number.isFinite(opt.perPage) || opt.perPage <= 0) opt.perPage = 100;
-  if (opt.perPage > 100) opt.perPage = 100; // GitLab 通常上限 100
+  if (opt.perPage > 100) opt.perPage = 100;
 
   if (!Number.isFinite(opt.mergeDelaySeconds) || opt.mergeDelaySeconds < 0) {
     opt.mergeDelaySeconds = 1.5;
@@ -167,28 +174,15 @@ function parseArgs(argv) {
     opt.maxProcess = 0;
   }
 
-  // Strict validation to prevent accidental merges/transitions.
-  if (args.length === 0) {
-    throw new Error(usage());
-  }
+  // Strict validation
+  if (args.length === 0) throw new Error(usage());
   if (unknown.length > 0) {
     throw new Error([`Unknown flags: ${unknown.join(", ")}`, "", usage()].join("\n"));
   }
-  if (!provided.hasLabels) {
-    throw new Error(usage());
-  }
-  if (!provided.hasApprovalChoice) {
-    throw new Error(usage());
-  }
-  if (!provided.hasJiraChoice) {
-    throw new Error(usage());
-  }
-  if (!provided.action) {
-    throw new Error(usage());
-  }
-  if (provided.action === "dry-run") {
-    opt.dryRun = true;
-  }
+  if (!provided.hasLabels) throw new Error(usage());
+  if (!provided.hasApprovalChoice) throw new Error(usage());
+  if (!provided.hasJiraChoice) throw new Error(usage());
+  if (!provided.action) throw new Error(usage());
 
   return opt;
 }
@@ -203,9 +197,7 @@ function execGlab(host, args, { silent = true } = {}) {
   const stdout = (res.stdout || "").toString();
   const stderr = (res.stderr || "").toString();
 
-  if (res.error) {
-    throw new Error(`glab 執行失敗: ${res.error.message}`);
-  }
+  if (res.error) throw new Error(`glab 執行失敗: ${res.error.message}`);
   if (res.status !== 0) {
     throw new Error(`glab 退出碼 ${res.status}: ${stderr || stdout}`.trim());
   }
@@ -217,8 +209,35 @@ function glabApiJson(host, endpoint) {
   return out ? JSON.parse(out) : null;
 }
 
+function glabApiPutJson(host, endpoint) {
+  const out = execGlab(host, ["api", "-X", "PUT", endpoint], { silent: true });
+  return out ? JSON.parse(out) : null;
+}
+
+function jiraUrl(ticket) {
+  return ticket ? `https://innotech.atlassian.net/browse/${ticket}` : "";
+}
+
+function emitProgress(opt, payload) {
+  if (!opt?.progress) return;
+  try {
+    process.stderr.write(`BATCH_MERGE_PROGRESS ${JSON.stringify(payload)}\n`);
+  } catch {
+    // no-op
+  }
+}
+
+function reasonDetailFromLabels(mrVersionLabels, jiraVersionLabels) {
+  const mr = Array.isArray(mrVersionLabels) ? mrVersionLabels.filter(Boolean) : [];
+  const jira = Array.isArray(jiraVersionLabels)
+    ? jiraVersionLabels.filter(Boolean)
+    : [];
+  const mrStr = mr.length ? mr.join("|") : "unknown";
+  const jiraStr = jira.length ? jira.join("|") : "unknown";
+  return `MR version 與 fix version 不匹配（mr=${mrStr}, jira=${jiraStr}）`;
+}
+
 function buildProjectRef(project) {
-  // 支援 glab placeholder（例如 :id），此時不可 encode
   if (typeof project === "string" && project.startsWith(":")) {
     return project;
   }
@@ -269,9 +288,7 @@ function intersects(a, b) {
 
 async function readJiraFields(ticket) {
   const config = getJiraConfig();
-  const auth = Buffer.from(`${config.email}:${config.apiToken}`).toString(
-    "base64"
-  );
+  const auth = Buffer.from(`${config.email}:${config.apiToken}`).toString("base64");
   const baseUrl = config.baseUrl.endsWith("/")
     ? config.baseUrl.slice(0, -1)
     : config.baseUrl;
@@ -299,9 +316,7 @@ async function readJiraFields(ticket) {
 
 async function getJiraTransitions(ticket) {
   const config = getJiraConfig();
-  const auth = Buffer.from(`${config.email}:${config.apiToken}`).toString(
-    "base64"
-  );
+  const auth = Buffer.from(`${config.email}:${config.apiToken}`).toString("base64");
   const baseUrl = config.baseUrl.endsWith("/")
     ? config.baseUrl.slice(0, -1)
     : config.baseUrl;
@@ -327,9 +342,7 @@ async function getJiraTransitions(ticket) {
 
 async function executeJiraTransition(ticket, transitionId) {
   const config = getJiraConfig();
-  const auth = Buffer.from(`${config.email}:${config.apiToken}`).toString(
-    "base64"
-  );
+  const auth = Buffer.from(`${config.email}:${config.apiToken}`).toString("base64");
   const baseUrl = config.baseUrl.endsWith("/")
     ? config.baseUrl.slice(0, -1)
     : config.baseUrl;
@@ -355,7 +368,7 @@ async function executeJiraTransition(ticket, transitionId) {
 
 async function transitionJiraTo(ticket, targetStatus) {
   const transitions = await getJiraTransitions(ticket);
-  const lower = targetStatus.toLowerCase();
+  const lower = String(targetStatus || "").trim().toLowerCase();
 
   const matched = transitions.find((t) => {
     const name = (t.name || "").toLowerCase();
@@ -403,6 +416,15 @@ async function main() {
   const seen = new Set();
   const projectRef = buildProjectRef(opt.project);
 
+  const jiraCache = new Map();
+  async function maybeGetJira(ticket) {
+    if (!ticket) return null;
+    if (jiraCache.has(ticket)) return jiraCache.get(ticket);
+    const data = await readJiraFields(ticket);
+    jiraCache.set(ticket, data);
+    return data;
+  }
+
   for (let iteration = 1; iteration <= opt.maxIterations; iteration += 1) {
     result.iterations = iteration;
 
@@ -416,52 +438,73 @@ async function main() {
       `&sort=${encodeURIComponent(opt.sort)}`;
 
     const list = glabApiJson(opt.host, endpoint) || [];
-    if (!Array.isArray(list) || list.length === 0) {
-      break;
-    }
+    if (!Array.isArray(list) || list.length === 0) break;
 
     const newOnes = list.filter((mr) => mr?.iid && !seen.has(mr.iid));
-    if (newOnes.length === 0) {
-      // 避免 list 不變造成無限迴圈
-      break;
-    }
+    if (newOnes.length === 0) break;
 
     for (const mr of newOnes) {
       seen.add(mr.iid);
+      if (opt.maxProcess > 0 && result.processed >= opt.maxProcess) break;
 
-      if (opt.maxProcess > 0 && result.processed >= opt.maxProcess) {
-        break;
-      }
-
-      // fetch full mr details for conflicts/labels/description
       const mrFull =
-        glabApiJson(
-          opt.host,
-          `/projects/${projectRef}/merge_requests/${mr.iid}`
-        ) || mr;
+        glabApiJson(opt.host, `/projects/${projectRef}/merge_requests/${mr.iid}`) ||
+        mr;
 
       const webUrl = mrFull.web_url || mr.web_url || "";
       const title = mrFull.title || mr.title || "";
       const labels = mrFull.labels || [];
+      const author = mrFull.author || {};
+
+      const ticket = extractJiraTicketFromMr(mrFull);
+      const ticketUrl = jiraUrl(ticket);
 
       if (opt.skipDraft) {
         const isDraft =
           !!mrFull.draft ||
           (typeof title === "string" && title.toLowerCase().startsWith("draft:"));
         if (isDraft) {
-          result.skipped.push({
-            iid: mrFull.iid,
-            url: webUrl,
+          result.skipped.push({ iid: mrFull.iid, url: webUrl, reason: "DRAFT" });
+          emitProgress(opt, {
+            status: "skipped",
             reason: "DRAFT",
+            reasonDetail: "Draft MR 會被略過",
+            project: opt.project,
+            iid: mrFull.iid,
+            mrUrl: webUrl,
+            ticket,
+            ticketUrl,
+            author: {
+              username: author?.username || "",
+              name: author?.name || "",
+              webUrl: author?.web_url || "",
+            },
+            jiraFixVersions: [],
           });
           continue;
         }
       }
 
       const hasConflicts = !!mrFull.has_conflicts;
-      const detailed = mrFull.detailed_merge_status || "";
-      if (hasConflicts || detailed === "conflicts") {
+      const detailed = String(mrFull.detailed_merge_status || "").toLowerCase();
+      if (hasConflicts || detailed === "conflict" || detailed === "conflicts") {
         result.conflicts.push({ iid: mrFull.iid, url: webUrl, title });
+        emitProgress(opt, {
+          status: "conflict",
+          reason: "CONFLICT",
+          reasonDetail: "MR 有衝突（GitLab 判定 cannot be merged: conflict）",
+          project: opt.project,
+          iid: mrFull.iid,
+          mrUrl: webUrl,
+          ticket,
+          ticketUrl,
+          author: {
+            username: author?.username || "",
+            name: author?.name || "",
+            webUrl: author?.web_url || "",
+          },
+          jiraFixVersions: [],
+        });
         continue;
       }
 
@@ -477,39 +520,76 @@ async function main() {
         );
 
         if (!fullyApproved || !userApproved) {
-          result.skipped.push({
-            iid: mrFull.iid,
-            url: webUrl,
+          result.skipped.push({ iid: mrFull.iid, url: webUrl, reason: "NOT_APPROVED" });
+          emitProgress(opt, {
+            status: "skipped",
             reason: "NOT_APPROVED",
+            reasonDetail: "未通過 approval 檢查",
+            project: opt.project,
+            iid: mrFull.iid,
+            mrUrl: webUrl,
+            ticket,
+            ticketUrl,
+            author: {
+              username: author?.username || "",
+              name: author?.name || "",
+              webUrl: author?.web_url || "",
+            },
+            jiraFixVersions: [],
           });
           continue;
         }
       }
 
-      // version label check vs Jira
-      const ticket = extractJiraTicketFromMr(mrFull);
       if (!ticket) {
-        result.skipped.push({
-          iid: mrFull.iid,
-          url: webUrl,
+        result.skipped.push({ iid: mrFull.iid, url: webUrl, reason: "NO_JIRA_TICKET" });
+        emitProgress(opt, {
+          status: "skipped",
           reason: "NO_JIRA_TICKET",
+          reasonDetail: "無法從 MR title/description 抽出 Jira ticket",
+          project: opt.project,
+          iid: mrFull.iid,
+          mrUrl: webUrl,
+          ticket: "",
+          ticketUrl: "",
+          author: {
+            username: author?.username || "",
+            name: author?.name || "",
+            webUrl: author?.web_url || "",
+          },
+          jiraFixVersions: [],
         });
         continue;
       }
 
       let jira;
       try {
-        jira = await readJiraFields(ticket);
+        jira = await maybeGetJira(ticket);
       } catch {
         result.skipped.push({
           iid: mrFull.iid,
           url: webUrl,
           reason: `JIRA_READ_FAILED(${ticket})`,
         });
+        emitProgress(opt, {
+          status: "skipped",
+          reason: `JIRA_READ_FAILED(${ticket})`,
+          reasonDetail: "讀取 Jira ticket 失敗",
+          project: opt.project,
+          iid: mrFull.iid,
+          mrUrl: webUrl,
+          ticket,
+          ticketUrl,
+          author: {
+            username: author?.username || "",
+            name: author?.name || "",
+            webUrl: author?.web_url || "",
+          },
+          jiraFixVersions: [],
+        });
         continue;
       }
 
-      // fix version label check vs Jira fixVersions
       const mrVersionLabels = getMrVersionLabels(labels);
       if (mrVersionLabels.length === 0) {
         result.skipped.push({
@@ -517,10 +597,26 @@ async function main() {
           url: webUrl,
           reason: "NO_MR_VERSION_LABEL",
         });
+        emitProgress(opt, {
+          status: "skipped",
+          reason: "NO_MR_VERSION_LABEL",
+          reasonDetail: "MR 沒有版本標籤（例如 v5.xx）",
+          project: opt.project,
+          iid: mrFull.iid,
+          mrUrl: webUrl,
+          ticket,
+          ticketUrl,
+          author: {
+            username: author?.username || "",
+            name: author?.name || "",
+            webUrl: author?.web_url || "",
+          },
+          jiraFixVersions: [],
+        });
         continue;
       }
 
-      const jiraFixVersionNames = Array.isArray(jira.fixVersions)
+      const jiraFixVersionNames = Array.isArray(jira?.fixVersions)
         ? jira.fixVersions.map((x) => x?.name).filter(Boolean)
         : [];
       if (jiraFixVersionNames.length === 0) {
@@ -528,6 +624,22 @@ async function main() {
           iid: mrFull.iid,
           url: webUrl,
           reason: `NO_JIRA_FIX_VERSION(${ticket})`,
+        });
+        emitProgress(opt, {
+          status: "skipped",
+          reason: `NO_JIRA_FIX_VERSION(${ticket})`,
+          reasonDetail: "Jira ticket 沒有填 fixVersion",
+          project: opt.project,
+          iid: mrFull.iid,
+          mrUrl: webUrl,
+          ticket,
+          ticketUrl,
+          author: {
+            username: author?.username || "",
+            name: author?.name || "",
+            webUrl: author?.web_url || "",
+          },
+          jiraFixVersions: [],
         });
         continue;
       }
@@ -541,6 +653,24 @@ async function main() {
             "|"
           )})`,
         });
+        emitProgress(opt, {
+          status: "skipped",
+          reason: `CANNOT_PARSE_JIRA_FIX_VERSION(${ticket})`,
+          reasonDetail: "Jira fixVersion 無法解析成 vX.Y 標籤",
+          project: opt.project,
+          iid: mrFull.iid,
+          mrUrl: webUrl,
+          ticket,
+          ticketUrl,
+          author: {
+            username: author?.username || "",
+            name: author?.name || "",
+            webUrl: author?.web_url || "",
+          },
+          jiraFixVersions: jiraFixVersionNames,
+          mrVersionLabels,
+          jiraVersionLabels,
+        });
         continue;
       }
 
@@ -552,45 +682,93 @@ async function main() {
             "|"
           )}, actual=${mrVersionLabels.join("|")}, ticket=${ticket})`,
         });
+        emitProgress(opt, {
+          status: "skipped",
+          reason: "FIX_VERSION_MISMATCH",
+          reasonDetail: reasonDetailFromLabels(mrVersionLabels, jiraVersionLabels),
+          project: opt.project,
+          iid: mrFull.iid,
+          mrUrl: webUrl,
+          ticket,
+          ticketUrl,
+          author: {
+            username: author?.username || "",
+            name: author?.name || "",
+            webUrl: author?.web_url || "",
+          },
+          jiraFixVersions: jiraFixVersionNames,
+          mrVersionLabels,
+          jiraVersionLabels,
+        });
         continue;
       }
 
       result.processed += 1;
 
       if (opt.dryRun) {
-        result.merged.push({
+        result.merged.push({ iid: mrFull.iid, url: webUrl, ticket, dryRun: true });
+        emitProgress(opt, {
+          status: "dry_run_candidate",
+          reason: "DRY_RUN_CANDIDATE",
+          reasonDetail: "符合條件（dry-run 候選）",
+          project: opt.project,
           iid: mrFull.iid,
-          url: webUrl,
+          mrUrl: webUrl,
           ticket,
-          dryRun: true,
+          ticketUrl,
+          author: {
+            username: author?.username || "",
+            name: author?.name || "",
+            webUrl: author?.web_url || "",
+          },
+          jiraFixVersions: jiraFixVersionNames,
+          mrVersionLabels,
+          jiraVersionLabels,
         });
         continue;
       }
 
-      // merge delay
-      if (opt.mergeDelaySeconds > 0) {
-        await sleep(opt.mergeDelaySeconds * 1000);
-      }
+      if (opt.mergeDelaySeconds > 0) await sleep(opt.mergeDelaySeconds * 1000);
 
       try {
-        execGlab(opt.host, ["mr", "merge", String(mrFull.iid), "--yes"], {
-          silent: true,
-        });
+        glabApiPutJson(
+          opt.host,
+          `/projects/${projectRef}/merge_requests/${mrFull.iid}/merge`
+        );
       } catch (e) {
         result.skipped.push({
           iid: mrFull.iid,
           url: webUrl,
           reason: `MERGE_FAILED(${String(e.message || e)})`,
         });
+        emitProgress(opt, {
+          status: "merge_failed",
+          reason: `MERGE_FAILED(${String(e.message || e)})`,
+          reasonDetail: "GitLab 合併 API 呼叫失敗",
+          project: opt.project,
+          iid: mrFull.iid,
+          mrUrl: webUrl,
+          ticket,
+          ticketUrl,
+          author: {
+            username: author?.username || "",
+            name: author?.name || "",
+            webUrl: author?.web_url || "",
+          },
+          jiraFixVersions: jiraFixVersionNames,
+          mrVersionLabels,
+          jiraVersionLabels,
+        });
         continue;
       }
 
-      // transition jira
+      let jiraTransition = "skipped";
       if (opt.transitionJira) {
         try {
           await transitionJiraTo(ticket, opt.jiraTargetStatus);
+          jiraTransition = "success";
         } catch (e) {
-          // 合併已完成，Jira 失敗只記錄錯誤
+          jiraTransition = "failed";
           result.errors.push({
             iid: mrFull.iid,
             url: webUrl,
@@ -601,11 +779,29 @@ async function main() {
       }
 
       result.merged.push({ iid: mrFull.iid, url: webUrl, ticket });
+      emitProgress(opt, {
+        status: "merged",
+        reason: "MERGED",
+        reasonDetail: "合併成功",
+        project: opt.project,
+        iid: mrFull.iid,
+        mrUrl: webUrl,
+        ticket,
+        ticketUrl,
+        author: {
+          username: author?.username || "",
+          name: author?.name || "",
+          webUrl: author?.web_url || "",
+        },
+        jiraFixVersions: jiraFixVersionNames,
+        mrVersionLabels,
+        jiraVersionLabels,
+        jiraTransition,
+        jiraTargetStatus: opt.jiraTargetStatus,
+      });
     }
 
-    if (opt.maxProcess > 0 && result.processed >= opt.maxProcess) {
-      break;
-    }
+    if (opt.maxProcess > 0 && result.processed >= opt.maxProcess) break;
   }
 
   result.finishedAt = new Date().toISOString();

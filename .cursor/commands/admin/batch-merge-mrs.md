@@ -8,7 +8,8 @@ description: 批次檢查/合併 MR，並切換 Jira 狀態（可自訂參數）
 
 - 檢查 MR 是否有衝突（conflict）
 - 依 `--labels` 過濾目標清單（例如 `v5.38`）
-- 檢查 Jira（從 MR title/description 抓 ticket）並推導 **預期 UI label**（`3.0UI` / `4.0UI`），若 MR labels 不含該 UI label 則略過
+- 檢查 Jira（從 MR title/description 抓 ticket），並以 Jira **fix version** 推導預期 version label（`vX.Y`）
+  - 若 MR version labels 與 Jira fix version 推導的 labels 不一致則略過（例如 `FIX_VERSION_MISMATCH`）
 - 檢查是否已通過 approve（可要求必須包含指定 user 的核准）
 - **符合條件才合併**
 - 合併後將 Jira 主單狀態切到指定狀態（預設：`PENDING DEPLOY STG`）
@@ -33,7 +34,7 @@ description: 批次檢查/合併 MR，並切換 Jira 狀態（可自訂參數）
 
 > 🚨 安全設計：此腳本已改為「缺少必要 flags 就直接退出」，避免吃到隱含預設造成誤合併/誤切 Jira。
 
-2. **建議流程**：即使你最後要合併，也請先跑一次 `--dry-run`（Answer 視窗選 `--dry-run`），確認清單無誤後再用 `--execute` 重跑
+2. **建議流程**：即使你最後要合併，也請先跑一次 `--dry-run`，確認清單無誤後再用 `--execute` 重跑
 
 3. **將 dry-run 結果整理回報給用戶**（建議用表格列出 `merged/conflicts/skipped/errors`）
 
@@ -51,7 +52,7 @@ node .cursor/scripts/admin/batch-merge-mrs.mjs <flags...>
 
 ### 🚨 權限要求
 
-此流程需要呼叫 GitLab API、合併 MR、呼叫 Jira API 做狀態切換。
+此流程需要呼叫 GitLab API、合併 MR、呼叫 Jira API 做狀態切換。  
 AI 執行時請使用可連網權限（建議 `required_permissions: ["all"]`）。
 
 ## 參數（flags）
@@ -73,6 +74,14 @@ AI 執行時請使用可連網權限（建議 `required_permissions: ["all"]`）
 - `--no-skip-draft`：不略過 Draft MR（預設會略過）
 - `--max-process=200`：最多處理 N 筆（0 = 不限制）
 - `--max-iterations=1000`：最多迭代次數（避免清單不變造成無限迴圈）
+- `--progress`：輸出逐筆進度事件（每處理一筆 MR 就輸出一行 `BATCH_MERGE_PROGRESS ...` 到 stderr）
+
+### `--progress` 逐筆事件回報規範
+
+當使用 `--progress` 時，事件必須包含：
+- 可點擊 MR 連結、ticket 超連結、MR 建立者、Jira fix version
+- 必須包含原因欄位（`reason`），並提供 `reasonDetail` 方便人類閱讀  
+  - 例如：`FIX_VERSION_MISMATCH` / `MR version 與 fix version 不匹配（mr=v5.38, jira=v5.41）`
 
 ## 使用範例
 
@@ -98,11 +107,22 @@ node .cursor/scripts/admin/batch-merge-mrs.mjs \
   --dry-run
 ```
 
+### 範例 3：逐筆進度事件（方便 AI 在 chat 逐筆回報）
+
+```bash
+node .cursor/scripts/admin/batch-merge-mrs.mjs \
+  --labels=v5.38 \
+  --approved-by=william.chiang \
+  --jira-to="PENDING DEPLOY STG" \
+  --execute \
+  --progress
+```
+
 ## 輸出
 
 腳本輸出為 JSON，包含：
 - `merged`: 已合併清單（含對應 Jira ticket）
 - `conflicts`: 有衝突清單（需人工處理）
-- `skipped`: 略過清單與原因（Draft / Not approved / Label mismatch / Jira read failed…）
+- `skipped`: 略過清單與原因（Draft / Not approved / Fix version mismatch / Jira read failed…）
 - `errors`: 合併後 Jira transition 失敗等非致命錯誤
 
