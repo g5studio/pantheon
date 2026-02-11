@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import readline from "readline";
 import { getProjectRoot, getJiraConfig } from "../utilities/env-loader.mjs";
+import { appendAgentSignature } from "../utilities/agent-signature.mjs";
 
 // 使用 env-loader 提供的 projectRoot
 const projectRoot = getProjectRoot();
@@ -57,7 +58,7 @@ function buildDevelopmentPlanTemplate({ ticket, summary, issueType }) {
 
 function buildDevelopmentReportTemplate({ ticket, summary, issueType }) {
   // 對齊 create-mr 的開發報告格式驗證（關聯單資訊、變更摘要、變更內容表格、風險評估表格）
-  return [
+  const base = [
     "## 📋 關聯單資訊",
     "",
     "| 項目 | 值 |",
@@ -87,6 +88,9 @@ function buildDevelopmentReportTemplate({ ticket, summary, issueType }) {
     "| `path/to/file` | 輕度 | <說明> |",
     "",
   ].join("\n");
+
+  // FE-8006: 若設定 AGENT_DISPLAY_NAME，開發報告末尾追加署名（idempotent & 署名為最後一行）
+  return appendAgentSignature(base);
 }
 
 // 獲取 Jira ticket 信息

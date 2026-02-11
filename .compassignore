@@ -9,4 +9,5 @@
 
 # 工具設定檔案 / 範本
 .cursor/.env.example
+.gitignore
 

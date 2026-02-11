@@ -2150,7 +2150,10 @@ async function main() {
   const planMarkdownRaw = tryReadUtf8FileFromProjectRoot(planPath);
   const reportMarkdownRaw = tryReadUtf8FileFromProjectRoot(reportPath);
   const planMarkdown = normalizeMarkdownForCompare(planMarkdownRaw);
-  const reportMarkdown = normalizeMarkdownForCompare(reportMarkdownRaw);
+  // FE-8006: 若設定 AGENT_DISPLAY_NAME，開發報告末尾追加署名（idempotent & 署名為最後一行）
+  const reportMarkdown = appendAgentSignature(
+    normalizeMarkdownForCompare(reportMarkdownRaw)
+  );
 
   if (!planMarkdown) {
     console.error("\n❌ create-mr 需要 start-task 的開發計劃 tmp file\n");

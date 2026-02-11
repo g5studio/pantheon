@@ -724,8 +724,9 @@ async function main() {
   const planMarkdown = planMarkdownRaw
     ? planMarkdownRaw.replace(/\r\n/g, "\n").trim()
     : "";
+  // FE-8006: 若設定 AGENT_DISPLAY_NAME，開發報告末尾追加署名（idempotent & 署名為最後一行）
   const reportMarkdown = reportMarkdownRaw
-    ? reportMarkdownRaw.replace(/\r\n/g, "\n").trim()
+    ? appendAgentSignature(reportMarkdownRaw.replace(/\r\n/g, "\n").trim())
     : "";
 
   if (!planMarkdown) {

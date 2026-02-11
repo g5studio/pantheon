@@ -48,7 +48,8 @@ export function appendAgentSignature(message) {
   let i = lines.length - 1;
   while (i >= 0 && lines[i].trim() === "") i--;
   const lastNonEmpty = i >= 0 ? lines[i] : "";
-  if (lastNonEmpty === signatureLine) return message;
+  // 若已存在署名，仍需確保「署名為最後一行」（移除尾端多餘換行）
+  if (lastNonEmpty === signatureLine) return base;
 
   if (!base) return signatureLine;
   return `${base}\n${signatureLine}`;
