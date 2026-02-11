@@ -20,7 +20,14 @@ description: 批次檢查/合併 MR，並切換 Jira 狀態（可自訂參數）
 
 ### 互動式流程（強制）
 
-1. **先用 Answer 視窗讓用戶選 flags**（至少要確認以下四項）
+0. **先確認要查詢的 repo（必要）**
+   - **使用目前 workspace repo**（預設）
+     - ⚠️ 注意：若使用 `--project=:id`，會依「目前 repo」的 git remote 自動解析 GitLab project
+   - **改用指定的本機 repo 路徑**
+     - 由用戶提供本機路徑（例如 `~/Desktop/inno-project/fluid-two`）
+     - AI 後續所有命令必須在該 repo 目錄下執行（等同 `cd <repo>` 再跑腳本），避免誤操作到錯的 GitLab project
+
+1. **再用 Answer 視窗讓用戶選 flags**（至少要確認以下四項）
    - **labels（必要）**：要處理哪個版本標籤？（例如 `v5.38` / `v5.39`）
    - **approval（必要，二選一）**
      - 需要 approvals：`--approved-by=<username>`
@@ -47,6 +54,8 @@ description: 批次檢查/合併 MR，並切換 Jira 狀態（可自訂參數）
 ```bash
 node .cursor/scripts/admin/batch-merge-mrs.mjs <flags...>
 ```
+
+> **重要**：如果用戶在第 0 步選擇「指定本機 repo 路徑」，AI 必須在該 repo 目錄中執行上述命令（避免 `--project=:id` 解析到錯誤的 GitLab project）。
 
 > **注意**：此腳本依賴本機已登入 `glab`（對應 GitLab host），以及 `.cursor/.env.local` 內的 Jira 認證（`JIRA_EMAIL`, `JIRA_API_TOKEN`）。
 
