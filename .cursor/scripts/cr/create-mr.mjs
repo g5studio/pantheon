@@ -1606,6 +1606,14 @@ function enforceStartTaskGateIfNeeded({
   );
   console.error("   - planConfirmed=true");
   console.error("   - resultVerified=true");
+  console.error("");
+  console.error("💡 可使用以下工具更新 gate（檔案化）：");
+  console.error(
+    `   - node .cursor/scripts/operator/update-development-plan.mjs --ticket="${ticket}" --confirmed=true`
+  );
+  console.error(
+    `   - node .cursor/scripts/operator/update-development-report.mjs --ticket="${ticket}" --confirmed=true`
+  );
   console.error("2) 若你確定要跳過 gate，可加上參數：--skip-start-task-gate\n");
   process.exit(1);
 }
@@ -1718,6 +1726,15 @@ function validateMrDescriptionFormat(description, startTaskInfo) {
   const desc = typeof description === "string" ? description : "";
   const missing = [];
 
+  // 開發計劃（必須）：使用 marker 包住，避免後續更新/比對誤判
+  if (
+    !desc.includes("<!-- PANTHEON_DEVELOPMENT_PLAN_START -->") ||
+    !desc.includes("<!-- PANTHEON_DEVELOPMENT_PLAN_END -->") ||
+    !desc.includes("## 🎯 開發計劃")
+  ) {
+    missing.push("## 🎯 開發計劃（必須，且需包含 marker）");
+  }
+
   // 1) 關聯單資訊（必須）
   if (
     !desc.includes("## 📋 關聯單資訊") ||
@@ -1763,6 +1780,32 @@ function validateMrDescriptionFormat(description, startTaskInfo) {
   return { ok: missing.length === 0, missing, isBug };
 }
 
+const PLAN_START = "<!-- PANTHEON_DEVELOPMENT_PLAN_START -->";
+const PLAN_END = "<!-- PANTHEON_DEVELOPMENT_PLAN_END -->";
+const REPORT_START = "<!-- PANTHEON_DEVELOPMENT_REPORT_START -->";
+const REPORT_END = "<!-- PANTHEON_DEVELOPMENT_REPORT_END -->";
+
+function normalizeMarkdownForCompare(input) {
+  if (!input) return "";
+  return String(input).replace(/\r\n/g, "\n").trim();
+}
+
+function extractBlockBetweenMarkers(text, startMarker, endMarker) {
+  const base = typeof text === "string" ? text : "";
+  const startIdx = base.indexOf(startMarker);
+  if (startIdx === -1) return null;
+  const from = startIdx + startMarker.length;
+  const endIdx = base.indexOf(endMarker, from);
+  if (endIdx === -1) return null;
+  return base.slice(from, endIdx).trim();
+}
+
+function wrapWithMarker(startMarker, endMarker, markdown) {
+  const content = typeof markdown === "string" ? markdown.trim() : "";
+  if (!content) return "";
+  return `${startMarker}\n${content}\n${endMarker}`;
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const targetBranchArg = args.find((arg) => arg.startsWith("--target="));
@@ -1796,15 +1839,16 @@ async function main() {
   const cleanupStartTaskArtifactsEnabled =
     !args.includes("--no-cleanup-start-task-artifacts");
 
-  // 解析外部傳入的開發計劃
+  // 🚨 唯一路徑：只允許從 start-task tmp file 讀取（不接受 --development-plan/--development-report 旁路）
   const developmentPlanArg = args.find((arg) =>
     arg.startsWith("--development-plan=")
   );
-  const externalDevelopmentPlan = developmentPlanArg
-    ? parseExternalDevelopmentPlan(
-        developmentPlanArg.split("=").slice(1).join("=")
-      )
-    : null;
+  if (developmentPlanArg) {
+    console.error("\n❌ 已停用 --development-plan\n");
+    console.error("✅ 請改為更新 start-task tmp file 後重跑 create-mr。\n");
+    process.exit(1);
+  }
+  const externalDevelopmentPlan = null;
 
   // 解析外部傳入的 labels（支持逗號分隔）
   const externalLabelsArg = args.find((arg) => arg.startsWith("--labels="));
@@ -1826,18 +1870,15 @@ async function main() {
     ? parseAgentVersion(agentVersionArg.split("=").slice(1).join("="))
     : null;
 
-  // 解析外部傳入的開發報告（與開發計劃不同，開發報告是完成後的報告）
-  // 開發報告包含：影響範圍、根本原因、改動前後邏輯差異（Bug）或預期效果、需求覆蓋率、潛在影響風險（Request）
   const developmentReportArg = args.find((arg) =>
     arg.startsWith("--development-report=")
   );
-  const externalDevelopmentReportFromArg = developmentReportArg
-    ? normalizeExternalMarkdownArg(
-        developmentReportArg.split("=").slice(1).join("=")
-      )
-    : null;
-
-  let externalDevelopmentReport = externalDevelopmentReportFromArg;
+  if (developmentReportArg) {
+    console.error("\n❌ 已停用 --development-report\n");
+    console.error("✅ 請改為更新 start-task tmp file 後重跑 create-mr。\n");
+    process.exit(1);
+  }
+  let externalDevelopmentReport = null;
 
   // 檢查是否有未提交的變更
   const uncommittedChanges = getGitStatus();
@@ -1860,6 +1901,16 @@ async function main() {
   const projectInfo = getProjectInfo();
   const startTaskInfo = readStartTaskInfo({ startTaskInfoFile });
   const ticketFromBranchEarly = extractTicketFromBranch(currentBranch);
+
+  if (!startTaskInfo || !isSameTicket(startTaskInfo.ticket, ticketFromBranchEarly)) {
+    console.error("\n❌ create-mr 僅支援 start-task tmp file 唯一路徑\n");
+    console.error(`🌿 分支 ticket: ${ticketFromBranchEarly}`);
+    console.error(
+      `📋 start-task-info.json: ${startTaskInfoFile || DEFAULT_START_TASK_INFO_FILE}`
+    );
+    console.error("✅ 請先執行 start-task 並確保 tmp file ticket 一致\n");
+    process.exit(1);
+  }
 
   // 檢查遠端分支是否存在
   let remoteBranchExists = false;
@@ -2086,135 +2137,43 @@ async function main() {
     }
   }
 
-  // 構建 description
-  let description = "";
-  // 這些區塊用於「更新既有 MR」時做擴充追加（不可覆蓋原 description）
-  let developmentPlanSectionToAppend = null;
-  let developmentReportSectionToAppend = null;
-  let relatedTicketsSectionToAppend = null;
-  let agentVersionSectionToAppend = null;
+  // 構建 description（唯一路徑：從 start-task tmp file 組裝）
+  const planPath =
+    developmentPlanFile ||
+    startTaskInfo?.developmentPlanFile ||
+    DEFAULT_DEVELOPMENT_PLAN_FILE;
+  const reportPath =
+    developmentReportFile ||
+    startTaskInfo?.developmentReportFile ||
+    DEFAULT_DEVELOPMENT_REPORT_FILE;
 
-  if (relatedTicketsArg) {
-    const relatedTickets = relatedTicketsArg
-      .split(/[,\s]+/)
-      .map((t) => t.trim())
-      .filter((t) => t.length > 0);
+  const planMarkdownRaw = tryReadUtf8FileFromProjectRoot(planPath);
+  const reportMarkdownRaw = tryReadUtf8FileFromProjectRoot(reportPath);
+  const planMarkdown = normalizeMarkdownForCompare(planMarkdownRaw);
+  const reportMarkdown = normalizeMarkdownForCompare(reportMarkdownRaw);
 
-    const allTickets = [ticket, ...relatedTickets].filter((t) => t !== "N/A");
-    description = allTickets.join(" , ");
-  } else {
-    description = ticket;
+  if (!planMarkdown) {
+    console.error("\n❌ create-mr 需要 start-task 的開發計劃 tmp file\n");
+    console.error(`✅ 請先確認檔案存在且有內容：${planPath}\n`);
+    process.exit(1);
+  }
+  if (!reportMarkdown) {
+    console.error("\n❌ create-mr 需要 start-task 的開發報告 tmp file\n");
+    console.error(`✅ 請先確認檔案存在且有內容：${reportPath}\n`);
+    process.exit(1);
   }
 
-  const commitLines = commitMessageFull.split("\n");
-  if (commitLines.length > 1) {
-    const commitBody = commitLines.slice(1).join("\n").trim();
-    if (commitBody) {
-      description = description
-        ? `${description}\n\n${commitBody}`
-        : commitBody;
-    }
-  }
+  const planBlock = wrapWithMarker(PLAN_START, PLAN_END, planMarkdown);
+  const reportBlock = wrapWithMarker(REPORT_START, REPORT_END, reportMarkdown);
 
-  const startTaskSameTicket = isSameTicket(startTaskInfo?.ticket, ticket);
-
-  // 處理開發計劃：優先使用外部傳入，否則使用 start-task 的計劃
-  if (externalDevelopmentPlan) {
-    if (externalDevelopmentPlan.raw) {
-      // 外部傳入完整計劃，直接使用
-      console.log("📋 使用外部傳入的完整開發計劃\n");
-      developmentPlanSectionToAppend = externalDevelopmentPlan.raw;
-      description = description
-        ? `${description}\n\n${externalDevelopmentPlan.raw}`
-        : externalDevelopmentPlan.raw;
-    } else {
-      // 結構化計劃，走格式化流程
-      const planSection = generateDevelopmentPlanSection(
-        externalDevelopmentPlan
-      );
-      if (planSection) {
-        console.log("📋 檢測到開發計劃，將添加到 MR description\n");
-        developmentPlanSectionToAppend = planSection;
-        description = description
-          ? `${description}\n\n${planSection}`
-          : planSection;
-      }
-    }
-  } else {
-    // 沒有外部傳入：
-    // 1) 優先讀取 plan 檔案（.cursor/tmp 或參數指定）
-    // 2) 次要回退：若 startTaskInfo 是結構化計劃，則使用 generateDevelopmentPlanSection
-    if (startTaskSameTicket) {
-      const planPath =
-        developmentPlanFile ||
-        startTaskInfo?.developmentPlanFile ||
-        DEFAULT_DEVELOPMENT_PLAN_FILE;
-      const planMarkdown = tryReadUtf8FileFromProjectRoot(planPath);
-      if (planMarkdown && planMarkdown.trim()) {
-        console.log("📋 檢測到開發計劃檔案，將添加到 MR description\n");
-        developmentPlanSectionToAppend = planMarkdown.trim();
-        description = description
-          ? `${description}\n\n${developmentPlanSectionToAppend}`
-          : developmentPlanSectionToAppend;
-      }
-    }
-
-    if (!developmentPlanSectionToAppend && startTaskInfo) {
-      const planSection = generateDevelopmentPlanSection(startTaskInfo);
-      if (planSection) {
-        console.log("📋 檢測到開發計劃（結構化），將添加到 MR description\n");
-        developmentPlanSectionToAppend = planSection;
-        description = description
-          ? `${description}\n\n${planSection}`
-          : planSection;
-      }
-    }
-  }
-
-  // 處理開發報告：外部傳入的開發報告直接添加到 description
-  // 開發報告與開發計劃不同：
-  // - 開發計劃（--development-plan）：開發前的計劃步驟
-  // - 開發報告（--development-report）：開發完成後的報告，包含影響範圍、根本原因、改動差異等
-  if (!externalDevelopmentReport && startTaskSameTicket) {
-    const reportPath =
-      developmentReportFile ||
-      startTaskInfo?.developmentReportFile ||
-      DEFAULT_DEVELOPMENT_REPORT_FILE;
-    const reportMarkdown = tryReadUtf8FileFromProjectRoot(reportPath);
-    if (reportMarkdown && reportMarkdown.trim()) {
-      externalDevelopmentReport = reportMarkdown.trim();
-    }
-  }
-
-  if (externalDevelopmentReport) {
-    console.log("📊 使用外部傳入的開發報告\n");
-    developmentReportSectionToAppend = externalDevelopmentReport;
-    description = description
-      ? `${description}\n\n${externalDevelopmentReport}`
-      : externalDevelopmentReport;
-  }
-
-  // 添加關聯單資訊區塊（獨立於開發計劃，只顯示單號、標題、類型）
-  if (startTaskInfo && startTaskSameTicket) {
-    const relatedTicketsSection = generateRelatedTicketsSection(startTaskInfo);
-    if (relatedTicketsSection) {
-      console.log("📋 添加關聯單資訊到 MR description\n");
-      relatedTicketsSectionToAppend = relatedTicketsSection;
-      description = description
-        ? `${description}\n\n${relatedTicketsSection}`
-        : relatedTicketsSection;
-    }
-  }
+  let description = [planBlock, reportBlock].filter(Boolean).join("\n\n");
 
   // 添加 Agent 版本資訊到 description 最下方
   if (agentVersionInfo) {
     const versionSection = generateAgentVersionSection(agentVersionInfo);
     if (versionSection) {
       console.log("🤖 檢測到 Agent 版本資訊，將添加到 MR description 最下方\n");
-      agentVersionSectionToAppend = versionSection;
-      description = description
-        ? `${description}\n\n${versionSection}`
-        : versionSection;
+      description = description ? `${description}\n\n${versionSection}` : versionSection;
     }
   }
 
@@ -2563,8 +2522,38 @@ async function main() {
           }
         }
 
+        // description ↔ tmp file 一致性比對：一致才清理（不一致則保留以便重跑/排查）
+        let canCleanup = false;
+        try {
+          const details = getMRDetailsWithGlab(mrId);
+          const desc =
+            typeof details?.description === "string" ? details.description : "";
+          const mrPlan = extractBlockBetweenMarkers(desc, PLAN_START, PLAN_END);
+          const mrReport = extractBlockBetweenMarkers(
+            desc,
+            REPORT_START,
+            REPORT_END
+          );
+          const samePlan =
+            normalizeMarkdownForCompare(mrPlan) ===
+            normalizeMarkdownForCompare(planMarkdown);
+          const sameReport =
+            normalizeMarkdownForCompare(mrReport) ===
+            normalizeMarkdownForCompare(reportMarkdown);
+          canCleanup = samePlan && sameReport;
+          if (!canCleanup) {
+            console.error("\n⚠️  MR description 與 tmp file 不一致，已保留 tmp 檔案\n");
+            console.error(`   - plan match: ${String(samePlan)}`);
+            console.error(`   - report match: ${String(sameReport)}\n`);
+          }
+        } catch (error) {
+          console.error(
+            `\n⚠️  無法重新讀取 MR description 進行比對（已保留 tmp 檔案）: ${error.message}\n`
+          );
+        }
+
         cleanupStartTaskArtifactsIfNeeded({
-          enabled: cleanupStartTaskArtifactsEnabled,
+          enabled: cleanupStartTaskArtifactsEnabled && canCleanup,
           ticket,
           startTaskInfo,
           startTaskInfoFile,
@@ -2707,8 +2696,32 @@ async function main() {
       }
     }
 
+    // description ↔ tmp file 一致性比對：一致才清理（不一致則保留以便重跑/排查）
+    let canCleanup = false;
+    try {
+      const desc = typeof mr?.description === "string" ? mr.description : "";
+      const mrPlan = extractBlockBetweenMarkers(desc, PLAN_START, PLAN_END);
+      const mrReport = extractBlockBetweenMarkers(desc, REPORT_START, REPORT_END);
+      const samePlan =
+        normalizeMarkdownForCompare(mrPlan) ===
+        normalizeMarkdownForCompare(planMarkdown);
+      const sameReport =
+        normalizeMarkdownForCompare(mrReport) ===
+        normalizeMarkdownForCompare(reportMarkdown);
+      canCleanup = samePlan && sameReport;
+      if (!canCleanup) {
+        console.error("\n⚠️  MR description 與 tmp file 不一致，已保留 tmp 檔案\n");
+        console.error(`   - plan match: ${String(samePlan)}`);
+        console.error(`   - report match: ${String(sameReport)}\n`);
+      }
+    } catch (error) {
+      console.error(
+        `\n⚠️  無法取得 MR description 進行比對（已保留 tmp 檔案）: ${error.message}\n`
+      );
+    }
+
     cleanupStartTaskArtifactsIfNeeded({
-      enabled: cleanupStartTaskArtifactsEnabled,
+      enabled: cleanupStartTaskArtifactsEnabled && canCleanup,
       ticket,
       startTaskInfo,
       startTaskInfoFile,
