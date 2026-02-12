@@ -25,7 +25,11 @@ import {
   getGitLabToken as getGitLabTokenFromEnvLoader,
 } from "../utilities/env-loader.mjs";
 import { determineLabels, readStartTaskInfo } from "./label-analyzer.mjs";
-import { appendAgentSignature } from "../utilities/agent-signature.mjs";
+import {
+  appendAgentSignature,
+  stripTrailingAgentSignature,
+} from "../utilities/agent-signature.mjs";
+import { readAgentVersionInfo } from "../utilities/agent-version.mjs";
 
 const projectRoot = getProjectRoot();
 
@@ -47,6 +51,37 @@ const DEFAULT_DEVELOPMENT_REPORT_FILE = join(
   "tmp",
   "development-report.md",
 );
+
+function generateAgentVersionSection(versionInfo) {
+  if (!versionInfo || Object.keys(versionInfo).length === 0) {
+    return null;
+  }
+
+  const lines = [
+    "---",
+    "",
+    "### 🤖 Agent Version",
+    "",
+    "| Deity Agent | Version |",
+    "|-------------|---------|",
+  ];
+
+  for (const [component, version] of Object.entries(versionInfo)) {
+    lines.push(`| ${component} | ${version} |`);
+  }
+
+  return lines.join("\n");
+}
+
+function stripAgentVersionSectionFromDescription(description) {
+  const base = typeof description === "string" ? description : "";
+  const idx = base.lastIndexOf("### 🤖 Agent Version");
+  if (idx === -1) return base;
+
+  const start = Math.max(base.lastIndexOf("\n---", idx), idx);
+  const before = base.slice(0, start).trimEnd();
+  return before ? `${before}\n` : "";
+}
 
 function exec(command, options = {}) {
   try {
@@ -724,9 +759,11 @@ async function main() {
   const planMarkdown = planMarkdownRaw
     ? planMarkdownRaw.replace(/\r\n/g, "\n").trim()
     : "";
-  // FE-8006: 若設定 AGENT_DISPLAY_NAME，開發報告末尾追加署名（idempotent & 署名為最後一行）
+  // FE-8006:
+  // - report 檔案可能已帶署名（例如 operator/update-development-report 產物）
+  // - 署名需位於 MR description 最後一行，因此這裡先移除 report 末尾署名，避免後續重複
   const reportMarkdown = reportMarkdownRaw
-    ? appendAgentSignature(reportMarkdownRaw.replace(/\r\n/g, "\n").trim())
+    ? stripTrailingAgentSignature(reportMarkdownRaw.replace(/\r\n/g, "\n").trim())
     : "";
 
   if (!planMarkdown) {
@@ -837,10 +874,25 @@ async function main() {
   const existingDescription =
     typeof mrDetails.description === "string" ? mrDetails.description : "";
   const mergedWithPlan = upsertDevelopmentPlan(existingDescription, planMarkdown);
-  const mergedDescription = upsertDevelopmentReport(
+  let mergedDescription = upsertDevelopmentReport(
     mergedWithPlan,
     reportMarkdown,
   );
+
+  // FE-8006:
+  // - Agent Version 需「一定呈現在報告中」
+  // - 署名需為 MR description 的最後一行（可見內容）
+  mergedDescription = stripAgentVersionSectionFromDescription(mergedDescription);
+  const agentVersionInfoAuto = readAgentVersionInfo() || {};
+  const agentVersionSection = generateAgentVersionSection(
+    Object.keys(agentVersionInfoAuto).length > 0
+      ? agentVersionInfoAuto
+      : { pantheon: "N/A" }
+  );
+  if (agentVersionSection && !mergedDescription.includes("### 🤖 Agent Version")) {
+    mergedDescription = `${mergedDescription.trimEnd()}\n\n${agentVersionSection}\n`;
+  }
+  mergedDescription = appendAgentSignature(mergedDescription);
 
   // 格式驗證（回歸檢查）
   const validation = validateMrDescriptionFormat(
