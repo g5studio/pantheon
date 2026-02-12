@@ -13,7 +13,7 @@
  */
 
 import { execSync, spawnSync } from "child_process";
-import { existsSync, readFileSync, statSync, unlinkSync } from "fs";
+import { existsSync, readFileSync, statSync, unlinkSync, rmSync } from "fs";
 import { isAbsolute, join } from "path";
 import readline from "readline";
 import {
@@ -145,6 +145,33 @@ function safeUnlink(filePath) {
   }
 }
 
+function safeRmStartTaskDir(dirPath, ticket) {
+  if (!dirPath) return false;
+  const resolved = resolvePathFromProjectRoot(dirPath);
+  if (!resolved) return false;
+
+  const tmpRoot = join(projectRoot, ".cursor", "tmp");
+  const resolvedTmpRoot = resolvePathFromProjectRoot(tmpRoot);
+  if (!resolvedTmpRoot) return false;
+
+  // 只允許刪除 .cursor/tmp 之下的資料夾，且禁止刪除根目錄
+  if (!resolved.startsWith(resolvedTmpRoot)) return false;
+  if (resolved === resolvedTmpRoot) return false;
+
+  // 只允許刪除 ticket 目錄（避免誤刪其他 ticket）
+  const expectedTicketDir = ticket
+    ? join(resolvedTmpRoot, ticket)
+    : null;
+  if (!expectedTicketDir || resolved !== expectedTicketDir) return false;
+
+  try {
+    rmSync(resolved, { recursive: true, force: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function isSameTicket(a, b) {
   const ta = typeof a === "string" ? a.trim().toUpperCase() : "";
   const tb = typeof b === "string" ? b.trim().toUpperCase() : "";
@@ -166,6 +193,14 @@ function cleanupStartTaskArtifactsIfNeeded({
   if (!enabled) return;
   if (!startTaskInfo) return;
   if (!isSameTicket(startTaskInfo.ticket, ticket)) return;
+
+  // FE-8006: 一律清除 `.cursor/tmp/{TICKET}/` 整個目錄（保留 --no-cleanup-start-task-artifacts 例外）
+  const ticketDir = join(".cursor", "tmp", ticket);
+  if (safeRmStartTaskDir(ticketDir, ticket)) {
+    console.log("🧹 已清理 start-task 暫存資料夾：");
+    console.log(`   - ${ticketDir}\n`);
+    return;
+  }
 
   const infoPath = startTaskInfoFile || DEFAULT_START_TASK_INFO_FILE;
   const planPath =
@@ -1005,7 +1040,7 @@ async function main() {
   }
 
   cleanupStartTaskArtifactsIfNeeded({
-    enabled: cleanupStartTaskArtifactsEnabled && canCleanup,
+    enabled: cleanupStartTaskArtifactsEnabled,
     ticket,
     startTaskInfo,
     startTaskInfoFile,
