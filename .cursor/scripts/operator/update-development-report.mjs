@@ -18,6 +18,7 @@
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { isAbsolute, join } from "path";
 import { getProjectRoot } from "../utilities/env-loader.mjs";
+import { appendAgentSignature } from "../utilities/agent-signature.mjs";
 
 const projectRoot = getProjectRoot();
 
@@ -121,7 +122,9 @@ function main() {
         process.exit(1);
       }
 
-      writeFileSync(reportOut, reportContent, "utf-8");
+      // FE-8006: 若設定 AGENT_DISPLAY_NAME，開發報告末尾追加署名（idempotent & 署名為最後一行）
+      const reportWithSignature = appendAgentSignature(reportContent);
+      writeFileSync(reportOut, reportWithSignature, "utf-8");
       startTaskInfo.aiDevelopmentReport = true;
       console.log("✅ 已更新開發報告（檔案化）");
       console.log(`   - report: ${reportOut}`);

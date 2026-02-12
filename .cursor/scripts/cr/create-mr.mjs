@@ -27,7 +27,11 @@ import {
   extractReleaseBranch,
   readStartTaskInfo,
 } from "./label-analyzer.mjs";
-import { appendAgentSignature } from "../utilities/agent-signature.mjs";
+import {
+  appendAgentSignature,
+  stripTrailingAgentSignature,
+} from "../utilities/agent-signature.mjs";
+import { readAgentVersionInfo } from "../utilities/agent-version.mjs";
 
 // 使用 env-loader 提供的 projectRoot
 const projectRoot = getProjectRoot();
@@ -2150,7 +2154,12 @@ async function main() {
   const planMarkdownRaw = tryReadUtf8FileFromProjectRoot(planPath);
   const reportMarkdownRaw = tryReadUtf8FileFromProjectRoot(reportPath);
   const planMarkdown = normalizeMarkdownForCompare(planMarkdownRaw);
-  const reportMarkdown = normalizeMarkdownForCompare(reportMarkdownRaw);
+  // FE-8006:
+  // - report 檔案可能已帶署名（例如 operator/update-development-report 產物）
+  // - 署名需位於 MR description 最後一行，因此這裡先移除 report 末尾署名，避免後續重複
+  const reportMarkdown = stripTrailingAgentSignature(
+    normalizeMarkdownForCompare(reportMarkdownRaw)
+  );
 
   if (!planMarkdown) {
     console.error("\n❌ create-mr 需要 start-task 的開發計劃 tmp file\n");
@@ -2168,14 +2177,24 @@ async function main() {
 
   let description = [planBlock, reportBlock].filter(Boolean).join("\n\n");
 
-  // 添加 Agent 版本資訊到 description 最下方
-  if (agentVersionInfo) {
-    const versionSection = generateAgentVersionSection(agentVersionInfo);
-    if (versionSection) {
-      console.log("🤖 檢測到 Agent 版本資訊，將添加到 MR description 最下方\n");
-      description = description ? `${description}\n\n${versionSection}` : versionSection;
-    }
+  // FE-8006: 確保 Agent Version 區塊一定會呈現在報告中
+  // - 優先使用 --agent-version
+  // - 否則自動從 repo 版本檔推導（避免過去 user 發出的報告缺失）
+  const agentVersionInfoAuto = agentVersionInfo || readAgentVersionInfo() || {};
+  const agentVersionSection = generateAgentVersionSection(
+    Object.keys(agentVersionInfoAuto).length > 0
+      ? agentVersionInfoAuto
+      : { pantheon: "N/A" }
+  );
+  if (agentVersionSection && !description.includes("### 🤖 Agent Version")) {
+    console.log("🤖 將添加 Agent Version 到 MR description（確保不缺失）\n");
+    description = description
+      ? `${description}\n\n${agentVersionSection}`
+      : agentVersionSection;
   }
+
+  // FE-8006: 署名必須為 MR description 的最後一行（可見內容）
+  description = appendAgentSignature(description);
 
   // 根據 Jira ticket 決定 labels（不再自動分析 v3/v4，由外部傳入）
   console.log("🔍 分析 Jira ticket 信息...\n");

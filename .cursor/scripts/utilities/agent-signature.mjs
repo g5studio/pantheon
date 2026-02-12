@@ -48,9 +48,39 @@ export function appendAgentSignature(message) {
   let i = lines.length - 1;
   while (i >= 0 && lines[i].trim() === "") i--;
   const lastNonEmpty = i >= 0 ? lines[i] : "";
-  if (lastNonEmpty === signatureLine) return message;
+  // 若已存在署名，仍需確保「署名為最後一行」（移除尾端多餘換行）
+  if (lastNonEmpty === signatureLine) return base;
 
   if (!base) return signatureLine;
   return `${base}\n${signatureLine}`;
+}
+
+/**
+ * 若訊息的最後一個非空白行為「當前 agent 署名」，則移除該署名行。
+ *
+ * 用途：
+ * - 在需要於尾端插入其他區塊（例如 Agent Version）前，先移除尾端署名，避免署名被推到中間
+ * - 插入完成後再呼叫 appendAgentSignature()，即可確保署名永遠位於最後一行
+ *
+ * @param {string} message
+ * @returns {string}
+ */
+export function stripTrailingAgentSignature(message) {
+  if (typeof message !== "string") return message;
+
+  const displayName = getAgentDisplayName();
+  if (!displayName) return message;
+
+  const signatureLine = buildAgentSignatureLine(displayName);
+  const base = message.replace(/[\r\n]+$/g, "");
+
+  const lines = base.split(/\r?\n/);
+  let i = lines.length - 1;
+  while (i >= 0 && lines[i].trim() === "") i--;
+  const lastNonEmpty = i >= 0 ? lines[i] : "";
+  if (lastNonEmpty !== signatureLine) return message;
+
+  const remaining = lines.slice(0, i).join("\n").replace(/[\r\n]+$/g, "");
+  return remaining;
 }
 
