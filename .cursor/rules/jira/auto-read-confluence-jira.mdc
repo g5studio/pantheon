@@ -42,13 +42,37 @@ AI 應該自動偵測用戶消息中的鏈接：
 #### 對於 Confluence 鏈接：
 
 ```bash
-node .cursor/scripts/jira/read-confluence-page.mjs "<confluence-url>"
+# ✅ 強烈建議使用「路徑判斷 + fallback」方式執行（避免 .pantheon + symlink 導致搜尋結果為空）
+if [ -f ".pantheon/.cursor/scripts/jira/read-confluence-page.mjs" ]; then
+  SCRIPT_PATH=".pantheon/.cursor/scripts/jira/read-confluence-page.mjs"
+elif [ -f ".cursor/scripts/jira/read-confluence-page.mjs" ]; then
+  SCRIPT_PATH=".cursor/scripts/jira/read-confluence-page.mjs"
+elif [ -f ".cursor/scripts/prometheus/jira/read-confluence-page.mjs" ]; then
+  SCRIPT_PATH=".cursor/scripts/prometheus/jira/read-confluence-page.mjs"
+else
+  echo "❌ 找不到 read-confluence-page.mjs，請確認 pantheon 掛載路徑是否正確。" 1>&2
+  exit 1
+fi
+
+node "$SCRIPT_PATH" "<confluence-url>"
 ```
 
 #### 對於 Jira ticket：
 
 ```bash
-node .cursor/scripts/jira/read-jira-ticket.mjs "<ticket-id-or-url>"
+# ✅ 強烈建議使用「路徑判斷 + fallback」方式執行（避免 .pantheon + symlink 導致搜尋結果為空）
+if [ -f ".pantheon/.cursor/scripts/jira/read-jira-ticket.mjs" ]; then
+  SCRIPT_PATH=".pantheon/.cursor/scripts/jira/read-jira-ticket.mjs"
+elif [ -f ".cursor/scripts/jira/read-jira-ticket.mjs" ]; then
+  SCRIPT_PATH=".cursor/scripts/jira/read-jira-ticket.mjs"
+elif [ -f ".cursor/scripts/prometheus/jira/read-jira-ticket.mjs" ]; then
+  SCRIPT_PATH=".cursor/scripts/prometheus/jira/read-jira-ticket.mjs"
+else
+  echo "❌ 找不到 read-jira-ticket.mjs，請確認 pantheon 掛載路徑是否正確。" 1>&2
+  exit 1
+fi
+
+node "$SCRIPT_PATH" "<ticket-id-or-url>"
 ```
 
 ### 3. 處理結果
@@ -59,6 +83,15 @@ node .cursor/scripts/jira/read-jira-ticket.mjs "<ticket-id-or-url>"
   - 理解任務需求
   - 參考文件內容執行任務
   - 回答用戶問題
+
+## 重要提醒（避免誤判「腳本不存在」）
+
+**CRITICAL**：在「Pantheon 以 submodule 掛載於 `.pantheon/`」且專案另外透過 **symbolic link** 同步腳本的情境下，
+部分 workspace 的搜尋能力（例如 Glob）可能對 `.pantheon/` 或 symlink 目錄回傳 **0 結果**。
+
+因此：
+- **不要**用「搜尋腳本檔案」作為「腳本是否存在」的依據
+- **要**用上方的「明確路徑 + `-f` 檢查 + fallback」方式執行
 
 ## 範例
 
