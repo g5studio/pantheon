@@ -37,28 +37,42 @@ Pantheon 專案設計為可以透過 **git clone** 掛載到其他專案中，�
 
 **CRITICAL**: 當 AI 在目標專案中執行 Pantheon 提供的腳本時，**必須**使用正確的路徑。
 
+## 重要提醒：不要依賴「搜尋結果」判斷腳本是否存在
+
+Pantheon 掛載到其他專案時，常見會搭配 **symbolic link** 做同步；在部分 workspace 中，
+搜尋工具（例如 Glob）可能對 `.pantheon/` 或 symlink 目錄回傳 **空結果**，即使檔案實際存在、`ls` 也看得到。
+
+因此：
+- **不要**用「搜尋腳本檔名」來「發現」/「定位」Pantheon 腳本
+- **要**先用下方的「檔案存在性檢查（`-f`）+ fallback」決定腳本路徑
+- 若仍失敗，使用 `ls -la` 直接列目錄做診斷（見「錯誤排查」）
+
 ### 路徑判斷邏輯
 
 執行腳本前，AI **必須**按以下順序檢查路徑：
 
-1. **優先檢查 `.pantheon/.cursor/scripts/` 路徑**
-   - 如果 `.pantheon/` 資料夾存在，表示 Pantheon 已掛載到目標專案
-   - 使用 `.pantheon/.cursor/scripts/...` 路徑
+1. **優先檢查 `.pantheon/.cursor/scripts/` 路徑（以檔案是否存在為準）**
+   - 若腳本檔案存在：使用 `.pantheon/.cursor/scripts/...`
 
-2. **備用檢查 `.cursor/scripts/` 路徑**
-   - 如果 `.pantheon/` 資料夾不存在，表示在 Pantheon 專案本身
-   - 使用 `.cursor/scripts/...` 路徑
+2. **備用檢查 `.cursor/scripts/` 路徑（Pantheon 專案本身）**
+   - 若腳本檔案存在：使用 `.cursor/scripts/...`
+
+3. **次要備援：`.cursor/scripts/prometheus/` 路徑（部分專案會用 symlink 聚合）**
+   - 若腳本檔案存在：使用 `.cursor/scripts/prometheus/...`
 
 ### 路徑檢查範例
 
 ```bash
-# 檢查是否存在 .pantheon 資料夾
-if [ -d ".pantheon" ]; then
-  # 使用掛載路徑
+# 以「檔案是否存在」決定路徑（避免只判斷資料夾存在但內容不齊、或 symlink/搜尋限制造成誤判）
+if [ -f ".pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs" ]; then
   SCRIPT_PATH=".pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs"
-else
-  # 使用直接路徑
+elif [ -f ".cursor/scripts/notification/notify-cursor-rules-failed.mjs" ]; then
   SCRIPT_PATH=".cursor/scripts/notification/notify-cursor-rules-failed.mjs"
+elif [ -f ".cursor/scripts/prometheus/notification/notify-cursor-rules-failed.mjs" ]; then
+  SCRIPT_PATH=".cursor/scripts/prometheus/notification/notify-cursor-rules-failed.mjs"
+else
+  echo "❌ 找不到 notify-cursor-rules-failed.mjs，請確認 pantheon 掛載路徑是否正確。" 1>&2
+  exit 1
 fi
 
 node "$SCRIPT_PATH" "$@"
@@ -134,3 +148,17 @@ node .pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs "flui
 2. `.pantheon/` 資料夾是否存在
 3. Symbolic link 是否正確建立
 4. 腳本檔案是否確實存在於預期路徑
+
+### 建議診斷命令（不依賴搜尋）
+
+```bash
+# 直接列出目標資料夾（比搜尋可靠）
+ls -la ".pantheon/.cursor/scripts/jira" 2>/dev/null || true
+ls -la ".cursor/scripts/jira" 2>/dev/null || true
+ls -la ".cursor/scripts/prometheus/jira" 2>/dev/null || true
+
+# 直接檢查檔案是否存在（最可靠）
+test -f ".pantheon/.cursor/scripts/jira/read-jira-ticket.mjs" && echo "found: .pantheon" || true
+test -f ".cursor/scripts/jira/read-jira-ticket.mjs" && echo "found: .cursor" || true
+test -f ".cursor/scripts/prometheus/jira/read-jira-ticket.mjs" && echo "found: prometheus symlink" || true
+```
