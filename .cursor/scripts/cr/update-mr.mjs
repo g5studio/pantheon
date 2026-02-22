@@ -13,6 +13,8 @@
  */
 
 import { execSync, spawnSync } from "child_process";
+import { existsSync, readFileSync } from "fs";
+import { join } from "path";
 import readline from "readline";
 import {
   getProjectRoot,
@@ -44,6 +46,72 @@ function exec(command, options = {}) {
     }
     throw error;
   }
+}
+
+function readAdaptKnowledgeOrExit() {
+  const filePath = join(projectRoot, ".cursor", "tmp", "pantheon", "adapt.json");
+  if (!existsSync(filePath)) {
+    console.error("\n❌ 找不到 adapt.json，無法驗證 labels 可用性\n");
+    console.error(`📁 預期路徑：${filePath}`);
+    console.error(
+      "\n✅ 請先執行：node .cursor/scripts/utilities/adapt.mjs\n",
+    );
+    process.exit(1);
+  }
+
+  try {
+    const text = readFileSync(filePath, "utf-8").replace(/^\uFEFF/, "");
+    return JSON.parse(text);
+  } catch (e) {
+    console.error("\n❌ 讀取 adapt.json 失敗，無法驗證 labels 可用性\n");
+    console.error(`📁 路徑：${filePath}`);
+    console.error(`原因：${e.message}\n`);
+    process.exit(1);
+  }
+}
+
+function getAdaptAllowedLabelSet() {
+  const knowledge = readAdaptKnowledgeOrExit();
+  const list = Array.isArray(knowledge?.labels) ? knowledge.labels : [];
+  const allowed = new Set();
+  for (const item of list) {
+    const name = typeof item?.name === "string" ? item.name.trim() : "";
+    if (!name) continue;
+
+    const a = item.applicable;
+    const ok =
+      a === undefined ||
+      a === null ||
+      a === true ||
+      (typeof a === "object" && a !== null && a.ok === true);
+    if (ok) allowed.add(name);
+  }
+  return allowed;
+}
+
+function filterLabelsByAdaptAllowed(labelsToFilter, allowedSet, labelSource) {
+  const input = Array.isArray(labelsToFilter) ? labelsToFilter : [];
+  const valid = [];
+  const invalid = [];
+
+  for (const raw of input) {
+    const label = String(raw || "").trim();
+    if (!label) continue;
+    if (allowedSet.has(label)) valid.push(label);
+    else invalid.push(label);
+  }
+
+  if (invalid.length > 0) {
+    console.error(
+      `\n❌ 以下 ${labelSource} 的 labels 未在 adapt.json 標示為可用，已過濾：\n`,
+    );
+    invalid.forEach((l) => console.error(`   - ${l}`));
+    console.error(
+      "\n💡 若要使用上述 labels，請先更新 adapt.json 的 labels/applicable.ok（再重新執行 update-mr）\n",
+    );
+  }
+
+  return { valid, invalid };
 }
 
 function hasGlab() {
@@ -289,10 +357,15 @@ async function updateMRDescription(
   host,
   projectPath,
   mrIid,
-  description
+  description,
+  addLabels = []
 ) {
   const url = `${host}/api/v4/projects/${projectPath}/merge_requests/${mrIid}`;
   const body = { description };
+  if (Array.isArray(addLabels) && addLabels.length > 0) {
+    // 只帶入 add_labels，避免覆寫現有 labels
+    body.add_labels = addLabels.join(",");
+  }
   const response = await fetch(url, {
     method: "PUT",
     headers: {
@@ -510,6 +583,18 @@ async function main() {
   }
 
   const skipReview = args.includes("--no-review");
+  const labelsArg =
+    args.find((a) => a.startsWith("--add-labels=")) ||
+    args.find((a) => a.startsWith("--labels="));
+  const requestedLabels = labelsArg
+    ? labelsArg
+        .split("=")
+        .slice(1)
+        .join("=")
+        .split(",")
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0)
+    : [];
 
   const uncommitted = getGitStatus();
   if (uncommitted.length > 0) {
@@ -629,12 +714,31 @@ async function main() {
     }
   }
 
+  // 🚨 CRITICAL: update-mr 若要新增 labels，必須先通過 adapt.json 可用性白名單
+  let labelsToAdd = [];
+  if (requestedLabels.length > 0) {
+    const adaptAllowedLabelSet = getAdaptAllowedLabelSet();
+    const adaptCheck = filterLabelsByAdaptAllowed(
+      requestedLabels,
+      adaptAllowedLabelSet,
+      "外部傳入（準備新增）",
+    );
+    labelsToAdd = adaptCheck.valid;
+
+    if (labelsToAdd.length > 0) {
+      console.log(`\n🏷️  將新增 labels: ${labelsToAdd.join(", ")}\n`);
+    } else {
+      console.log("\n🏷️  未提供任何可用 labels（或已全數被過濾），將略過 labels 更新\n");
+    }
+  }
+
   const updated = await updateMRDescription(
     token,
     projectInfo.host,
     projectInfo.projectPath,
     mrIid,
-    mergedDescription
+    mergedDescription,
+    labelsToAdd
   );
 
   console.log("\n✅ MR 更新成功！\n");

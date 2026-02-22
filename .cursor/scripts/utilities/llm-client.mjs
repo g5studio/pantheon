@@ -55,8 +55,12 @@ export async function callOpenAiChatCompletions({
   temperature = 0.2,
   url = "https://api.openai.com/v1/chat/completions",
 }) {
-  if (typeof apiKey !== "string" || !apiKey.trim()) {
-    throw new Error("缺少 OpenAI API key（OPENAI_API_KEY）");
+  const effectiveApiKey =
+    typeof apiKey === "string" && apiKey.trim()
+      ? apiKey.trim()
+      : (process.env.OPENAI_API_KEY || "").trim();
+  if (typeof effectiveApiKey !== "string" || !effectiveApiKey.trim()) {
+    throw new Error("缺少 OpenAI API key（請設定 OPENAI_API_KEY 或傳入 apiKey）");
   }
   if (typeof model !== "string" || !model.trim()) {
     throw new Error("缺少 OpenAI model");
@@ -75,7 +79,7 @@ export async function callOpenAiChatCompletions({
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${effectiveApiKey}`,
     },
     body: JSON.stringify(body),
   });
