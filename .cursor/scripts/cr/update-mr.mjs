@@ -26,6 +26,7 @@ import {
   getJiraEmail,
   getGitLabToken as getGitLabTokenFromEnvLoader,
 } from "../utilities/env-loader.mjs";
+import { callOpenAiJson, resolveLlmModel } from "../utilities/llm-client.mjs";
 import {
   appendAgentSignature,
   stripTrailingAgentSignature,
@@ -62,6 +63,178 @@ function exec(command, options = {}) {
       console.error(`錯誤: ${error.message}`);
     }
     throw error;
+  }
+}
+
+function getChangesBundleAgainstTarget(targetBranch) {
+  if (!targetBranch) {
+    return {
+      baseRef: null,
+      nameStatus: "",
+      stat: "",
+      diff: "",
+    };
+  }
+
+  const baseRef = `origin/${targetBranch}`;
+  const run = (cmd) => {
+    try {
+      return exec(cmd, { silent: true }).trim();
+    } catch {
+      return "";
+    }
+  };
+
+  return {
+    baseRef,
+    nameStatus: run(`git diff --name-status ${baseRef}...HEAD`),
+    stat: run(`git diff --stat ${baseRef}...HEAD`),
+    diff: run(`git diff ${baseRef}...HEAD`),
+  };
+}
+
+function hasMeaningfulText(v) {
+  if (typeof v !== "string") return false;
+  const t = v.trim();
+  if (!t) return false;
+  if (t === "待補齊") return false;
+  return true;
+}
+
+function shouldAutoFillReportWithLlm(reportJson) {
+  const r = reportJson && typeof reportJson === "object" ? reportJson : null;
+  if (!r) return false;
+
+  if (!hasMeaningfulText(r.changeSummary)) return true;
+
+  const files = Array.isArray(r?.changes?.files) ? r.changes.files : [];
+  for (const f of files) {
+    if (!hasMeaningfulText(f?.description)) return true;
+  }
+
+  const riskFiles = Array.isArray(r?.riskAssessment?.files)
+    ? r.riskAssessment.files
+    : [];
+  for (const rf of riskFiles) {
+    if (!hasMeaningfulText(rf?.reason)) return true;
+  }
+
+  return false;
+}
+
+function clampText(s, maxChars) {
+  const text = String(s || "");
+  if (!maxChars || text.length <= maxChars) return text;
+  return `${text.slice(0, maxChars)}\n... [truncated ${text.length - maxChars} chars]`;
+}
+
+async function autoFillDevelopmentReportJsonWithLlmIfMissing({
+  ticket,
+  targetBranch,
+  changedFiles,
+  reportJson,
+}) {
+  const envLocal = loadEnvLocal();
+  const apiKey = process.env.OPENAI_API_KEY || envLocal.OPENAI_API_KEY || null;
+  if (!apiKey) return reportJson;
+
+  if (!shouldAutoFillReportWithLlm(reportJson)) return reportJson;
+
+  const explicitModel =
+    typeof envLocal.REPORT_LLM_MODEL === "string" ? envLocal.REPORT_LLM_MODEL : null;
+  const model = resolveLlmModel({
+    explicitModel,
+    envLocal,
+    envKeys: ["REPORT_LLM_MODEL", "AI_MODEL", "LLM_MODEL", "OPENAI_MODEL"],
+    defaultModel: "gpt-5.2",
+  });
+
+  const changes = getChangesBundleAgainstTarget(targetBranch);
+  const input = {
+    ticket,
+    targetBranch,
+    changedFiles: Array.isArray(changedFiles) ? changedFiles : [],
+    currentReport: reportJson || null,
+    git: {
+      baseRef: changes.baseRef,
+      nameStatus: clampText(changes.nameStatus, 6000),
+      stat: clampText(changes.stat, 6000),
+      diff: clampText(changes.diff, 16000),
+    },
+  };
+
+  const system = `
+你是一個「Merge Request 開發報告」補齊器。
+你會收到：
+- git diff（name-status / stat / diff）
+- 目前的 report JSON（可能含「待補齊」或空字串）
+- changedFiles（檔案清單）
+
+目標：
+- 只補齊「缺漏」欄位，避免覆蓋已經有意義內容的欄位
+- 風險評估請針對每個檔案給出：level（高度/中度/輕度）與 reason
+
+輸出必須是 JSON object，格式：
+{
+  "changeSummary": string,
+  "files": { "<path>": { "description": string, "riskLevel": "高度"|"中度"|"輕度", "riskReason": string } }
+}
+  `.trim();
+
+  try {
+    console.log(`🤖 report 缺漏，嘗試用 LLM 補齊... (model=${model})`);
+    const resp = await callOpenAiJson({
+      apiKey,
+      model,
+      system,
+      input,
+      temperature: 0.2,
+    });
+
+    const out = resp && typeof resp === "object" ? resp : null;
+    if (!out) return reportJson;
+
+    const next = reportJson && typeof reportJson === "object" ? { ...reportJson } : {};
+    if (!hasMeaningfulText(next.changeSummary) && hasMeaningfulText(out.changeSummary)) {
+      next.changeSummary = String(out.changeSummary).trim();
+    }
+
+    const byPath = out.files && typeof out.files === "object" ? out.files : {};
+
+    if (next.changes && Array.isArray(next?.changes?.files)) {
+      next.changes = { ...next.changes };
+      next.changes.files = next.changes.files.map((f) => {
+        const path = f?.path || "";
+        const suggestion = path ? byPath[path] : null;
+        const desc =
+          !hasMeaningfulText(f?.description) && hasMeaningfulText(suggestion?.description)
+            ? String(suggestion.description).trim()
+            : (f?.description || "");
+        return { ...f, description: desc };
+      });
+    }
+
+    if (next.riskAssessment && Array.isArray(next?.riskAssessment?.files)) {
+      next.riskAssessment = { ...next.riskAssessment };
+      next.riskAssessment.files = next.riskAssessment.files.map((rf) => {
+        const path = rf?.path || "";
+        const suggestion = path ? byPath[path] : null;
+        const level =
+          !hasMeaningfulText(rf?.level) && hasMeaningfulText(suggestion?.riskLevel)
+            ? String(suggestion.riskLevel).trim()
+            : (rf?.level || "中度");
+        const reason =
+          !hasMeaningfulText(rf?.reason) && hasMeaningfulText(suggestion?.riskReason)
+            ? String(suggestion.riskReason).trim()
+            : (rf?.reason || "");
+        return { ...rf, level, reason };
+      });
+    }
+
+    return next;
+  } catch (e) {
+    console.log(`⚠️  report LLM 補齊失敗，將略過：${e.message}\n`);
+    return reportJson;
   }
 }
 
@@ -806,6 +979,22 @@ async function main() {
   mergedInfo = normalizeMergeRequestDescriptionInfoJson(mergedInfo, {
     changeFiles: changedFiles,
   });
+
+  // 若 report 仍有缺漏，才用 LLM double-check 補齊（不覆蓋既有有意義內容）
+  if (ticketFromBranch !== "N/A" && mergedInfo?.report) {
+    mergedInfo = {
+      ...mergedInfo,
+      report: await autoFillDevelopmentReportJsonWithLlmIfMissing({
+        ticket: ticketFromBranch,
+        targetBranch,
+        changedFiles,
+        reportJson: mergedInfo.report,
+      }),
+    };
+    mergedInfo = normalizeMergeRequestDescriptionInfoJson(mergedInfo, {
+      changeFiles: changedFiles,
+    });
+  }
 
   if (ticketFromBranch !== "N/A" && infoPath) {
     writeJsonFile(infoPath, mergedInfo);

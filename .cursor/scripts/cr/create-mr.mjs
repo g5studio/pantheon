@@ -18,6 +18,7 @@ import {
   getCompassApiToken,
 } from "../utilities/env-loader.mjs";
 import { determineLabels, readStartTaskInfo } from "./label-analyzer.mjs";
+import { callOpenAiJson, resolveLlmModel } from "../utilities/llm-client.mjs";
 import {
   appendAgentSignature,
   stripTrailingAgentSignature,
@@ -1679,6 +1680,183 @@ function getChangedFilesAgainstTarget(targetBranch) {
   }
 }
 
+function getChangesBundleAgainstTarget(targetBranch) {
+  if (!targetBranch) {
+    return {
+      baseRef: null,
+      nameStatus: "",
+      stat: "",
+      diff: "",
+    };
+  }
+
+  const baseRef = `origin/${targetBranch}`;
+  const run = (cmd) => {
+    try {
+      return exec(cmd, { silent: true }).trim();
+    } catch {
+      return "";
+    }
+  };
+
+  return {
+    baseRef,
+    nameStatus: run(`git diff --name-status ${baseRef}...HEAD`),
+    stat: run(`git diff --stat ${baseRef}...HEAD`),
+    diff: run(`git diff ${baseRef}...HEAD`),
+  };
+}
+
+function hasMeaningfulText(v) {
+  if (typeof v !== "string") return false;
+  const t = v.trim();
+  if (!t) return false;
+  if (t === "待補齊") return false;
+  return true;
+}
+
+function shouldAutoFillReportWithLlm(reportJson) {
+  const r = reportJson && typeof reportJson === "object" ? reportJson : null;
+  if (!r) return false;
+
+  if (!hasMeaningfulText(r.changeSummary)) return true;
+
+  const files = Array.isArray(r?.changes?.files) ? r.changes.files : [];
+  for (const f of files) {
+    if (!hasMeaningfulText(f?.description)) return true;
+  }
+
+  const riskFiles = Array.isArray(r?.riskAssessment?.files)
+    ? r.riskAssessment.files
+    : [];
+  for (const rf of riskFiles) {
+    if (!hasMeaningfulText(rf?.reason)) return true;
+  }
+
+  return false;
+}
+
+function clampText(s, maxChars) {
+  const text = String(s || "");
+  if (!maxChars || text.length <= maxChars) return text;
+  return `${text.slice(0, maxChars)}\n... [truncated ${text.length - maxChars} chars]`;
+}
+
+async function autoFillDevelopmentReportJsonWithLlmIfMissing({
+  ticket,
+  targetBranch,
+  mrTitle,
+  changedFiles,
+  reportJson,
+}) {
+  const envLocal = loadEnvLocal();
+  const apiKey = process.env.OPENAI_API_KEY || envLocal.OPENAI_API_KEY || null;
+  if (!apiKey) return reportJson;
+
+  if (!shouldAutoFillReportWithLlm(reportJson)) return reportJson;
+
+  const explicitModel =
+    typeof envLocal.REPORT_LLM_MODEL === "string" ? envLocal.REPORT_LLM_MODEL : null;
+  const model = resolveLlmModel({
+    explicitModel,
+    envLocal,
+    envKeys: ["REPORT_LLM_MODEL", "AI_MODEL", "LLM_MODEL", "OPENAI_MODEL"],
+    defaultModel: "gpt-5.2",
+  });
+
+  const changes = getChangesBundleAgainstTarget(targetBranch);
+  const input = {
+    ticket,
+    targetBranch,
+    mrTitle,
+    changedFiles: Array.isArray(changedFiles) ? changedFiles : [],
+    currentReport: reportJson || null,
+    git: {
+      baseRef: changes.baseRef,
+      nameStatus: clampText(changes.nameStatus, 6000),
+      stat: clampText(changes.stat, 6000),
+      diff: clampText(changes.diff, 16000),
+    },
+  };
+
+  const system = `
+你是一個「Merge Request 開發報告」補齊器。
+你會收到：
+- git diff（name-status / stat / diff）
+- 目前的 report JSON（可能含「待補齊」或空字串）
+- changedFiles（檔案清單）
+
+目標：
+- 只補齊「缺漏」欄位，避免覆蓋已經有意義內容的欄位
+- 產出更可交付的內容，但保持精簡
+- 風險評估請針對每個檔案給出：level（高度/中度/輕度）與 reason（具體、可理解）
+
+輸出必須是 JSON object，格式：
+{
+  "changeSummary": string,
+  "files": { "<path>": { "description": string, "riskLevel": "高度"|"中度"|"輕度", "riskReason": string } }
+}
+  `.trim();
+
+  try {
+    console.log(`🤖 report 缺漏，嘗試用 LLM 補齊... (model=${model})`);
+    const resp = await callOpenAiJson({
+      apiKey,
+      model,
+      system,
+      input,
+      temperature: 0.2,
+    });
+
+    const out = resp && typeof resp === "object" ? resp : null;
+    if (!out) return reportJson;
+
+    const next = reportJson && typeof reportJson === "object" ? { ...reportJson } : {};
+    if (!hasMeaningfulText(next.changeSummary) && hasMeaningfulText(out.changeSummary)) {
+      next.changeSummary = String(out.changeSummary).trim();
+    }
+
+    const byPath = out.files && typeof out.files === "object" ? out.files : {};
+
+    // changes.files
+    if (next.changes && Array.isArray(next?.changes?.files)) {
+      next.changes = { ...next.changes };
+      next.changes.files = next.changes.files.map((f) => {
+        const path = f?.path || "";
+        const suggestion = path ? byPath[path] : null;
+        const desc =
+          !hasMeaningfulText(f?.description) && hasMeaningfulText(suggestion?.description)
+            ? String(suggestion.description).trim()
+            : (f?.description || "");
+        return { ...f, description: desc };
+      });
+    }
+
+    // riskAssessment.files
+    if (next.riskAssessment && Array.isArray(next?.riskAssessment?.files)) {
+      next.riskAssessment = { ...next.riskAssessment };
+      next.riskAssessment.files = next.riskAssessment.files.map((rf) => {
+        const path = rf?.path || "";
+        const suggestion = path ? byPath[path] : null;
+        const level =
+          !hasMeaningfulText(rf?.level) && hasMeaningfulText(suggestion?.riskLevel)
+            ? String(suggestion.riskLevel).trim()
+            : (rf?.level || "中度");
+        const reason =
+          !hasMeaningfulText(rf?.reason) && hasMeaningfulText(suggestion?.riskReason)
+            ? String(suggestion.riskReason).trim()
+            : (rf?.reason || "");
+        return { ...rf, level, reason };
+      });
+    }
+
+    return next;
+  } catch (e) {
+    console.log(`⚠️  report LLM 補齊失敗，將略過：${e.message}\n`);
+    return reportJson;
+  }
+}
+
 function hasMarkdownTable(content, expectedHeaderLine) {
   if (!content) return false;
   // normalizeExternalMarkdownArg 已將 CRLF 統一成 LF；這裡只做簡單判斷
@@ -2057,13 +2235,31 @@ async function main() {
   // 讀取 start-task 的計劃（目前僅用於 labels 判斷；MR description 一律以 JSON 模板生成）
   const startTaskInfo = readStartTaskInfo();
 
+  // 先決定 labels / target branch（避免 Hotfix 自動推斷後 report 還用舊 target 計算）
+  console.log("🔍 分析 Jira ticket 信息...\n");
+  let labels = [];
+  const adaptAllowedLabelSet = getAdaptAllowedLabelSet();
+
+  const labelResult = await determineLabels(ticket, {
+    startTaskInfo,
+    targetBranch,
+  });
+  labels = labelResult.labels;
+
+  if (labelResult.releaseBranch && !userExplicitlySetTarget) {
+    const originalTargetBranch = targetBranch;
+    targetBranch = labelResult.releaseBranch;
+    console.log(
+      `   → 檢測到 Hotfix，自動設置 target branch: ${originalTargetBranch} → ${targetBranch}\n`,
+    );
+  }
+
   // ============================================================
   // MR description info（JSON + 固定模板）：
   // - 檔案：.cursor/tmp/{ticket}/merge-request-description-info.json
   // - schema：{ plan: {...}, report: {...} }
   // ============================================================
-  const changedFiles =
-    ticket !== "N/A" ? getChangedFilesAgainstTarget(targetBranch) : [];
+  let changedFiles = [];
   let mrDescriptionInfoPath = null;
   let mrDescriptionInfoJson = null;
   let developmentReportJson = null;
@@ -2099,42 +2295,6 @@ async function main() {
     };
   }
 
-  if (ticket !== "N/A") {
-    // Jira URL 至少要可用（避免 JSON 缺欄位）
-    const jiraTicketUrl = toJiraTicketUrl(ticket);
-    developmentReportJson =
-      mrDescriptionInfoJson?.report ||
-      createDefaultDevelopmentReportJson({
-        ticket,
-        jiraTitle: mrTitle?.includes(`(${ticket})`)
-          ? mrTitle.split(":").slice(1).join(":").trim()
-          : "",
-        issueType: "",
-        changeFiles: changedFiles,
-      });
-
-    // 只由 info JSON 填入模板；缺 report 就視為無內容，但 create-mr 會自動補齊 report skeleton
-    mrDescriptionInfoJson =
-      mrDescriptionInfoJson ||
-      createDefaultMergeRequestDescriptionInfoJson({
-        ticket,
-        jiraTicketUrl,
-      });
-    mrDescriptionInfoJson = {
-      ...mrDescriptionInfoJson,
-      report: normalizeDevelopmentReportJson(developmentReportJson, {
-        changeFiles: changedFiles,
-      }),
-    };
-    mrDescriptionInfoJson = normalizeMergeRequestDescriptionInfoJson(
-      mrDescriptionInfoJson,
-      { changeFiles: changedFiles }
-    );
-
-    // 只落地 merge-request-description-info.json（不再寫 development-report.json / development-plan.json）
-    writeJsonFile(mrDescriptionInfoPath, mrDescriptionInfoJson);
-  }
-
   // 處理開發計劃：legacy 仍保留 externalDevelopmentPlan（但不再從 start-task notes 自動生成）
   if (externalDevelopmentPlan) {
     if (externalDevelopmentPlan.raw) {
@@ -2162,68 +2322,6 @@ async function main() {
   }
 
   // 處理開發計劃 + 開發報告：固定由 info JSON 渲染模板
-  if (ticket !== "N/A" && mrDescriptionInfoJson) {
-    console.log(
-      `🧾 以 JSON 產生 MR description（${join(
-        ".cursor",
-        "tmp",
-        ticket,
-        "merge-request-description-info.json"
-      )}）\n`
-    );
-    const infoMarkdown = renderMergeRequestDescriptionInfoMarkdown(
-      mrDescriptionInfoJson,
-      { changeFiles: changedFiles }
-    );
-    if (infoMarkdown && infoMarkdown.trim()) {
-      developmentReportSectionToAppend = infoMarkdown;
-      description = description
-        ? `${description}\n\n${infoMarkdown}`
-        : infoMarkdown;
-    }
-  }
-
-  // 新流程：關聯單資訊固定由 report 模板輸出（若 report 無內容則不輸出）
-
-  // FE-8004: 確保「署名永遠最後一行」
-  // - 報告/計劃內容可能已經自帶署名
-  // - 若後續再追加 Agent Version/其他區塊，署名可能被推到中間造成重複
-  description = stripTrailingAgentSignature(description);
-
-  // 添加 Agent 版本資訊到 description 最下方
-  if (agentVersionInfo) {
-    const versionSection = generateAgentVersionSection(agentVersionInfo);
-    if (versionSection) {
-      console.log("🤖 檢測到 Agent 版本資訊，將添加到 MR description 最下方\n");
-      agentVersionSectionToAppend = versionSection;
-      description = description
-        ? `${description}\n\n${versionSection}`
-        : versionSection;
-    }
-  }
-
-  // FE-8004: 署名必須為 MR description 的最後一行（可見內容）
-  description = appendAgentSignature(description);
-
-  // 根據 Jira ticket 決定 labels（不再自動分析 v3/v4，由外部傳入）
-  console.log("🔍 分析 Jira ticket 信息...\n");
-  let labels = [];
-  const adaptAllowedLabelSet = getAdaptAllowedLabelSet();
-
-  const labelResult = await determineLabels(ticket, {
-    startTaskInfo,
-    targetBranch,
-  });
-  labels = labelResult.labels;
-
-  if (labelResult.releaseBranch) {
-    const originalTargetBranch = targetBranch;
-    targetBranch = labelResult.releaseBranch;
-    console.log(
-      `   → 檢測到 Hotfix，自動設置 target branch: ${originalTargetBranch} → ${targetBranch}\n`,
-    );
-  }
-
   // 🚨 CRITICAL: 任何準備帶入 GitLab API 的 labels，必須先通過 adapt.json 可用性白名單
   if (labels.length > 0) {
     const adaptCheck = filterLabelsByAdaptAllowed(
@@ -2320,6 +2418,94 @@ async function main() {
       );
     });
   }
+
+  // 最終 target branch 確定後，再生成/同步 report（避免 Hotfix 推斷後清單不一致）
+  if (ticket !== "N/A") {
+    changedFiles = getChangedFilesAgainstTarget(targetBranch);
+
+    const jiraTicketUrl = toJiraTicketUrl(ticket);
+    developmentReportJson =
+      mrDescriptionInfoJson?.report ||
+      createDefaultDevelopmentReportJson({
+        ticket,
+        jiraTitle: mrTitle?.includes(`(${ticket})`)
+          ? mrTitle.split(":").slice(1).join(":").trim()
+          : "",
+        issueType: "",
+        changeFiles: changedFiles,
+      });
+
+    mrDescriptionInfoJson =
+      mrDescriptionInfoJson ||
+      createDefaultMergeRequestDescriptionInfoJson({
+        ticket,
+        jiraTicketUrl,
+      });
+
+    // 先正規化（同步檔案清單 / 風險表列）
+    mrDescriptionInfoJson = {
+      ...mrDescriptionInfoJson,
+      report: normalizeDevelopmentReportJson(developmentReportJson, {
+        changeFiles: changedFiles,
+      }),
+    };
+
+    // 若仍有缺漏，再用 LLM double-check 補齊（只補缺漏，不覆蓋既有內容）
+    mrDescriptionInfoJson = {
+      ...mrDescriptionInfoJson,
+      report: await autoFillDevelopmentReportJsonWithLlmIfMissing({
+        ticket,
+        targetBranch,
+        mrTitle,
+        changedFiles,
+        reportJson: mrDescriptionInfoJson.report,
+      }),
+    };
+
+    mrDescriptionInfoJson = normalizeMergeRequestDescriptionInfoJson(
+      mrDescriptionInfoJson,
+      { changeFiles: changedFiles }
+    );
+
+    writeJsonFile(mrDescriptionInfoPath, mrDescriptionInfoJson);
+
+    console.log(
+      `🧾 以 JSON 產生 MR description（${join(
+        ".cursor",
+        "tmp",
+        ticket,
+        "merge-request-description-info.json"
+      )}）\n`
+    );
+    const infoMarkdown = renderMergeRequestDescriptionInfoMarkdown(
+      mrDescriptionInfoJson,
+      { changeFiles: changedFiles }
+    );
+    if (infoMarkdown && infoMarkdown.trim()) {
+      developmentReportSectionToAppend = infoMarkdown;
+      description = description
+        ? `${description}\n\n${infoMarkdown}`
+        : infoMarkdown;
+    }
+  }
+
+  // FE-8004: 確保「署名永遠最後一行」
+  description = stripTrailingAgentSignature(description);
+
+  // 添加 Agent 版本資訊到 description 最下方
+  if (agentVersionInfo) {
+    const versionSection = generateAgentVersionSection(agentVersionInfo);
+    if (versionSection) {
+      console.log("🤖 檢測到 Agent 版本資訊，將添加到 MR description 最下方\n");
+      agentVersionSectionToAppend = versionSection;
+      description = description
+        ? `${description}\n\n${versionSection}`
+        : versionSection;
+    }
+  }
+
+  // FE-8004: 署名必須為 MR description 的最後一行（可見內容）
+  description = appendAgentSignature(description);
 
   // 查找現有 MR
   let existingMR = null;
