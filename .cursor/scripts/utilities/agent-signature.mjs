@@ -54,3 +54,39 @@ export function appendAgentSignature(message) {
   return `${base}\n${signatureLine}`;
 }
 
+/**
+ * 移除尾端署名（若存在）
+ *
+ * 用途：
+ * - 更新 MR description 前先移除舊署名，再追加新內容後重新署名
+ * - 避免署名重複堆疊
+ *
+ * @param {string} message
+ * @returns {string}
+ */
+export function stripTrailingAgentSignature(message) {
+  if (typeof message !== "string") return message;
+
+  // 只處理尾端：先去掉尾端多餘換行，避免最後一行是空白
+  const base = message.replace(/[\r\n]+$/g, "");
+  if (!base) return message;
+
+  const lines = base.split(/\r?\n/);
+  let i = lines.length - 1;
+  while (i >= 0 && lines[i].trim() === "") i--;
+  const lastNonEmpty = i >= 0 ? lines[i] : "";
+
+  // 兼容格式：— {owner}的AI助理『{displayName}』 / — AI助理『{displayName}』
+  const isSignatureLine =
+    typeof lastNonEmpty === "string" &&
+    lastNonEmpty.trim().startsWith("— ") &&
+    lastNonEmpty.includes("AI助理『") &&
+    lastNonEmpty.trim().endsWith("』");
+
+  if (!isSignatureLine) return message;
+
+  // 移除最後一個非空白行（署名），保留前面的內容
+  const kept = lines.slice(0, i).join("\n").replace(/[\r\n]+$/g, "");
+  return kept;
+}
+
