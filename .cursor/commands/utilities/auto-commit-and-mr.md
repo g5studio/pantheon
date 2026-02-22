@@ -17,7 +17,6 @@ description: 自動執行 commit 和建立 MR 的完整流程
 4. 執行 commit 並推送到遠端
 5. 自動建立 MR（包含 FE Board label、reviewer、draft 狀態、delete source branch）
 6. **預設提交 AI review**（用戶可用 `--no-review` 明確跳過；若缺少 `COMPASS_API_TOKEN` 則會自動跳過 AI review；若為更新既有 MR，會由 `update-mr.mjs` 決定是否送審）
-7. **MR description 格式回歸檢查（CRITICAL）**：在提交/更新 MR 前，`create-mr.mjs` 會驗證 MR description 是否包含規範要求的開發報告格式（關聯單資訊/變更摘要/變更內容表格/風險評估表格；若可辨識為 Bug，需包含影響範圍與根本原因）。不符合將中止流程並提示補齊方式。
 
 **多 Ticket 驗證流程：**
 
@@ -632,7 +631,7 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
    
    | 參數 | 來源 | 必要性 | 說明 |
    |---|---|---|---|
-   | `--development-report` | （Legacy）外部傳入 markdown | 非必須 | 新流程改由 `.cursor/tmp/{ticket}/merge-request-description-info.json`（schema: `{ plan, report }`）+ 固定模板渲染；此參數僅保留相容舊用法 |
+   | `--development-report` | 根據 Jira 資訊和變更內容生成 | **必須** | 直接以字串傳入；**Agent 必須確保不跑版**（避免 MR description 出現字面 `\n`） |
    | `--agent-version` | 從 `version.json` 讀取 | **必須** | 優先順序：`.pantheon/version.json` → `version.json` → `.cursor/version.json` |
    | `--labels` | AI 在建立 MR 前判定 | **必須** | AI 必須先讀 `adapt.json` + Jira + 改動範圍，判定 labels，並透過 `--labels="a,b,c"` 傳入（腳本仍會做白名單/存在性過濾） |
    | `--reviewer` | 僅用戶明確指定時傳遞 | 可選 | 未指定時讓腳本使用環境變數或預設值 |
@@ -661,18 +660,19 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
    - 建議 **只傳入需要 AI 補齊的額外 labels**（例如 UI 版本類 / domain 類 labels）；`AI` / `FE Board` / `Hotfix` 等腳本自動處理的 labels 仍會由腳本自行加入
    - 腳本會再以 `adapt.json` 做白名單過濾，不在清單內的 labels 會被濾掉
    
-   **開發報告生成步驟（新流程）：**
-   1. 讀取/更新 `.cursor/tmp/{ticket}/merge-request-description-info.json`
-   2. `create-mr.mjs` / `update-mr.mjs` 以固定模板渲染到 MR description
-   3. 詳細報告欄位與模板區塊請參考 `.cursor/rules/cr/commit-and-mr-guidelines.mdc` 的「Development Report Requirement」
+   **開發報告生成步驟：**
+   1. 讀取 Jira ticket 資訊（標題、類型）
+   2. 分析 `git diff` 和 `git status` 獲取變更檔案
+   3. 根據 Jira 類型（Bug/Request/其他）生成對應格式的報告
+   4. 詳細格式請參考 `.cursor/rules/cr/commit-and-mr-guidelines.mdc` 中的「Development Report Requirement」章節
    
    **版本資訊讀取步驟：**
    1. 按優先順序檢查版本檔案是否存在
    2. 讀取 JSON 內容並提取版本欄位
    3. 將版本資訊作為 JSON 字串傳遞
    
-   **禁止行為（更新後）：**
-   - ❌ 自動產出任何檔案，除 `merge-request-description-info.json`
+   **禁止行為：**
+   - ❌ 執行 `create-mr` 時不傳入 `--development-report`
    - ❌ 執行 `create-mr` 時不傳入 `--agent-version` 參數
    - ❌ 生成不完整的開發報告（缺少關聯單資訊或變更摘要）
    
@@ -681,13 +681,13 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
    腳本會自動使用 GitLab CLI (glab) 或 API token 建立 MR：
    
    ```bash
-   node .cursor/scripts/cr/create-mr.mjs --agent-version='<版本JSON>' --labels="label1,label2" [--reviewer="@username"] [--target=main] [--no-draft] [--no-review] [--related-tickets="IN-1235,IN-1236"] [--no-notify]
+   node .cursor/scripts/cr/create-mr.mjs --development-report="<markdown>" --agent-version='<版本JSON>' --labels="label1,label2" [--reviewer="@username"] [--target=main] [--no-draft] [--no-review] [--related-tickets="IN-1235,IN-1236"] [--no-notify]
    ```
 
    **方法 B: 更新既有 MR：使用 update-mr 腳本（任何 MR 修改一律走此腳本）**
 
    ```bash
-   node .cursor/scripts/cr/update-mr.mjs
+   node .cursor/scripts/cr/update-mr.mjs --development-report="<markdown>"
    ```
    
    **參數說明：**
