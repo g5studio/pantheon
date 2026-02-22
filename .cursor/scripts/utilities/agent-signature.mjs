@@ -56,11 +56,12 @@ export function appendAgentSignature(message) {
 }
 
 /**
- * 若訊息的最後一個非空白行為「當前 agent 署名」，則移除該署名行。
+ * 移除訊息末尾署名（若存在）
  *
  * 用途：
  * - 在需要於尾端插入其他區塊（例如 Agent Version）前，先移除尾端署名，避免署名被推到中間
- * - 插入完成後再呼叫 appendAgentSignature()，即可確保署名永遠位於最後一行
+ * - 更新 MR description 前先移除舊署名，再追加新內容後重新署名
+ * - 避免署名重複堆疊
  *
  * @param {string} message
  * @returns {string}
@@ -69,18 +70,34 @@ export function stripTrailingAgentSignature(message) {
   if (typeof message !== "string") return message;
 
   const displayName = getAgentDisplayName();
-  if (!displayName) return message;
-
-  const signatureLine = buildAgentSignatureLine(displayName);
   const base = message.replace(/[\r\n]+$/g, "");
+  if (!base) return message;
 
   const lines = base.split(/\r?\n/);
   let i = lines.length - 1;
   while (i >= 0 && lines[i].trim() === "") i--;
-  const lastNonEmpty = i >= 0 ? lines[i] : "";
-  if (lastNonEmpty !== signatureLine) return message;
+  if (i < 0) return message;
 
-  const remaining = lines.slice(0, i).join("\n").replace(/[\r\n]+$/g, "");
-  return remaining;
+  const lastNonEmpty = lines[i];
+
+  // 若能取得 displayName，先做精準移除（避免誤刪其他行）
+  if (displayName) {
+    const escaped = displayName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const signatureRegex = new RegExp(`^—\\s+.*AI助理『${escaped}』$`);
+    if (signatureRegex.test(lastNonEmpty)) {
+      return lines.slice(0, i).join("\n").replace(/[\r\n]+$/g, "");
+    }
+  }
+
+  // fallback：只要符合署名格式就移除（兼容：— {owner}的AI助理『...』 / — AI助理『...』）
+  const isSignatureLine =
+    typeof lastNonEmpty === "string" &&
+    lastNonEmpty.trim().startsWith("— ") &&
+    lastNonEmpty.includes("AI助理『") &&
+    lastNonEmpty.trim().endsWith("』");
+  if (!isSignatureLine) return message;
+
+  const kept = lines.slice(0, i).join("\n").replace(/[\r\n]+$/g, "");
+  return kept;
 }
 

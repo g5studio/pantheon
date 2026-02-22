@@ -632,24 +632,23 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
    
    | 參數 | 來源 | 必要性 | 說明 |
    |---|---|---|---|
-   | `--development-report` | 根據 Jira 資訊和變更內容生成 | **必須** | 直接以字串傳入；**Agent 必須確保不跑版**（避免 MR description 出現字面 `\n`） |
+   | `--development-report` | （Legacy）外部傳入 markdown | 非必須 | 新流程改由 `.cursor/tmp/{ticket}/merge-request-description-info.json`（schema: `{ plan, report }`）+ 固定模板渲染；此參數僅保留相容舊用法 |
    | `--agent-version` | 從 `version.json` 讀取 | **必須** | 優先順序：`.pantheon/version.json` → `version.json` → `.cursor/version.json` |
    | `--reviewer` | 僅用戶明確指定時傳遞 | 可選 | 未指定時讓腳本使用環境變數或預設值 |
    | `--related-tickets` | 從用戶輸入或自動偵測 | 可選 | 多個單號用逗號分隔 |
    
-   **開發報告生成步驟：**
-   1. 讀取 Jira ticket 資訊（標題、類型）
-   2. 分析 `git diff` 和 `git status` 獲取變更檔案
-   3. 根據 Jira 類型（Bug/Request/其他）生成對應格式的報告
-   4. 詳細格式請參考 `.cursor/rules/cr/commit-and-mr-guidelines.mdc` 中的「Development Report Requirement」章節
+   **開發報告生成步驟（新流程）：**
+   1. 讀取/更新 `.cursor/tmp/{ticket}/merge-request-description-info.json`
+   2. `create-mr.mjs` / `update-mr.mjs` 以固定模板渲染到 MR description
+   3. 詳細報告欄位與模板區塊請參考 `.cursor/rules/cr/commit-and-mr-guidelines.mdc` 的「Development Report Requirement」
    
    **版本資訊讀取步驟：**
    1. 按優先順序檢查版本檔案是否存在
    2. 讀取 JSON 內容並提取版本欄位
    3. 將版本資訊作為 JSON 字串傳遞
    
-   **禁止行為：**
-   - ❌ 執行 `create-mr` 時不傳入 `--development-report`
+   **禁止行為（更新後）：**
+   - ❌ 自動產出任何檔案，除 `merge-request-description-info.json`
    - ❌ 執行 `create-mr` 時不傳入 `--agent-version` 參數
    - ❌ 生成不完整的開發報告（缺少關聯單資訊或變更摘要）
    
@@ -658,13 +657,13 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
    腳本會自動使用 GitLab CLI (glab) 或 API token 建立 MR：
    
    ```bash
-   node .cursor/scripts/cr/create-mr.mjs --development-report="<markdown>" --agent-version='<版本JSON>' [--reviewer="@username"] [--target=main] [--no-draft] [--no-review] [--related-tickets="IN-1235,IN-1236"] [--no-notify]
+   node .cursor/scripts/cr/create-mr.mjs --agent-version='<版本JSON>' [--reviewer="@username"] [--target=main] [--no-draft] [--no-review] [--related-tickets="IN-1235,IN-1236"] [--no-notify]
    ```
 
    **方法 B: 更新既有 MR：使用 update-mr 腳本（任何 MR 修改一律走此腳本）**
 
    ```bash
-   node .cursor/scripts/cr/update-mr.mjs --development-report="<markdown>"
+   node .cursor/scripts/cr/update-mr.mjs
    ```
    
    **參數說明：**

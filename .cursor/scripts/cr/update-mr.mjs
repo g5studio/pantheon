@@ -5,7 +5,9 @@
  *
  * 核心目標：
  * - 任何「修改 MR」都應透過此腳本（create-mr 僅用於建立 MR）
- * - 使用 --development-report 傳入「不跑版」markdown（不產出任何實體檔案）
+ * - 以 `.cursor/tmp/{ticket}/merge-request-description-info.json` 作為 MR description 資訊來源（含 plan/report）並用固定模板渲染
+ * - 會先將既有 MR description 解析回 JSON，再合併/更新 JSON 後回填模板更新 description
+ * - 僅允許自動落地 `merge-request-description-info.json`
  * - 更新 description 時以 merge 的概念處理，避免重複內容（marker-based）
  * - 用戶可要求不審核（--no-review）
  * - 未特別說明時預設要審核，但前提是「相對於上次已送審狀態」有 new commit
@@ -13,6 +15,8 @@
  */
 
 import { execSync, spawnSync } from "child_process";
+import { existsSync, readFileSync } from "fs";
+import { join } from "path";
 import readline from "readline";
 import {
   getProjectRoot,
@@ -22,11 +26,26 @@ import {
   getJiraEmail,
   getGitLabToken as getGitLabTokenFromEnvLoader,
 } from "../utilities/env-loader.mjs";
-import { readStartTaskInfo } from "./label-analyzer.mjs";
 import {
   appendAgentSignature,
   stripTrailingAgentSignature,
 } from "../utilities/agent-signature.mjs";
+import {
+  ensureTmpDir,
+  getDevelopmentReportJsonPath,
+  getMergeRequestDescriptionInfoJsonPath,
+  readJsonIfExists,
+  removeTmpDirForTicket,
+  writeJsonFile,
+  createDefaultDevelopmentReportJson,
+  createDefaultMergeRequestDescriptionInfoJson,
+  normalizeDevelopmentReportJson,
+  normalizeMergeRequestDescriptionInfoJson,
+  extractEmbeddedMergeRequestDescriptionInfoJson,
+  extractEmbeddedDevelopmentReportJson,
+  parseDevelopmentReportMarkdownToJson,
+  renderMergeRequestDescriptionInfoMarkdown,
+} from "./development-docs.mjs";
 
 const projectRoot = getProjectRoot();
 
@@ -44,6 +63,72 @@ function exec(command, options = {}) {
     }
     throw error;
   }
+}
+
+function readAdaptKnowledgeOrExit() {
+  const filePath = join(projectRoot, ".cursor", "tmp", "pantheon", "adapt.json");
+  if (!existsSync(filePath)) {
+    console.error("\n❌ 找不到 adapt.json，無法驗證 labels 可用性\n");
+    console.error(`📁 預期路徑：${filePath}`);
+    console.error(
+      "\n✅ 請先執行：node .cursor/scripts/utilities/adapt.mjs\n",
+    );
+    process.exit(1);
+  }
+
+  try {
+    const text = readFileSync(filePath, "utf-8").replace(/^\uFEFF/, "");
+    return JSON.parse(text);
+  } catch (e) {
+    console.error("\n❌ 讀取 adapt.json 失敗，無法驗證 labels 可用性\n");
+    console.error(`📁 路徑：${filePath}`);
+    console.error(`原因：${e.message}\n`);
+    process.exit(1);
+  }
+}
+
+function getAdaptAllowedLabelSet() {
+  const knowledge = readAdaptKnowledgeOrExit();
+  const list = Array.isArray(knowledge?.labels) ? knowledge.labels : [];
+  const allowed = new Set();
+  for (const item of list) {
+    const name = typeof item?.name === "string" ? item.name.trim() : "";
+    if (!name) continue;
+
+    const a = item.applicable;
+    const ok =
+      a === undefined ||
+      a === null ||
+      a === true ||
+      (typeof a === "object" && a !== null && a.ok === true);
+    if (ok) allowed.add(name);
+  }
+  return allowed;
+}
+
+function filterLabelsByAdaptAllowed(labelsToFilter, allowedSet, labelSource) {
+  const input = Array.isArray(labelsToFilter) ? labelsToFilter : [];
+  const valid = [];
+  const invalid = [];
+
+  for (const raw of input) {
+    const label = String(raw || "").trim();
+    if (!label) continue;
+    if (allowedSet.has(label)) valid.push(label);
+    else invalid.push(label);
+  }
+
+  if (invalid.length > 0) {
+    console.error(
+      `\n❌ 以下 ${labelSource} 的 labels 未在 adapt.json 標示為可用，已過濾：\n`,
+    );
+    invalid.forEach((l) => console.error(`   - ${l}`));
+    console.error(
+      "\n💡 若要使用上述 labels，請先更新 adapt.json 的 labels/applicable.ok（再重新執行 update-mr）\n",
+    );
+  }
+
+  return { valid, invalid };
 }
 
 function hasGlab() {
@@ -289,10 +374,15 @@ async function updateMRDescription(
   host,
   projectPath,
   mrIid,
-  description
+  description,
+  addLabels = []
 ) {
   const url = `${host}/api/v4/projects/${projectPath}/merge_requests/${mrIid}`;
   const body = { description };
+  if (Array.isArray(addLabels) && addLabels.length > 0) {
+    // 只帶入 add_labels，避免覆寫現有 labels
+    body.add_labels = addLabels.join(",");
+  }
   const response = await fetch(url, {
     method: "PUT",
     headers: {
@@ -338,7 +428,7 @@ function hasMarkdownTable(content, expectedHeaderLine) {
   return afterHeader.includes("\n|---|") && /(\n\|.+\|)/.test(afterHeader);
 }
 
-function validateMrDescriptionFormat(description, startTaskInfo) {
+function validateMrDescriptionFormat(description, options = {}) {
   const desc = typeof description === "string" ? description : "";
   const missing = [];
 
@@ -364,7 +454,7 @@ function validateMrDescriptionFormat(description, startTaskInfo) {
     missing.push("## ⚠️ 風險評估（含表格：| 檔案 | 風險等級 | 評估說明 |）");
   }
 
-  const issueType = startTaskInfo?.issueType;
+  const issueType = options?.issueType;
   const isBug =
     typeof issueType === "string" && issueType.toLowerCase().includes("bug");
   if (isBug) {
@@ -487,6 +577,54 @@ function upsertDevelopmentReport(existingDescription, reportMarkdown) {
   return `${trimmed}\n\n${reportBlock}\n`;
 }
 
+function getChangedFilesAgainstTarget(targetBranch) {
+  if (!targetBranch) return [];
+  try {
+    exec(`git fetch origin ${targetBranch}`, { silent: true });
+  } catch {
+    // ignore
+  }
+
+  try {
+    const raw = exec(`git diff --name-status origin/${targetBranch}...HEAD`, {
+      silent: true,
+    })
+      .trim()
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    return raw.map((line) => {
+      const parts = line.split("\t");
+      const status = parts[0] || "M";
+      const path =
+        status.startsWith("R") && parts.length >= 3
+          ? parts[2]
+          : parts[1] || "";
+      return { status, path, description: "" };
+    });
+  } catch {
+    return [];
+  }
+}
+
+function extractReportMarkdownFromDescription(description) {
+  const base = typeof description === "string" ? description : "";
+
+  const startIdx = base.indexOf(REPORT_START);
+  const endIdx = base.indexOf(REPORT_END);
+  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+    return base.slice(startIdx + REPORT_START.length, endIdx).trim();
+  }
+
+  const lastReportStart = base.lastIndexOf("## 📋 關聯單資訊");
+  if (lastReportStart === -1) return null;
+
+  const agentVersionIdx = base.indexOf("### 🤖 Agent Version", lastReportStart);
+  const sliceEnd = agentVersionIdx !== -1 ? agentVersionIdx : base.length;
+  return base.slice(lastReportStart, sliceEnd).trim();
+}
+
 async function main() {
   const hostname = "gitlab.service-hub.tech";
   const args = process.argv.slice(2);
@@ -498,18 +636,25 @@ async function main() {
     process.exit(1);
   }
 
+  // Legacy：允許用 --development-report 傳入 markdown，會自動轉存為 JSON 後再渲染模板
   const reportArg = args.find((a) => a.startsWith("--development-report="));
-  const externalReport = reportArg
+  const legacyExternalReport = reportArg
     ? normalizeExternalMarkdownArg(reportArg.split("=").slice(1).join("="))
     : null;
 
-  if (!externalReport || !externalReport.trim()) {
-    console.error("\n❌ update-mr 需要提供 --development-report\n");
-    console.error("💡 必須確保傳入的 markdown 不跑版（避免字面 \\\\n）\n");
-    process.exit(1);
-  }
-
   const skipReview = args.includes("--no-review");
+  const labelsArg =
+    args.find((a) => a.startsWith("--add-labels=")) ||
+    args.find((a) => a.startsWith("--labels="));
+  const requestedLabels = labelsArg
+    ? labelsArg
+        .split("=")
+        .slice(1)
+        .join("=")
+        .split(",")
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0)
+    : [];
 
   const uncommitted = getGitStatus();
   if (uncommitted.length > 0) {
@@ -518,6 +663,7 @@ async function main() {
   }
 
   const currentBranch = getCurrentBranch();
+  const ticketFromBranch = currentBranch?.match(/FE-\d+|IN-\d+/)?.[0] || "N/A";
 
   // 嘗試取得 MR（優先 glab）
   let mrIid = null;
@@ -570,14 +716,108 @@ async function main() {
     process.exit(1);
   }
 
-  // merge description（避免重複）
   const existingDescription =
     typeof mrDetails.description === "string" ? mrDetails.description : "";
-  const reportForDescription = stripTrailingAgentSignature(externalReport);
-  let mergedDescription = upsertDevelopmentReport(
-    existingDescription,
-    reportForDescription
-  );
+
+  // ============================================================
+  // MR description info（JSON + 固定模板）更新策略：
+  // 1) 既有 MR description → 解析回 info JSON（優先新 hidden JSON block；否則從模板 heuristic）
+  // 2) 合併本地 `.cursor/tmp/{ticket}/merge-request-description-info.json`（若存在）
+  // 3) 若有 legacyExternalReport，解析並覆蓋合併結果
+  // 4) 更新變更檔案清單（依 MR target branch）並補齊風險表列
+  // 5) 寫回 merge-request-description-info.json，再渲染模板更新 MR description
+  // ============================================================
+  const targetBranch = mrDetails?.target_branch || "main";
+  const changedFiles = ticketFromBranch !== "N/A" ? getChangedFilesAgainstTarget(targetBranch) : [];
+
+  // 1) 既有 MR description → 解析回 info JSON（優先新 hidden JSON；再 fallback 舊 report hidden JSON / 模板 heuristic）
+  let parsedInfoFromDescription =
+    extractEmbeddedMergeRequestDescriptionInfoJson(existingDescription) || null;
+
+  if (!parsedInfoFromDescription) {
+    const legacyEmbeddedReport =
+      extractEmbeddedDevelopmentReportJson(existingDescription) || null;
+    if (legacyEmbeddedReport) {
+      parsedInfoFromDescription = { report: legacyEmbeddedReport };
+    } else {
+      const reportMd = extractReportMarkdownFromDescription(existingDescription);
+      if (reportMd) {
+        parsedInfoFromDescription = {
+          report: parseDevelopmentReportMarkdownToJson(
+            reportMd,
+            ticketFromBranch !== "N/A" ? ticketFromBranch : null
+          ),
+        };
+      }
+    }
+  }
+
+  // 2) 合併本地 `.cursor/tmp/{ticket}/merge-request-description-info.json`（若存在）
+  let infoPath = null;
+  let localInfoJson = null;
+  if (ticketFromBranch !== "N/A") {
+    ensureTmpDir(ticketFromBranch);
+    infoPath = getMergeRequestDescriptionInfoJsonPath(ticketFromBranch);
+    localInfoJson = readJsonIfExists(infoPath);
+
+    // legacy：若舊 report json 存在且新 info 沒有 report，取作遷移來源（但不再寫回舊檔）
+    const legacyReportPath = getDevelopmentReportJsonPath(ticketFromBranch);
+    const legacyReportJson = readJsonIfExists(legacyReportPath);
+    if (legacyReportJson && !localInfoJson?.report) {
+      localInfoJson = { ...(localInfoJson || {}), report: legacyReportJson };
+    }
+  }
+
+  let mergedInfo = {
+    ...(parsedInfoFromDescription || {}),
+    ...(localInfoJson || {}),
+  };
+
+  // 3) 若有 legacyExternalReport，解析並覆蓋 report
+  if (legacyExternalReport && legacyExternalReport.trim()) {
+    const legacyJson = parseDevelopmentReportMarkdownToJson(
+      legacyExternalReport,
+      ticketFromBranch !== "N/A" ? ticketFromBranch : null
+    );
+    mergedInfo = {
+      ...mergedInfo,
+      report: { ...(mergedInfo?.report || {}), ...(legacyJson || {}) },
+    };
+  }
+
+  // 4) 若沒有 info，建立 skeleton；report 若缺也補 skeleton（避免 description 格式驗證失敗）
+  if (ticketFromBranch !== "N/A") {
+    mergedInfo =
+      mergedInfo && typeof mergedInfo === "object"
+        ? mergedInfo
+        : createDefaultMergeRequestDescriptionInfoJson({
+            ticket: ticketFromBranch,
+          });
+    if (!mergedInfo.report) {
+      mergedInfo.report = createDefaultDevelopmentReportJson({
+        ticket: ticketFromBranch,
+        jiraTitle: "",
+        issueType: "",
+        changeFiles: changedFiles,
+      });
+    }
+  }
+
+  mergedInfo = normalizeMergeRequestDescriptionInfoJson(mergedInfo, {
+    changeFiles: changedFiles,
+  });
+
+  if (ticketFromBranch !== "N/A" && infoPath) {
+    writeJsonFile(infoPath, mergedInfo);
+  }
+
+  const reportMarkdown = renderMergeRequestDescriptionInfoMarkdown(mergedInfo, {
+    changeFiles: changedFiles,
+  });
+
+  // merge description（避免重複）
+  const reportForDescription = stripTrailingAgentSignature(reportMarkdown);
+  let mergedDescription = upsertDevelopmentReport(existingDescription, reportForDescription);
   // FE-8004: 署名必須為 MR description 的最後一行（可見內容）
   mergedDescription = appendAgentSignature(
     stripTrailingAgentSignature(mergedDescription)
@@ -587,7 +827,7 @@ async function main() {
   const startTaskInfo = readStartTaskInfo();
   const validation = validateMrDescriptionFormat(
     mergedDescription,
-    startTaskInfo
+    { issueType: mergedInfo?.report?.issueType || "" }
   );
   if (!validation.ok) {
     console.error(
@@ -629,17 +869,43 @@ async function main() {
     }
   }
 
+  // 🚨 CRITICAL: update-mr 若要新增 labels，必須先通過 adapt.json 可用性白名單
+  let labelsToAdd = [];
+  if (requestedLabels.length > 0) {
+    const adaptAllowedLabelSet = getAdaptAllowedLabelSet();
+    const adaptCheck = filterLabelsByAdaptAllowed(
+      requestedLabels,
+      adaptAllowedLabelSet,
+      "外部傳入（準備新增）",
+    );
+    labelsToAdd = adaptCheck.valid;
+
+    if (labelsToAdd.length > 0) {
+      console.log(`\n🏷️  將新增 labels: ${labelsToAdd.join(", ")}\n`);
+    } else {
+      console.log("\n🏷️  未提供任何可用 labels（或已全數被過濾），將略過 labels 更新\n");
+    }
+  }
+
   const updated = await updateMRDescription(
     token,
     projectInfo.host,
     projectInfo.projectPath,
     mrIid,
-    mergedDescription
+    mergedDescription,
+    labelsToAdd
   );
 
   console.log("\n✅ MR 更新成功！\n");
   console.log(`🔗 MR 連結: [MR !${updated.iid}](${updated.web_url})`);
   console.log(`📊 MR ID: !${updated.iid}`);
+
+  if (ticketFromBranch !== "N/A") {
+    const removed = removeTmpDirForTicket(ticketFromBranch);
+    if (removed) {
+      console.log(`🧹 已移除 tmp 資料夾: .cursor/tmp/${ticketFromBranch}\n`);
+    }
+  }
 
   // AI review 規則（根源級）：
   // - 用戶可用 --no-review 明確跳過

@@ -13,7 +13,7 @@ description: 快速執行 commit 並建立 MR，略過關聯單號詢問（預�
 6. **預設提交 AI review**（用戶可用 `--no-review` 明確跳過；若缺少 `COMPASS_API_TOKEN` 則會自動跳過 AI review；若為更新既有 MR，會由 `update-mr.mjs` 決定是否送審）
 7. **自動檢查 Cursor rules**：在執行 commit 之前，AI 會檢查代碼是否符合 Cursor rules。如果檢測到違規，會自動顯示系統通知（macOS/Windows）並自動切換到 Cursor，停止 commit 流程
 8. **Bug 類型強制追溯來源**：如果 Jira ticket 類型為 Bug，AI 必須在生成開發報告前執行 `git log` 追溯問題來源，並在報告中包含「造成問題的單號」區塊。詳細流程請參考 [auto-commit-and-mr.md](../utilities/auto-commit-and-mr.md) 中的「步驟 4.6. Bug 類型強制追溯來源」章節。
-9. **生成開發報告（CRITICAL）**：在建立 MR 前，**必須**根據 Jira ticket 資訊和變更內容生成開發報告，並透過 `--development-report` 傳遞給 `create-mr.mjs`。**CRITICAL**：Agent 必須確保傳入的是「不跑版」的 Markdown（避免出現字面 `\n`）。
+9. **MR description 資訊（CRITICAL）**：在建立 MR 前，來源改為 `.cursor/tmp/{ticket}/merge-request-description-info.json`（schema: `{ plan, report }`），並由 `create-mr.mjs` 以固定模板渲染到 MR description（必要時會自動建立/補齊 JSON 欄位；不會落地任何 markdown 檔）。
 10. **讀取 Agent 版本（CRITICAL）**：在建立 MR 前，**必須**讀取 `version.json`（優先順序：`.pantheon/version.json` → `version.json` → `.cursor/version.json`）並透過 `--agent-version` 參數傳遞給 `create-mr.mjs`。
 11. **MR description 格式回歸檢查（CRITICAL）**：在建立/更新 MR 前，腳本會驗證 MR description 是否包含規範要求的開發報告格式（關聯單資訊/變更摘要/變更內容表格/風險評估表格；若可辨識為 Bug，需包含影響範圍與根本原因）。不符合將中止流程並提示補齊方式（`create-mr.mjs` 僅用於建立；更新請使用 `update-mr.mjs`）。
 
@@ -34,42 +34,10 @@ description: 快速執行 commit 並建立 MR，略過關聯單號詢問（預�
 - `cr single-ticket --no-review`：明確跳過 AI review（不送審）
 - `cr single-ticket --no-notify`：停用 Cursor rules 檢查失敗時的系統通知（預設為開啟）
 
-**`--development-report` 不跑版建議：**
-- **方法 A（推薦）**：用 heredoc 直接把 Markdown 當作參數值（不產生檔案）
-  ```bash
-  node .cursor/scripts/cr/create-mr.mjs \
-    --development-report="$(cat <<'EOF'
-  ## 📋 關聯單資訊
+**MR description info 檔案位置：**
+- `.cursor/tmp/{jira ticket number}/merge-request-description-info.json`
 
-  | 項目 | 值 |
-  |---|---|
-  | **單號** | [FE-7910](https://innotech.atlassian.net/browse/FE-7910) |
-  | **標題** | ... |
-  | **類型** | ... |
-
-  ---
-
-  ## 📝 變更摘要
-
-  ...
-
-  ### 變更內容
-
-  | 檔案 | 狀態 | 說明 |
-  |---|---|---|
-  | `path/to/file.ts` | 更新 | ... |
-
-  ---
-
-  ## ⚠️ 風險評估
-
-  | 檔案 | 風險等級 | 評估說明 |
-  |---|---|---|
-  | `path/to/file.ts` | 中度 | ... |
-  EOF
-  )"
-  ```
-- **方法 B**：傳入 JSON string（腳本會自動把 `\\n` 轉成真正換行）
+> `{jira ticket number}` 從當前分支名稱提取（例如 `feature/FE-1234` → `FE-1234`）。
 
 **參數使用範例：**
 - `cr single-ticket`：使用預設設定

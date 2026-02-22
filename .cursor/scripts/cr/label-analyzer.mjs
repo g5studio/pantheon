@@ -8,11 +8,15 @@
  */
 
 import { execSync } from "child_process";
+import { existsSync, readFileSync } from "fs";
+import { join } from "path";
 import {
   getProjectRoot,
   getJiraConfig,
   guideJiraConfig,
+  loadEnvLocal,
 } from "../utilities/env-loader.mjs";
+import { callOpenAiJson, resolveLlmModel } from "../utilities/llm-client.mjs";
 
 // 使用 env-loader 提供的 projectRoot
 const projectRoot = getProjectRoot();
@@ -31,6 +35,131 @@ function exec(command, options = {}) {
     }
     throw error;
   }
+}
+
+function safeJsonParse(text, hint = "JSON") {
+  try {
+    return JSON.parse(String(text || ""));
+  } catch (e) {
+    throw new Error(`${hint} 解析失敗：${e.message}`);
+  }
+}
+
+function uniqStrings(list) {
+  const out = [];
+  const seen = new Set();
+  for (const raw of Array.isArray(list) ? list : []) {
+    const v = String(raw || "").trim();
+    if (!v) continue;
+    if (seen.has(v)) continue;
+    seen.add(v);
+    out.push(v);
+  }
+  return out;
+}
+
+function truncateText(text, maxChars) {
+  const s = String(text || "");
+  if (!maxChars || s.length <= maxChars) return s;
+  return `${s.slice(0, maxChars)}\n... [truncated ${s.length - maxChars} chars]`;
+}
+
+function getDefaultAdaptJsonPath() {
+  return join(projectRoot, ".cursor", "tmp", "pantheon", "adapt.json");
+}
+
+function readAdaptKnowledge() {
+  const filePath = getDefaultAdaptJsonPath();
+  if (!existsSync(filePath)) return null;
+  const text = readFileSync(filePath, "utf-8").replace(/^\uFEFF/, "");
+  return safeJsonParse(text, "adapt.json");
+}
+
+function getChangesSinceBase(baseRef) {
+  const ref = baseRef || "origin/main";
+  const nameStatus = exec(`git diff --name-status ${ref}...HEAD`, {
+    silent: true,
+  });
+  const stat = exec(`git diff --stat ${ref}...HEAD`, { silent: true });
+  // diff 可能很大：只截斷後給 LLM
+  const diff = exec(`git diff ${ref}...HEAD`, { silent: true });
+  const commits = exec(`git log --oneline ${ref}..HEAD`, { silent: true });
+
+  return {
+    baseRef: ref,
+    nameStatus: nameStatus || "",
+    stat: stat || "",
+    commits: commits || "",
+    diff: diff || "",
+  };
+}
+
+async function getJiraTicketInfo(ticket) {
+  if (!ticket || ticket === "N/A") return null;
+
+  let config;
+  try {
+    config = getJiraConfig();
+  } catch (error) {
+    console.log(`⚠️  無法讀取 Jira 設定：${error.message}\n`);
+    return null;
+  }
+
+  if (!config || !config.email || !config.apiToken) {
+    console.log(`⚠️  未設置 Jira API 認證信息，無法讀取 ${ticket}\n`);
+    guideJiraConfig();
+    return null;
+  }
+
+  const auth = Buffer.from(`${config.email}:${config.apiToken}`).toString(
+    "base64",
+  );
+  const baseUrl = config.baseUrl.endsWith("/")
+    ? config.baseUrl.slice(0, -1)
+    : config.baseUrl;
+  const url = `${baseUrl}/rest/api/3/issue/${ticket}`;
+
+  console.log(`🔍 正在從 Jira 獲取 ticket ${ticket} 的資訊...`);
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Basic ${auth}`,
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      console.log(`⚠️  找不到 Jira ticket: ${ticket}\n`);
+      return null;
+    }
+    if (response.status === 401 || response.status === 403) {
+      console.log(`\n❌ Jira API Token 已過期或無權限 (${response.status})\n`);
+      console.log(`   請聯繫最高管理員: william.chiang\n`);
+      throw new Error("Jira API Token 已過期，請聯繫 william.chiang");
+    }
+    console.log(
+      `⚠️  獲取 Jira ticket ${ticket} 信息失敗: ${response.status} ${response.statusText}\n`,
+    );
+    return null;
+  }
+
+  const data = await response.json();
+  const fields = data.fields || {};
+  const fixVersions = Array.isArray(fields.fixVersions) ? fields.fixVersions : [];
+  const fixVersionNames = fixVersions
+    .map((v) => v?.name)
+    .filter((v) => typeof v === "string" && v.trim().length > 0);
+
+  const summary = typeof fields.summary === "string" ? fields.summary : null;
+  const issueType = fields.issuetype?.name || null;
+
+  return {
+    key: data.key || ticket,
+    summary,
+    issueType,
+    fixVersions: fixVersionNames,
+    fixVersion: fixVersionNames[0] || null,
+  };
 }
 
 // 獲取 Jira ticket 的 fix version
@@ -211,6 +340,74 @@ export function readStartTaskInfo() {
   }
 }
 
+async function suggestLabelsWithLlm({
+  ticket,
+  jira,
+  changes,
+  adapt,
+  existingLabels = [],
+}) {
+  const envLocal = loadEnvLocal();
+  const apiKey = process.env.OPENAI_API_KEY || envLocal.OPENAI_API_KEY || null;
+
+  const explicitModel =
+    typeof envLocal.LABEL_LLM_MODEL === "string" ? envLocal.LABEL_LLM_MODEL : null;
+  const model = resolveLlmModel({
+    explicitModel,
+    envLocal,
+    envKeys: ["LABEL_LLM_MODEL", "ADAPT_LLM_MODEL", "AI_MODEL", "LLM_MODEL", "OPENAI_MODEL"],
+    defaultModel: "gpt-5.2",
+  });
+
+  const system = `
+你是一個 GitLab Merge Request labels 決策器。
+你會收到：
+- changes（git diff / stat / commits）
+- jira ticket info
+- adapt.json（repo knowledge，含 labels 與 applicable.ok、scenario）
+
+請遵守：
+- 只回傳 adapt.json.labels 內存在，且 applicable.ok === true（或 applicable === true / applicable 欄位缺失視為可用）的 labels
+- 不要創造新 label
+- 不要回傳不確定/不適用的 label
+
+輸出必須是 JSON object，格式：
+{
+  "labels": string[],
+  "reason": string
+}
+  `.trim();
+
+  const input = {
+    ticket,
+    jira,
+    changes: {
+      baseRef: changes?.baseRef || null,
+      nameStatus: truncateText(changes?.nameStatus, 4000),
+      stat: truncateText(changes?.stat, 4000),
+      commits: truncateText(changes?.commits, 4000),
+      diff: truncateText(changes?.diff, 12000),
+    },
+    adapt,
+    existingLabels,
+  };
+
+  console.log(`🤖 正在請 LLM 建議 labels... (model=${model})`);
+  const resp = await callOpenAiJson({
+    apiKey,
+    model,
+    system,
+    input,
+    temperature: 0.1,
+  });
+
+  const labels = uniqStrings(resp?.labels);
+  const reason = typeof resp?.reason === "string" ? resp.reason.trim() : "";
+
+  if (reason) console.log(`🧠 LLM 理由（摘要）：${truncateText(reason, 400)}\n`);
+  return labels;
+}
+
 /**
  * 根據 ticket 和選項決定 labels
  *
@@ -220,10 +417,11 @@ export function readStartTaskInfo() {
  * @param {string} ticket - Jira ticket 編號
  * @param {object} options - 選項
  * @param {object} options.startTaskInfo - start-task 開發計劃信息
+ * @param {string} options.targetBranch - MR target branch（用於計算 changes base）
  * @returns {Promise<{labels: string[], releaseBranch: string|null}>}
  */
 export async function determineLabels(ticket, options = {}) {
-  const { startTaskInfo = null } = options;
+  const { startTaskInfo = null, targetBranch = "main" } = options;
   const labels = [];
   let releaseBranch = null;
 
@@ -239,31 +437,49 @@ export async function determineLabels(ticket, options = {}) {
     labels.push("FE Board");
   }
 
-  // 獲取 Jira ticket 的 fix version 並添加版本 label
+  // 蒐集 Jira ticket info（提供給 LLM / Hotfix 判定）
+  let jiraInfo = null;
   if (ticket && ticket !== "N/A") {
     try {
-      const fixVersion = await getJiraFixVersion(ticket);
-      if (fixVersion) {
-        console.log(`📋 Jira ticket ${ticket} 的 fix version: ${fixVersion}`);
-        const versionLabel = extractVersionLabel(fixVersion);
-        if (versionLabel) {
-          console.log(`   → 提取版本 label: ${versionLabel}`);
-          labels.push(versionLabel);
-        }
-
-        // 如果 fix version 最後數字非 0，添加 Hotfix label
-        if (isHotfixVersion(fixVersion)) {
-          console.log(`   → 檢測到 Hotfix 版本，將添加 Hotfix label`);
-          labels.push("Hotfix");
-          releaseBranch = extractReleaseBranch(fixVersion);
-        }
-        console.log("");
-      }
+      jiraInfo = await getJiraTicketInfo(ticket);
     } catch (error) {
       if (error.message && error.message.includes("Jira API Token")) {
-        // Token 過期，不添加版本 label
+        // Token 過期，略過 Jira info
       }
     }
+  }
+
+  const fixVersion = jiraInfo?.fixVersion || null;
+  const inferredReleaseBranch =
+    fixVersion && isHotfixVersion(fixVersion) ? extractReleaseBranch(fixVersion) : null;
+
+  // 蒐集 changes（Hotfix 優先以 release/* 作為 base）
+  const baseRef = `origin/${inferredReleaseBranch || targetBranch || "main"}`;
+  const changes = getChangesSinceBase(baseRef);
+
+  // 讀取 adapt.json（repo knowledge）
+  const adapt = readAdaptKnowledge();
+
+  // LLM labels 建議（會被 create-mr / update-mr 再做可用 label 白名單過濾）
+  try {
+    const llmLabels = await suggestLabelsWithLlm({
+      ticket,
+      jira: jiraInfo,
+      changes,
+      adapt,
+      existingLabels: labels,
+    });
+    for (const l of llmLabels) {
+      if (!labels.includes(l)) labels.push(l);
+    }
+  } catch (e) {
+    console.log(`⚠️  LLM labels 建議失敗，將略過：${e.message}\n`);
+  }
+
+  // 仍保留 Hotfix target branch 推斷（避免 label 遺漏導致 target branch 不正確）
+  if (fixVersion && isHotfixVersion(fixVersion)) {
+    if (!labels.includes("Hotfix")) labels.push("Hotfix");
+    releaseBranch = inferredReleaseBranch || extractReleaseBranch(fixVersion);
   }
 
   return { labels, releaseBranch };
