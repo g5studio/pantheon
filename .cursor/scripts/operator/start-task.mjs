@@ -4,18 +4,9 @@
  * 開始新任務：創建 feature branch 並分析 Jira ticket 需求
  */
 
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 import readline from "readline";
 import { getProjectRoot, getJiraConfig } from "../utilities/env-loader.mjs";
-import {
-  createDefaultMergeRequestDescriptionInfoJson,
-  ensureTmpDir,
-  getMergeRequestDescriptionInfoJsonPath,
-  normalizeMergeRequestDescriptionInfoJson,
-  readJsonIfExists,
-  toJiraTicketUrl,
-  writeJsonFile,
-} from "../cr/development-docs.mjs";
 
 // 使用 env-loader 提供的 projectRoot
 const projectRoot = getProjectRoot();
@@ -150,50 +141,6 @@ function analyzeTicketAndPlan(ticketData) {
   return analysis;
 }
 
-function truncateOneLine(text, maxLen) {
-  if (typeof text !== "string") return "";
-  const oneLine = text.replace(/\s+/g, " ").trim();
-  if (!oneLine) return "";
-  if (oneLine.length <= maxLen) return oneLine;
-  return `${oneLine.slice(0, Math.max(0, maxLen - 1)).trim()}…`;
-}
-
-function buildAutoPlanFromAnalysis({ ticket, jiraTicketUrl, analysis }) {
-  const summary = typeof analysis?.summary === "string" ? analysis.summary : "";
-  const issueType =
-    typeof analysis?.issueType === "string" ? analysis.issueType : "";
-  const isBug = issueType.toLowerCase().includes("bug");
-
-  const targetBase = summary || ticket || "此任務";
-  const target = isBug
-    ? `修復「${targetBase}」並確認問題不再重現`
-    : `完成「${targetBase}」需求交付`;
-
-  const desc = truncateOneLine(analysis?.description || "", 140);
-  const stepTitles = Array.isArray(analysis?.suggestedSteps)
-    ? analysis.suggestedSteps
-        .map((s) => String(s || "").replace(/^\s*\d+\.\s*/, "").trim())
-        .filter(Boolean)
-        .slice(0, 3)
-    : [];
-  const scopeParts = [];
-  if (desc) scopeParts.push(`需求重點：${desc}`);
-  if (stepTitles.length > 0)
-    scopeParts.push(`初步步驟：${stepTitles.join(" / ")}`);
-  const scope = scopeParts.join("；") || `以「${targetBase}」為主要範圍`;
-
-  const test = isBug
-    ? "依 Jira 描述情境驗證可重現；修復後同情境不再發生；相關流程回歸"
-    : "主要流程符合需求；錯誤/邊界情境可用；相關頁面回歸";
-
-  return {
-    jiraTicketUrl: jiraTicketUrl || toJiraTicketUrl(ticket),
-    target,
-    scope,
-    test,
-  };
-}
-
 // 詢問用戶輸入
 function question(prompt) {
   return new Promise((resolve) => {
@@ -319,39 +266,40 @@ async function main() {
     if (confirm.toLowerCase() === "y") {
       console.log("\n✅ 計劃已確認，可以開始開發！\n");
 
-      // 新流程：start-task 只負責產生/更新 `.cursor/tmp/{ticket}/merge-request-description-info.json` 的 plan
-      const jiraTicketUrl = toJiraTicketUrl(ticket);
-      ensureTmpDir(ticket);
-      const infoPath = getMergeRequestDescriptionInfoJsonPath(ticket);
-      const existing = readJsonIfExists(infoPath);
-
-      const base =
-        existing ||
-        createDefaultMergeRequestDescriptionInfoJson({
-          ticket,
-          jiraTicketUrl,
-        });
-
-      const autoPlan = buildAutoPlanFromAnalysis({
+      const startTaskInfo = {
         ticket,
-        jiraTicketUrl,
-        analysis,
-      });
+        summary: analysis.summary,
+        issueType: analysis.issueType,
+        status: analysis.status,
+        assignee: analysis.assignee,
+        priority: analysis.priority,
+        suggestedSteps: analysis.suggestedSteps,
+        startedAt: new Date().toISOString(),
+        sourceBranch: sourceBranchTrimmed,
+        featureBranch: `feature/${ticket}`,
+        // developmentReport 將由 AI 在開發完成後填充
+        developmentReport: null,
+      };
 
-      const merged = normalizeMergeRequestDescriptionInfoJson(
-        {
-          ...base,
-          ticket,
-          jiraTicketUrl,
-          plan: autoPlan,
-        },
-        { changeFiles: [] }
-      );
+      try {
+        const noteContent = JSON.stringify(startTaskInfo, null, 2);
+        const result = spawnSync(
+          "git",
+          ["notes", "--ref=start-task", "add", "-f", "-F", "-"],
+          {
+            cwd: projectRoot,
+            input: noteContent,
+            encoding: "utf-8",
+            stdio: ["pipe", "pipe", "pipe"],
+          }
+        );
 
-      writeJsonFile(infoPath, merged);
-      console.log(
-        `💾 已保存開發計劃到：.cursor/tmp/${ticket}/merge-request-description-info.json\n`
-      );
+        if (result.status === 0) {
+          console.log("💾 已保存開發計劃到 Git notes\n");
+        }
+      } catch (error) {
+        console.log(`⚠️  無法保存開發計劃: ${error.message}\n`);
+      }
     } else {
       console.log("\n💡 如需調整計劃，請告知具體需求\n");
     }

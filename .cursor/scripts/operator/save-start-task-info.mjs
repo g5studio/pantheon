@@ -1,37 +1,35 @@
 #!/usr/bin/env node
 
 /**
- * 保存 start-task 開發計劃到 `.cursor/tmp/{ticket}/merge-request-description-info.json`
+ * 保存 start-task info 到 Git notes
+ *
+ * 此腳本用於在 start-task 流程中，當用戶確認開發計劃後，
+ * 將開發計劃信息保存到 Git notes，以便後續建立 MR 時使用。
  *
  * 使用方式：
- *   node .cursor/scripts/operator/save-start-task-info.mjs --ticket=IN-107113 --target="..." --scope="..." --test="..."
- *   node .cursor/scripts/operator/save-start-task-info.mjs --json='{"ticket":"IN-107113","plan":{...},"report":{...}}'
- *   node .cursor/scripts/operator/save-start-task-info.mjs --read [--ticket=IN-107113]
- *   node .cursor/scripts/operator/save-start-task-info.mjs --verify [--ticket=IN-107113]
- *   node .cursor/scripts/operator/save-start-task-info.mjs --update --ticket=IN-107113 --target="..."
+ *   node .cursor/scripts/operator/save-start-task-info.mjs --ticket=IN-107113 --summary="[標題]" --type=Bug --steps='["步驟1", "步驟2"]'
+ *   node .cursor/scripts/operator/save-start-task-info.mjs --json='{"ticket":"IN-107113", ...}'
+ *   node .cursor/scripts/operator/save-start-task-info.mjs --read  # 讀取當前的 start-task info
+ *   node .cursor/scripts/operator/save-start-task-info.mjs --verify  # 驗證 Git notes 是否存在
  *
  * 參數說明：
- *   --ticket        Jira ticket 編號（可省略：會嘗試從目前分支名稱推導）
- *   --target        預期目標（plan.target）
- *   --scope         改動範圍（plan.scope）
- *   --test          驗收項目（plan.test）
- *   --json          完整的 JSON（可為 `{ plan, report }` 形狀；或舊形狀，會被轉為新形狀）
- *   --read          讀取目前的 JSON
- *   --verify        驗證 JSON 是否存在
- *   --update        合併更新（保留既有 report；覆寫 plan）
+ *   --ticket        Jira ticket 編號（必填，除非使用 --json）
+ *   --summary       Jira ticket 標題
+ *   --type          Issue 類型（Bug, Story, Task, Feature 等）
+ *   --status        Jira 狀態
+ *   --assignee      負責人
+ *   --priority      優先級
+ *   --steps         開發步驟（JSON 陣列格式）
+ *   --source-branch 來源分支
+ *   --ai-completed  是否為 AI 獨立完成（true/false）
+ *   --json          完整的 JSON 格式 startTaskInfo（優先使用）
+ *   --read          讀取當前的 start-task info
+ *   --verify        驗證 Git notes 是否存在
+ *   --update        更新現有的 Git notes（合併模式）
  */
 
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 import { getProjectRoot } from "../utilities/env-loader.mjs";
-import {
-  createDefaultMergeRequestDescriptionInfoJson,
-  ensureTmpDir,
-  getMergeRequestDescriptionInfoJsonPath,
-  normalizeMergeRequestDescriptionInfoJson,
-  readJsonIfExists,
-  toJiraTicketUrl,
-  writeJsonFile,
-} from "../cr/development-docs.mjs";
 
 const projectRoot = getProjectRoot();
 
@@ -51,35 +49,99 @@ function exec(command, options = {}) {
   }
 }
 
-function getTicketFromCurrentBranch() {
+// 讀取現有的 start-task info
+function readStartTaskInfo() {
   try {
-    const branch = exec("git branch --show-current", { silent: true }).trim();
-    const match = branch.match(/([A-Z0-9]+-\d+)/);
-    return match ? match[1] : null;
-  } catch {
+    const currentCommit = exec("git rev-parse HEAD", { silent: true }).trim();
+
+    // 嘗試從當前 commit 讀取
+    try {
+      const noteContent = exec(
+        `git notes --ref=start-task show ${currentCommit}`,
+        { silent: true }
+      ).trim();
+      if (noteContent) {
+        return { info: JSON.parse(noteContent), commit: currentCommit };
+      }
+    } catch (error) {
+      // 當前 commit 沒有 Git notes
+    }
+
+    // 嘗試從父 commit 讀取
+    try {
+      const parentCommit = exec("git rev-parse HEAD^", { silent: true }).trim();
+      const noteContent = exec(
+        `git notes --ref=start-task show ${parentCommit}`,
+        { silent: true }
+      ).trim();
+      if (noteContent) {
+        return { info: JSON.parse(noteContent), commit: parentCommit };
+      }
+    } catch (error) {
+      // 父 commit 沒有 Git notes
+    }
+
+    // 嘗試從 base commit 讀取
+    try {
+      const baseCommit = exec("git merge-base HEAD main", {
+        silent: true,
+      }).trim();
+      const noteContent = exec(
+        `git notes --ref=start-task show ${baseCommit}`,
+        { silent: true }
+      ).trim();
+      if (noteContent) {
+        return { info: JSON.parse(noteContent), commit: baseCommit };
+      }
+    } catch (error) {
+      // base commit 沒有 Git notes
+    }
+
+    return null;
+  } catch (error) {
     return null;
   }
 }
 
-function getTicket(params) {
-  const t =
-    (typeof params.ticket === "string" && params.ticket.trim()) ||
-    getTicketFromCurrentBranch();
-  return t ? t.trim().toUpperCase() : null;
+// 保存 start-task info 到 Git notes
+function saveStartTaskInfo(startTaskInfo) {
+  try {
+    const currentCommit = exec("git rev-parse HEAD", { silent: true }).trim();
+    const noteContent = JSON.stringify(startTaskInfo, null, 2);
+
+    const result = spawnSync(
+      "git",
+      ["notes", "--ref=start-task", "add", "-f", "-F", "-", currentCommit],
+      {
+        cwd: projectRoot,
+        input: noteContent,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+      }
+    );
+
+    if (result.status === 0) {
+      return { success: true, commit: currentCommit };
+    }
+
+    return { success: false, error: result.stderr };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
 }
 
-function readInfoJson(ticket) {
-  if (!ticket) return null;
-  const p = getMergeRequestDescriptionInfoJsonPath(ticket);
-  const info = readJsonIfExists(p);
-  if (!info) return null;
-  return { path: p, info };
-}
-
-function verifyInfoJson(ticket) {
-  const result = readInfoJson(ticket);
-  if (!result) return { exists: false };
-  return { exists: true, ticket, path: result.path };
+// 驗證 Git notes 是否存在
+function verifyStartTaskInfo() {
+  const result = readStartTaskInfo();
+  if (result) {
+    return {
+      exists: true,
+      commit: result.commit,
+      ticket: result.info.ticket,
+      summary: result.info.summary,
+    };
+  }
+  return { exists: false };
 }
 
 // 解析命令行參數
@@ -90,10 +152,6 @@ function parseArgs(args) {
     update: false,
     json: null,
     ticket: null,
-    target: null,
-    scope: null,
-    test: null,
-    // legacy args: accept but ignore (避免舊 command 直接壞掉)
     summary: null,
     type: null,
     status: null,
@@ -101,7 +159,7 @@ function parseArgs(args) {
     priority: null,
     steps: null,
     sourceBranch: null,
-    aiCompleted: null,
+    aiCompleted: true, // 預設為 true
   };
 
   for (const arg of args) {
@@ -115,12 +173,6 @@ function parseArgs(args) {
       params.json = arg.slice("--json=".length);
     } else if (arg.startsWith("--ticket=")) {
       params.ticket = arg.slice("--ticket=".length);
-    } else if (arg.startsWith("--target=")) {
-      params.target = arg.slice("--target=".length);
-    } else if (arg.startsWith("--scope=")) {
-      params.scope = arg.slice("--scope=".length);
-    } else if (arg.startsWith("--test=")) {
-      params.test = arg.slice("--test=".length);
     } else if (arg.startsWith("--summary=")) {
       params.summary = arg.slice("--summary=".length);
     } else if (arg.startsWith("--type=")) {
@@ -143,156 +195,157 @@ function parseArgs(args) {
   return params;
 }
 
-function buildInfoJson(params, { ticket, existingInfo } = {}) {
-  const jiraTicketUrl = toJiraTicketUrl(ticket);
-  const base =
-    (existingInfo && typeof existingInfo === "object" ? existingInfo : null) ||
-    createDefaultMergeRequestDescriptionInfoJson({ ticket, jiraTicketUrl });
-
-  let fromJson = null;
+// 構建 startTaskInfo 對象
+function buildStartTaskInfo(params, existingInfo = null) {
+  // 如果提供了完整的 JSON，直接使用
   if (params.json) {
     try {
       const parsed = JSON.parse(params.json);
-      if (parsed && typeof parsed === "object") {
-        fromJson = parsed;
+      // 確保有 startedAt
+      if (!parsed.startedAt) {
+        parsed.startedAt = new Date().toISOString();
       }
+      return parsed;
     } catch (error) {
       console.error(`❌ JSON 解析失敗: ${error.message}`);
       process.exit(1);
     }
   }
 
-  const merged = normalizeMergeRequestDescriptionInfoJson(
-    {
-      ...base,
-      ...(fromJson && typeof fromJson === "object" ? fromJson : null),
-      ticket,
-      jiraTicketUrl,
-      plan: {
-        ...(base?.plan && typeof base.plan === "object" ? base.plan : null),
-        ...(fromJson?.plan && typeof fromJson.plan === "object"
-          ? fromJson.plan
-          : null),
-        jiraTicketUrl,
-        target:
-          (typeof params.target === "string" && params.target.trim()) ||
-          fromJson?.plan?.target ||
-          base?.plan?.target ||
-          "待補齊",
-        scope:
-          (typeof params.scope === "string" && params.scope.trim()) ||
-          fromJson?.plan?.scope ||
-          base?.plan?.scope ||
-          "待補齊",
-        test:
-          (typeof params.test === "string" && params.test.trim()) ||
-          fromJson?.plan?.test ||
-          base?.plan?.test ||
-          "待補齊",
-      },
-    },
-    { changeFiles: [] }
-  );
+  // 基於現有資訊或新建
+  const info = existingInfo || {};
 
-  return merged;
+  // 更新欄位（只更新有提供的欄位）
+  if (params.ticket) info.ticket = params.ticket;
+  if (params.summary) info.summary = params.summary;
+  if (params.type) info.issueType = params.type;
+  if (params.status) info.status = params.status;
+  if (params.assignee) info.assignee = params.assignee;
+  if (params.priority) info.priority = params.priority;
+  if (params.sourceBranch) info.sourceBranch = params.sourceBranch;
+  info.aiCompleted = params.aiCompleted;
+
+  // 處理 steps
+  if (params.steps) {
+    try {
+      info.suggestedSteps = JSON.parse(params.steps);
+    } catch (error) {
+      console.error(`❌ steps 解析失敗: ${error.message}`);
+      process.exit(1);
+    }
+  }
+
+  // 確保有 startedAt
+  if (!info.startedAt) {
+    info.startedAt = new Date().toISOString();
+  }
+
+  // 確保有 featureBranch
+  if (!info.featureBranch && info.ticket) {
+    info.featureBranch = `feature/${info.ticket}`;
+  }
+
+  return info;
 }
 
 // 主函數
 function main() {
   const args = process.argv.slice(2);
   const params = parseArgs(args);
-  const ticket = getTicket(params);
 
   // 讀取模式
   if (params.read) {
-    const result = readInfoJson(ticket);
-    if (!result) {
-      console.error("❌ 找不到 merge-request-description-info.json（請確認 ticket 或分支名稱）");
+    const result = readStartTaskInfo();
+    if (result) {
+      console.log(JSON.stringify(result.info, null, 2));
+    } else {
+      console.error("❌ 找不到 start-task Git notes");
       process.exit(1);
     }
-    console.log(JSON.stringify(result.info, null, 2));
     return;
   }
 
   // 驗證模式
   if (params.verify) {
-    const result = verifyInfoJson(ticket);
-    if (!result.exists) {
-      console.log("❌ merge-request-description-info.json 不存在");
+    const result = verifyStartTaskInfo();
+    if (result.exists) {
+      console.log("✅ Start-task Git notes 存在");
+      console.log(`   Commit: ${result.commit}`);
+      console.log(`   Ticket: ${result.ticket}`);
+      console.log(`   Summary: ${result.summary}`);
+    } else {
+      console.log("❌ Start-task Git notes 不存在");
       process.exit(1);
     }
-    console.log("✅ merge-request-description-info.json 存在");
-    console.log(`   Ticket: ${result.ticket}`);
-    console.log(`   Path: ${result.path}`);
     return;
   }
 
-  const existingInfo = params.update ? readInfoJson(ticket)?.info || null : null;
-  if (params.update && existingInfo) {
-    console.log("📝 更新模式：將合併現有的 JSON\n");
+  // 更新模式或新建模式
+  let existingInfo = null;
+  if (params.update) {
+    const existing = readStartTaskInfo();
+    if (existing) {
+      existingInfo = existing.info;
+      console.log("📝 更新模式：將合併現有的 Git notes\n");
+    }
   }
 
   // 檢查必要參數
-  if (!ticket && !params.json) {
+  if (!params.json && !params.ticket && !existingInfo?.ticket) {
     console.log(`
 📝 保存 Start-Task Info 工具
 
 使用方式：
-  node .cursor/scripts/operator/save-start-task-info.mjs --ticket=IN-107113 --target="..." --scope="..." --test="..."
-  node .cursor/scripts/operator/save-start-task-info.mjs --json='{"ticket":"IN-107113","plan":{...},"report":{...}}'
+  node .cursor/scripts/operator/save-start-task-info.mjs --ticket=IN-107113 --summary="[標題]" --type=Bug --steps='["步驟1", "步驟2"]'
+  node .cursor/scripts/operator/save-start-task-info.mjs --json='{"ticket":"IN-107113", ...}'
   node .cursor/scripts/operator/save-start-task-info.mjs --read
   node .cursor/scripts/operator/save-start-task-info.mjs --verify
-  node .cursor/scripts/operator/save-start-task-info.mjs --update --ticket=IN-107113 --target="..."
+  node .cursor/scripts/operator/save-start-task-info.mjs --update --steps='["新步驟"]'
 
 參數說明：
-  --ticket        Jira ticket 編號（可省略：會嘗試從目前分支推導）
-  --target        預期目標（plan.target）
-  --scope         改動範圍（plan.scope）
-  --test          驗收項目（plan.test）
-  --json          完整的 JSON（可為 { plan, report } 形狀；或舊形狀，會被轉為新形狀）
-  --read          讀取目前的 JSON
-  --verify        驗證 JSON 是否存在
-  --update        合併更新（保留既有 report；覆寫 plan）
+  --ticket        Jira ticket 編號（必填，除非使用 --json 或 --update）
+  --summary       Jira ticket 標題
+  --type          Issue 類型（Bug, Story, Task, Feature 等）
+  --status        Jira 狀態
+  --assignee      負責人
+  --priority      優先級
+  --steps         開發步驟（JSON 陣列格式）
+  --source-branch 來源分支
+  --ai-completed  是否為 AI 獨立完成（預設 true）
+  --json          完整的 JSON 格式 startTaskInfo
+  --read          讀取當前的 start-task info
+  --verify        驗證 Git notes 是否存在
+  --update        更新現有的 Git notes（合併模式）
 `);
     process.exit(1);
   }
 
-  const effectiveTicket =
-    ticket ||
-    (params.json ? (() => {
-      try {
-        const parsed = JSON.parse(params.json);
-        return typeof parsed?.ticket === "string" ? parsed.ticket : null;
-      } catch {
-        return null;
-      }
-    })() : null);
+  // 構建 startTaskInfo
+  const startTaskInfo = buildStartTaskInfo(params, existingInfo);
 
-  if (!effectiveTicket) {
-    console.error("❌ 無法取得 ticket（請提供 --ticket 或確保分支名稱包含單號）");
+  // 保存到 Git notes
+  console.log("💾 正在保存 start-task info 到 Git notes...\n");
+  const result = saveStartTaskInfo(startTaskInfo);
+
+  if (result.success) {
+    console.log("✅ 已保存 start-task info\n");
+    console.log("📋 保存的內容：");
+    console.log(JSON.stringify(startTaskInfo, null, 2));
+    console.log(`\n📍 Commit: ${result.commit}`);
+
+    // 驗證保存成功
+    console.log("\n🔍 驗證保存結果...");
+    const verified = verifyStartTaskInfo();
+    if (verified.exists) {
+      console.log("✅ 驗證成功：Git notes 已正確保存");
+    } else {
+      console.error("❌ 驗證失敗：無法讀取剛保存的 Git notes");
+      process.exit(1);
+    }
+  } else {
+    console.error(`❌ 保存失敗: ${result.error}`);
     process.exit(1);
   }
-
-  const infoJson = buildInfoJson(params, {
-    ticket: effectiveTicket,
-    existingInfo,
-  });
-
-  ensureTmpDir(effectiveTicket);
-  const infoPath = getMergeRequestDescriptionInfoJsonPath(effectiveTicket);
-  writeJsonFile(infoPath, infoJson);
-
-  console.log("✅ 已保存 merge-request-description-info.json\n");
-  console.log(JSON.stringify(infoJson, null, 2));
-  console.log(`\n📍 Path: ${infoPath}`);
-
-  console.log("\n🔍 驗證保存結果...");
-  const verified = verifyInfoJson(effectiveTicket);
-  if (!verified.exists) {
-    console.error("❌ 驗證失敗：無法讀取剛保存的 JSON");
-    process.exit(1);
-  }
-  console.log("✅ 驗證成功：JSON 已正確保存");
 }
 
 main();

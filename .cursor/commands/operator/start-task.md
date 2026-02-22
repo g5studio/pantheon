@@ -98,31 +98,38 @@ description: 開始新任務：創建 feature branch 並分析 Jira ticket 需�
 - ❌ 假設用戶會同意而直接開始
 - ❌ 在用戶回覆前執行任何代碼修改
 
-**用戶確認後**：才能繼續執行步驟 4（保存開發計劃到 JSON）
+**用戶確認後**：才能繼續執行步驟 4（保存開發計劃到 Git notes）
 
 ---
 
-4. **🚨 保存開發計劃到 JSON（強制步驟）**：
-   - **CRITICAL**: 當用戶確認計劃後，`start-task` 會**自動產生 plan（target/scope/test）**並保存到 `.cursor/tmp/{ticket}/merge-request-description-info.json`
-   - 如需手動調整/覆寫 plan，可使用腳本更新：
+4. **🚨 保存開發計劃到 Git notes（強制步驟）**：
+   - **CRITICAL**: 當用戶確認計劃後，**必須立即**保存開發計劃到 Git notes
+   - 使用腳本保存：
      ```bash
      node .cursor/scripts/operator/save-start-task-info.mjs \
        --ticket="{ticket}" \
-       --target="{target}" \
-       --scope="{scope}" \
-       --test="{test}"
+       --summary="{標題}" \
+       --type="{issueType}" \
+       --status="{status}" \
+       --assignee="{assignee}" \
+       --priority="{priority}" \
+       --steps='["步驟1", "步驟2", ...]' \
+       --source-branch="{來源分支}" \
+       --ai-completed=true
      ```
    - 或使用 JSON 格式：
      ```bash
      node .cursor/scripts/operator/save-start-task-info.mjs --json='{
        "ticket": "{ticket}",
-       "plan": {
-         "jiraTicketUrl": "https://innotech.atlassian.net/browse/{ticket}",
-         "target": "{target}",
-         "scope": "{scope}",
-         "test": "{test}"
-       },
-       "report": {}
+       "summary": "{標題}",
+       "issueType": "{issueType}",
+       "status": "{status}",
+       "assignee": "{assignee}",
+       "priority": "{priority}",
+       "suggestedSteps": ["步驟1", "步驟2"],
+       "sourceBranch": "{來源分支}",
+       "featureBranch": "feature/{ticket}",
+       "aiCompleted": true
      }'
      ```
    - 驗證保存成功：`node .cursor/scripts/operator/save-start-task-info.mjs --verify`
@@ -130,10 +137,10 @@ description: 開始新任務：創建 feature branch 並分析 Jira ticket 需�
 
 5. **完成修改後的確認與自動提交流程**：
    - 當 AI 完成代碼修改後，必須在 chat 中與用戶確認目前的修改計畫
-   - **讀取開發計劃**：從 `.cursor/tmp/{ticket}/merge-request-description-info.json` 讀取最新的 plan
+   - **讀取開發計劃**：從 Git notes 讀取最新的開發計劃（使用 `git notes --ref=start-task show HEAD`）
    - **顯示修改計畫**：在 chat 中顯示以下內容：
      - 當前分支和 ticket 信息
-     - 開發計劃（plan）：target / scope / test
+     - 已完成的開發步驟（基於 Git notes 中的 `suggestedSteps`）
      - 本次修改的摘要（變更的檔案和主要改動）
    - **詢問確認**：詢問用戶「目前的修改計畫是否正確無誤？」
 
@@ -190,32 +197,6 @@ Ticket: {TICKET}
          - 單號（含超連結）
          - 標題
          - 類型（Issue Type）
-     - ### 🚨 CRITICAL - 建立 MR 前必須先判定 labels（使用 adapt.json）
-       **目標**：在呼叫 `create-mr` 建立 MR 之前，AI 必須先參考 repo knowledge（`adapt.json`）的 label 定義，綜合 Jira ticket 資訊與改動範圍，做出「本次應使用哪些 labels」的判斷，並透過 `--labels` 手動傳入 MR 腳本。
-       
-       **AI 必做資訊來源**：
-       1. `adapt.json`：`adapt.json`
-          - 使用 `adapt.json.labels` 作為 **可用 label 清單**（只可從清單中挑選，不可創造新 label）
-          - 只使用 `applicable.ok === true`（或 `applicable` 缺失 / `applicable === true`）的 labels
-       2. Jira ticket info：標題 / 類型 / fix version（Hotfix 可能影響 target branch）
-       3. 改動範圍：`git diff --name-status origin/{targetBranch}...HEAD`、`git diff --stat ...`、近期 commits
-       
-       **AI 在 chat 中的輸出要求（建立 MR 前）**：
-       - 先列出「建議 labels」與「原因」，至少包含下列表格：
-       
-         | Label | 判定原因（對應 Jira / 改動範圍） |
-         |---|---|
-         | ... | ... |
-       
-       **傳入 `create-mr` 的方式**：
-       - 使用 `--labels="label1,label2,label3"`（逗號分隔）
-       - 建議 **只傳入需要 AI 補齊的額外 labels**（例如 UI 版本類 / domain 類 labels）；`AI` / `FE Board` / `Hotfix` 等腳本自動處理的 labels 仍會由腳本自行加入
-       - 腳本會再以 `adapt.json` 做白名單過濾，不在清單內的 labels 會被濾掉
-       
-       **範例**：
-       ```bash
-       pnpm run create-mr --labels="4.0UI,Static File"
-       ```
 
 **使用方式：**
 - `start-task`：開始新任務，會依次詢問必要信息
