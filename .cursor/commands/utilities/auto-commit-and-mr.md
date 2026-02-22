@@ -634,8 +634,32 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
    |---|---|---|---|
    | `--development-report` | （Legacy）外部傳入 markdown | 非必須 | 新流程改由 `.cursor/tmp/{ticket}/merge-request-description-info.json`（schema: `{ plan, report }`）+ 固定模板渲染；此參數僅保留相容舊用法 |
    | `--agent-version` | 從 `version.json` 讀取 | **必須** | 優先順序：`.pantheon/version.json` → `version.json` → `.cursor/version.json` |
+   | `--labels` | AI 在建立 MR 前判定 | **必須** | AI 必須先讀 `adapt.json` + Jira + 改動範圍，判定 labels，並透過 `--labels="a,b,c"` 傳入（腳本仍會做白名單/存在性過濾） |
    | `--reviewer` | 僅用戶明確指定時傳遞 | 可選 | 未指定時讓腳本使用環境變數或預設值 |
    | `--related-tickets` | 從用戶輸入或自動偵測 | 可選 | 多個單號用逗號分隔 |
+   
+   ### 🚨 CRITICAL - 建立 MR 前必須先判定 labels（使用 adapt.json）
+   
+   **目標**：在呼叫 `create-mr` 建立 MR 之前，AI 必須先參考 repo knowledge（`adapt.json`）的 label 定義，綜合 Jira ticket 資訊與改動範圍，做出「本次應使用哪些 labels」的判斷，並透過 `--labels` 手動傳入 MR 腳本。
+   
+   **AI 必做資訊來源**：
+   1. `adapt.json`：`.cursor/tmp/pantheon/adapt.json`
+      - 使用 `adapt.json.labels` 作為 **可用 label 清單**（只可從清單中挑選，不可創造新 label）
+      - 只使用 `applicable.ok === true`（或 `applicable` 缺失 / `applicable === true`）的 labels
+   2. Jira ticket info：標題 / 類型 / fix version（Hotfix 可能影響 target branch）
+   3. 改動範圍：`git diff --name-status origin/{targetBranch}...HEAD`、`git diff --stat ...`、近期 commits
+   
+   **AI 在 chat 中的輸出要求（建立 MR 前）**：
+   - 先列出「建議 labels」與「原因」，至少包含下列表格：
+   
+     | Label | 判定原因（對應 Jira / 改動範圍） |
+     |---|---|
+     | ... | ... |
+   
+   **傳入 `create-mr` 的方式**：
+   - 使用 `--labels="label1,label2,label3"`（逗號分隔）
+   - 建議 **只傳入需要 AI 補齊的額外 labels**（例如 UI 版本類 / domain 類 labels）；`AI` / `FE Board` / `Hotfix` 等腳本自動處理的 labels 仍會由腳本自行加入
+   - 腳本會再以 `adapt.json` 做白名單過濾，不在清單內的 labels 會被濾掉
    
    **開發報告生成步驟（新流程）：**
    1. 讀取/更新 `.cursor/tmp/{ticket}/merge-request-description-info.json`
@@ -657,7 +681,7 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
    腳本會自動使用 GitLab CLI (glab) 或 API token 建立 MR：
    
    ```bash
-   node .cursor/scripts/cr/create-mr.mjs --agent-version='<版本JSON>' [--reviewer="@username"] [--target=main] [--no-draft] [--no-review] [--related-tickets="IN-1235,IN-1236"] [--no-notify]
+   node .cursor/scripts/cr/create-mr.mjs --agent-version='<版本JSON>' --labels="label1,label2" [--reviewer="@username"] [--target=main] [--no-draft] [--no-review] [--related-tickets="IN-1235,IN-1236"] [--no-notify]
    ```
 
    **方法 B: 更新既有 MR：使用 update-mr 腳本（任何 MR 修改一律走此腳本）**
@@ -1074,6 +1098,7 @@ Commit 並推送完成後，建立 MR：
 
 ```bash
 pnpm run create-mr \
+  --labels="{labels 用逗號分隔，例：4.0UI,Static File}" \
   --reviewer="@william.chiang" \
   --target=main
 ```
@@ -1092,6 +1117,7 @@ pnpm run agent-commit \
 
 # 2. 建立 MR
 pnpm run create-mr \
+  --labels="{labels 用逗號分隔，例：4.0UI,Static File}" \
   --reviewer="@william.chiang" \
   --target=main
 ```
