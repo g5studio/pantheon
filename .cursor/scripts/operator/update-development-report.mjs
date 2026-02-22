@@ -1,55 +1,163 @@
 #!/usr/bin/env node
 
 /**
- * 更新開發報告到 .cursor/tmp（檔案化）
+ * 更新開發報告到 Git notes
  *
- * 此腳本用於在開發完成後，將開發報告保存到 .cursor/tmp 的實體檔案中，
- * 並同步更新 start-task-info.json（aiDevelopmentReport / updatedAt 等欄位），
- * 以便在建立 / 更新 MR 時由 create-mr / update-mr 透過參數讀取並檢附。
+ * 此腳本用於在開發完成後，將開發報告保存到 Git notes 中的 startTaskInfo，
+ * 以便在建立 MR 時檢附到 MR description。
  *
  * 使用方式：
  *   node .cursor/scripts/operator/update-development-report.mjs --report="<report-content>"
  *   node .cursor/scripts/operator/update-development-report.mjs --report-file="<path-to-report-file>"
- *   node .cursor/scripts/operator/update-development-report.mjs --ticket="FE-1234" --report-file="..."
- *   node .cursor/scripts/operator/update-development-report.mjs --start-task-dir=".cursor/tmp/FE-1234" --report-file="..."
- *   node .cursor/scripts/operator/update-development-report.mjs --start-task-info-file=".cursor/tmp/FE-1234/start-task-info.json" --report-file="..."
+ *   node .cursor/scripts/operator/update-development-report.mjs --read  # 讀取當前的開發報告
+ *   node .cursor/scripts/operator/update-development-report.mjs --format  # 輸出格式化的 MR description
  */
 
-import { readFileSync, writeFileSync, existsSync } from "fs";
-import { isAbsolute, join } from "path";
+import { execSync, spawnSync } from "child_process";
+import { readFileSync, existsSync } from "fs";
 import { getProjectRoot } from "../utilities/env-loader.mjs";
-import { appendAgentSignature } from "../utilities/agent-signature.mjs";
 
 const projectRoot = getProjectRoot();
 
-function resolvePathFromProjectRoot(filePath) {
-  if (!filePath) return null;
-  return isAbsolute(filePath) ? filePath : join(projectRoot, filePath);
+function exec(command, options = {}) {
+  try {
+    return execSync(command, {
+      cwd: projectRoot,
+      encoding: "utf-8",
+      stdio: options.silent ? "pipe" : "inherit",
+      ...options,
+    });
+  } catch (error) {
+    if (!options.silent) {
+      console.error(`錯誤: ${error.message}`);
+    }
+    throw error;
+  }
 }
 
-function safeJsonParse(text) {
+// 讀取 start-task 開發計劃（從 Git notes）
+function readStartTaskInfo() {
   try {
-    return JSON.parse(text);
-  } catch {
+    // 首先嘗試讀取當前 HEAD 的 Git notes
+    const currentCommit = exec("git rev-parse HEAD", { silent: true }).trim();
+    try {
+      const noteContent = exec(
+        `git notes --ref=start-task show ${currentCommit}`,
+        { silent: true }
+      ).trim();
+      if (noteContent) {
+        return { info: JSON.parse(noteContent), commit: currentCommit };
+      }
+    } catch (error) {
+      // 當前 commit 沒有 Git notes，繼續嘗試其他位置
+    }
+
+    // 嘗試從父 commit 讀取
+    try {
+      const parentCommit = exec("git rev-parse HEAD^", { silent: true }).trim();
+      const noteContent = exec(
+        `git notes --ref=start-task show ${parentCommit}`,
+        { silent: true }
+      ).trim();
+      if (noteContent) {
+        return { info: JSON.parse(noteContent), commit: parentCommit };
+      }
+    } catch (error) {
+      // 父 commit 沒有 Git notes，繼續嘗試
+    }
+
+    // 嘗試從分支的 base commit 讀取
+    try {
+      const baseCommit = exec("git merge-base HEAD main", {
+        silent: true,
+      }).trim();
+      const noteContent = exec(
+        `git notes --ref=start-task show ${baseCommit}`,
+        { silent: true }
+      ).trim();
+      if (noteContent) {
+        return { info: JSON.parse(noteContent), commit: baseCommit };
+      }
+    } catch (error) {
+      // base commit 沒有 Git notes
+    }
+
+    return null;
+  } catch (error) {
     return null;
   }
 }
 
-function resolveStartTaskPaths({ ticket, startTaskDir, startTaskInfoFile } = {}) {
-  const dir = startTaskDir
-    ? resolvePathFromProjectRoot(startTaskDir)
-    : ticket
-      ? join(projectRoot, ".cursor", "tmp", ticket)
-      : null;
+// 更新 Git notes 中的 startTaskInfo
+function updateStartTaskInfo(startTaskInfo) {
+  try {
+    const currentCommit = exec("git rev-parse HEAD", { silent: true }).trim();
+    const noteContent = JSON.stringify(startTaskInfo, null, 2);
 
-  const infoFile = startTaskInfoFile
-    ? resolvePathFromProjectRoot(startTaskInfoFile)
-    : dir
-      ? join(dir, "start-task-info.json")
-      : join(projectRoot, ".cursor", "tmp", "start-task-info.json");
+    const result = spawnSync(
+      "git",
+      ["notes", "--ref=start-task", "add", "-f", "-F", "-", currentCommit],
+      {
+        cwd: projectRoot,
+        input: noteContent,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+      }
+    );
 
-  const reportFile = dir ? join(dir, "development-report.md") : null;
-  return { dir, infoFile, reportFile };
+    if (result.status === 0) {
+      return true;
+    }
+    return false;
+  } catch (error) {
+    return false;
+  }
+}
+
+// 生成格式化的 MR description（使用表格格式）
+function formatMrDescription(startTaskInfo) {
+  const sections = [];
+
+  // 開發計劃部分
+  if (startTaskInfo.suggestedSteps && startTaskInfo.suggestedSteps.length > 0) {
+    const planSection = [
+      "## 🎯 開發計劃",
+      "",
+      "本 MR 由 `start-task` 命令啟動，以下是初步制定的開發計劃：",
+      "",
+      ...startTaskInfo.suggestedSteps.map((step) => `- ${step}`),
+      "",
+      "| 項目 | 值 |",
+      "|---|---|",
+      `| **Jira Ticket** | ${startTaskInfo.ticket} |`,
+      `| **標題** | ${startTaskInfo.summary} |`,
+      `| **類型** | ${startTaskInfo.issueType} |`,
+      `| **狀態** | ${startTaskInfo.status || "未知"} |`,
+      `| **負責人** | ${startTaskInfo.assignee || "未分配"} |`,
+      `| **優先級** | ${startTaskInfo.priority || "未設置"} |`,
+      `| **啟動時間** | ${new Date(startTaskInfo.startedAt).toLocaleString(
+        "zh-TW"
+      )} |`,
+    ].join("\n");
+
+    sections.push(planSection);
+  }
+
+  // 開發報告部分
+  if (startTaskInfo.developmentReport) {
+    const reportSection = [
+      "",
+      "---",
+      "",
+      "## 📊 開發報告",
+      "",
+      startTaskInfo.developmentReport,
+    ].join("\n");
+
+    sections.push(reportSection);
+  }
+
+  return sections.join("\n");
 }
 
 // 主函數
@@ -59,22 +167,43 @@ function main() {
   // 解析參數
   let reportContent = null;
   let reportFile = null;
-  let ticket = null;
-  let startTaskDir = null;
-  let startTaskInfoFile = null;
+  let readMode = false;
+  let formatMode = false;
 
   for (const arg of args) {
     if (arg.startsWith("--report=")) {
       reportContent = arg.slice("--report=".length);
     } else if (arg.startsWith("--report-file=")) {
       reportFile = arg.slice("--report-file=".length);
-    } else if (arg.startsWith("--ticket=")) {
-      ticket = arg.slice("--ticket=".length).trim().toUpperCase();
-    } else if (arg.startsWith("--start-task-dir=")) {
-      startTaskDir = arg.slice("--start-task-dir=".length);
-    } else if (arg.startsWith("--start-task-info-file=")) {
-      startTaskInfoFile = arg.slice("--start-task-info-file=".length);
+    } else if (arg === "--read") {
+      readMode = true;
+    } else if (arg === "--format") {
+      formatMode = true;
     }
+  }
+
+  // 讀取模式：輸出當前的 startTaskInfo
+  if (readMode) {
+    const result = readStartTaskInfo();
+    if (result) {
+      console.log(JSON.stringify(result.info, null, 2));
+    } else {
+      console.error("❌ 找不到 start-task Git notes");
+      process.exit(1);
+    }
+    return;
+  }
+
+  // 格式化模式：輸出格式化的 MR description
+  if (formatMode) {
+    const result = readStartTaskInfo();
+    if (result) {
+      console.log(formatMrDescription(result.info));
+    } else {
+      console.error("❌ 找不到 start-task Git notes");
+      process.exit(1);
+    }
+    return;
   }
 
   // 從檔案讀取報告內容
@@ -88,43 +217,22 @@ function main() {
 
   // 更新模式：更新開發報告
   if (reportContent) {
-    const { infoFile, reportFile: defaultReportFile } = resolveStartTaskPaths({
-      ticket,
-      startTaskDir,
-      startTaskInfoFile,
-    });
-
-    if (!existsSync(infoFile)) {
-      console.error(`❌ 找不到 start-task-info.json：${infoFile}`);
+    const result = readStartTaskInfo();
+    if (!result) {
+      console.error("❌ 找不到 start-task Git notes，無法更新開發報告");
       process.exit(1);
     }
 
-    const raw = readFileSync(infoFile, "utf-8").replace(/^\uFEFF/, "").trim();
-    const startTaskInfo = safeJsonParse(raw);
-    if (!startTaskInfo) {
-      console.error(`❌ start-task-info.json 解析失敗：${infoFile}`);
+    const startTaskInfo = result.info;
+    startTaskInfo.developmentReport = reportContent;
+
+    if (updateStartTaskInfo(startTaskInfo)) {
+      console.log("✅ 已更新開發報告到 Git notes");
+      console.log("\n📋 開發報告已保存，建立 MR 時將自動檢附到 MR description");
+    } else {
+      console.error("❌ 更新開發報告失敗");
       process.exit(1);
     }
-
-    const reportOut = startTaskInfo.developmentReportFile
-      ? resolvePathFromProjectRoot(startTaskInfo.developmentReportFile)
-      : defaultReportFile;
-    if (!reportOut) {
-      console.error("❌ 無法推斷 development-report.md 路徑");
-      process.exit(1);
-    }
-
-    // FE-8006: 若設定 AGENT_DISPLAY_NAME，開發報告末尾追加署名（idempotent & 署名為最後一行）
-    const reportWithSignature = appendAgentSignature(reportContent);
-    writeFileSync(reportOut, reportWithSignature, "utf-8");
-    startTaskInfo.aiDevelopmentReport = true;
-    startTaskInfo.updatedAt = new Date().toISOString();
-
-    writeFileSync(infoFile, JSON.stringify(startTaskInfo, null, 2), "utf-8");
-
-    console.log("✅ 已更新開發報告（檔案化）");
-    console.log(`   - report: ${reportOut}`);
-    console.log(`   - info:   ${infoFile}\n`);
     return;
   }
 
@@ -135,16 +243,14 @@ function main() {
 使用方式：
   node .cursor/scripts/operator/update-development-report.mjs --report="<report-content>"
   node .cursor/scripts/operator/update-development-report.mjs --report-file="<path-to-report-file>"
-  node .cursor/scripts/operator/update-development-report.mjs --ticket="FE-1234" --report-file="..."
-  node .cursor/scripts/operator/update-development-report.mjs --start-task-dir=".cursor/tmp/FE-1234" --report-file="..."
-  node .cursor/scripts/operator/update-development-report.mjs --start-task-info-file=".cursor/tmp/FE-1234/start-task-info.json" --report-file="..."
+  node .cursor/scripts/operator/update-development-report.mjs --read
+  node .cursor/scripts/operator/update-development-report.mjs --format
 
 參數說明：
   --report="..."      直接提供報告內容
   --report-file="..." 從檔案讀取報告內容
-  --ticket="..."      指定 ticket（用於推斷 .cursor/tmp/<ticket>/）
-  --start-task-dir="..." 指定 start-task 目錄（內含 start-task-info.json）
-  --start-task-info-file="..." 指定 start-task-info.json 路徑
+  --read              讀取當前的 startTaskInfo（JSON 格式）
+  --format            輸出格式化的 MR description（Markdown 格式）
 `);
 }
 
