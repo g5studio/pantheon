@@ -194,7 +194,7 @@ Ticket: {TICKET}
        **目標**：在呼叫 `create-mr` 建立 MR 之前，AI 必須先參考 repo knowledge（`adapt.json`）的 label 定義，綜合 Jira ticket 資訊與改動範圍，做出「本次應使用哪些 labels」的判斷，並透過 `--labels` 手動傳入 MR 腳本。
        
        **AI 必做資訊來源**：
-       1. `adapt.json`：`.cursor/tmp/pantheon/adapt.json`
+       1. `adapt.json`：`adapt.json`
           - 使用 `adapt.json.labels` 作為 **可用 label 清單**（只可從清單中挑選，不可創造新 label）
           - 只使用 `applicable.ok === true`（或 `applicable` 缺失 / `applicable === true`）的 labels
        2. Jira ticket info：標題 / 類型 / fix version（Hotfix 可能影響 target branch）

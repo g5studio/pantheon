@@ -11,3 +11,6 @@
 .cursor/.env.example
 .gitignore
 
+# Repo knowledge（開發工具輸出）
+adapt.json
+

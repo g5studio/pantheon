@@ -4,7 +4,7 @@ description: 生成/更新 repo 知識庫 JSON（labels / coding-standard）並�
 
 ## adapt - repo 知識庫落地化
 
-此指令用於將「當前 repo」可重用的知識整理成一份結構化 JSON（寫入 tmp），並支援 CRUD 操作與 LLM 分析結果快取，讓後續不同指令可以直接讀取整理後的內容，減少 token 使用並提升推論穩定性。
+此指令用於將「當前 repo」可重用的知識整理成一份結構化 JSON（寫入專案根目錄），並支援 CRUD 操作與 LLM 分析結果快取，讓後續不同指令可以直接讀取整理後的內容，減少 token 使用並提升推論穩定性。
 
 ---
 
@@ -19,8 +19,8 @@ node .cursor/scripts/utilities/adapt.mjs
 常用參數：
 
 ```bash
-# 指定輸出 JSON 位置（預設：.cursor/tmp/pantheon/adapt.json）
-node .cursor/scripts/utilities/adapt.mjs --file=".cursor/tmp/pantheon/adapt.json"
+# 指定輸出 JSON 位置（預設：adapt.json）
+node .cursor/scripts/utilities/adapt.mjs --file="adapt.json"
 
 # 限制抽樣 MR 數量（預設：50）
 node .cursor/scripts/utilities/adapt.mjs --max-mrs=50

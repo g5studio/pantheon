@@ -82,7 +82,7 @@ function ensureDirForFile(filePath) {
 }
 
 function getDefaultKnowledgeFile() {
-  return join(projectRoot, ".cursor", "tmp", "pantheon", "adapt.json");
+  return join(projectRoot, "adapt.json");
 }
 
 function safeJsonParse(text, hint = "JSON") {
