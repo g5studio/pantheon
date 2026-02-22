@@ -27,6 +27,10 @@ import {
   extractReleaseBranch,
   readStartTaskInfo,
 } from "./label-analyzer.mjs";
+import {
+  appendAgentSignature,
+  stripTrailingAgentSignature,
+} from "../utilities/agent-signature.mjs";
 
 // 使用 env-loader 提供的 projectRoot
 const projectRoot = getProjectRoot();
@@ -2017,6 +2021,11 @@ async function main() {
     }
   }
 
+  // FE-8004: 確保「署名永遠最後一行」
+  // - 報告/計劃內容可能已經自帶署名
+  // - 若後續再追加 Agent Version/其他區塊，署名可能被推到中間造成重複
+  description = stripTrailingAgentSignature(description);
+
   // 添加 Agent 版本資訊到 description 最下方
   if (agentVersionInfo) {
     const versionSection = generateAgentVersionSection(agentVersionInfo);
@@ -2028,6 +2037,9 @@ async function main() {
         : versionSection;
     }
   }
+
+  // FE-8004: 署名必須為 MR description 的最後一行（可見內容）
+  description = appendAgentSignature(description);
 
   // 根據 Jira ticket 決定 labels（不再自動分析 v3/v4，由外部傳入）
   console.log("🔍 分析 Jira ticket 信息...\n");
