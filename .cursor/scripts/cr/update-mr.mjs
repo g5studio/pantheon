@@ -824,7 +824,6 @@ async function main() {
   );
 
   // 格式驗證（回歸檢查）
-  const startTaskInfo = readStartTaskInfo();
   const validation = validateMrDescriptionFormat(
     mergedDescription,
     { issueType: mergedInfo?.report?.issueType || "" }

@@ -98,38 +98,31 @@ description: 開始新任務：創建 feature branch 並分析 Jira ticket 需�
 - ❌ 假設用戶會同意而直接開始
 - ❌ 在用戶回覆前執行任何代碼修改
 
-**用戶確認後**：才能繼續執行步驟 4（保存開發計劃到 Git notes）
+**用戶確認後**：才能繼續執行步驟 4（保存開發計劃到 JSON）
 
 ---
 
-4. **🚨 保存開發計劃到 Git notes（強制步驟）**：
-   - **CRITICAL**: 當用戶確認計劃後，**必須立即**保存開發計劃到 Git notes
-   - 使用腳本保存：
+4. **🚨 保存開發計劃到 JSON（強制步驟）**：
+   - **CRITICAL**: 當用戶確認計劃後，`start-task` 會**自動產生 plan（target/scope/test）**並保存到 `.cursor/tmp/{ticket}/merge-request-description-info.json`
+   - 如需手動調整/覆寫 plan，可使用腳本更新：
      ```bash
      node .cursor/scripts/operator/save-start-task-info.mjs \
        --ticket="{ticket}" \
-       --summary="{標題}" \
-       --type="{issueType}" \
-       --status="{status}" \
-       --assignee="{assignee}" \
-       --priority="{priority}" \
-       --steps='["步驟1", "步驟2", ...]' \
-       --source-branch="{來源分支}" \
-       --ai-completed=true
+       --target="{target}" \
+       --scope="{scope}" \
+       --test="{test}"
      ```
    - 或使用 JSON 格式：
      ```bash
      node .cursor/scripts/operator/save-start-task-info.mjs --json='{
        "ticket": "{ticket}",
-       "summary": "{標題}",
-       "issueType": "{issueType}",
-       "status": "{status}",
-       "assignee": "{assignee}",
-       "priority": "{priority}",
-       "suggestedSteps": ["步驟1", "步驟2"],
-       "sourceBranch": "{來源分支}",
-       "featureBranch": "feature/{ticket}",
-       "aiCompleted": true
+       "plan": {
+         "jiraTicketUrl": "https://innotech.atlassian.net/browse/{ticket}",
+         "target": "{target}",
+         "scope": "{scope}",
+         "test": "{test}"
+       },
+       "report": {}
      }'
      ```
    - 驗證保存成功：`node .cursor/scripts/operator/save-start-task-info.mjs --verify`
@@ -137,10 +130,10 @@ description: 開始新任務：創建 feature branch 並分析 Jira ticket 需�
 
 5. **完成修改後的確認與自動提交流程**：
    - 當 AI 完成代碼修改後，必須在 chat 中與用戶確認目前的修改計畫
-   - **讀取開發計劃**：從 Git notes 讀取最新的開發計劃（使用 `git notes --ref=start-task show HEAD`）
+   - **讀取開發計劃**：從 `.cursor/tmp/{ticket}/merge-request-description-info.json` 讀取最新的 plan
    - **顯示修改計畫**：在 chat 中顯示以下內容：
      - 當前分支和 ticket 信息
-     - 已完成的開發步驟（基於 Git notes 中的 `suggestedSteps`）
+     - 開發計劃（plan）：target / scope / test
      - 本次修改的摘要（變更的檔案和主要改動）
    - **詢問確認**：詢問用戶「目前的修改計畫是否正確無誤？」
 

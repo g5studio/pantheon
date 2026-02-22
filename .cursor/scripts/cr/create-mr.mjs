@@ -17,7 +17,7 @@ import {
   getJiraEmail,
   getCompassApiToken,
 } from "../utilities/env-loader.mjs";
-import { determineLabels, readStartTaskInfo } from "./label-analyzer.mjs";
+import { determineLabels } from "./label-analyzer.mjs";
 import {
   appendAgentSignature,
   stripTrailingAgentSignature,
@@ -2054,9 +2054,6 @@ async function main() {
     }
   }
 
-  // 讀取 start-task 的計劃（目前僅用於 labels 判斷；MR description 一律以 JSON 模板生成）
-  const startTaskInfo = readStartTaskInfo();
-
   // ============================================================
   // MR description info（JSON + 固定模板）：
   // - 檔案：.cursor/tmp/{ticket}/merge-request-description-info.json
@@ -2210,10 +2207,7 @@ async function main() {
   let labels = [];
   const adaptAllowedLabelSet = getAdaptAllowedLabelSet();
 
-  const labelResult = await determineLabels(ticket, {
-    startTaskInfo,
-    targetBranch,
-  });
+  const labelResult = await determineLabels(ticket, { targetBranch });
   labels = labelResult.labels;
 
   if (labelResult.releaseBranch) {

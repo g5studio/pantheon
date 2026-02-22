@@ -5,7 +5,7 @@
  * 這個腳本接受參數，讓 Cursor agent 可以直接調用
  */
 
-import { execSync, spawnSync } from "child_process";
+import { execSync } from "child_process";
 import { getProjectRoot } from "../utilities/env-loader.mjs";
 
 // 使用 env-loader 提供的 projectRoot
@@ -97,67 +97,8 @@ try {
   process.exit(1);
 }
 
-// 檢查並複製 start-task Git notes 到新 commit
-try {
-  const currentCommit = exec("git rev-parse HEAD", { silent: true }).trim();
-
-  // 嘗試從父 commit 讀取 Git notes
-  try {
-    const parentCommit = exec("git rev-parse HEAD^", { silent: true }).trim();
-    const parentNote = exec(`git notes --ref=start-task show ${parentCommit}`, {
-      silent: true,
-    }).trim();
-    if (parentNote) {
-      // 複製到當前 commit
-      const result = spawnSync(
-        "git",
-        ["notes", "--ref=start-task", "add", "-f", "-F", "-", currentCommit],
-        {
-          cwd: projectRoot,
-          input: parentNote,
-          encoding: "utf-8",
-          stdio: ["pipe", "pipe", "pipe"],
-        }
-      );
-
-      if (result.status === 0) {
-        console.log("✅ 已複製 start-task Git notes 到新 commit\n");
-      }
-    }
-  } catch (parentError) {
-    // 父 commit 沒有 Git notes，嘗試從分支的 base commit 讀取
-    try {
-      const baseCommit = exec("git merge-base HEAD main", {
-        silent: true,
-      }).trim();
-      const baseNote = exec(`git notes --ref=start-task show ${baseCommit}`, {
-        silent: true,
-      }).trim();
-      if (baseNote) {
-        const result = spawnSync(
-          "git",
-          ["notes", "--ref=start-task", "add", "-f", "-F", "-", currentCommit],
-          {
-            cwd: projectRoot,
-            input: baseNote,
-            encoding: "utf-8",
-            stdio: ["pipe", "pipe", "pipe"],
-          }
-        );
-
-        if (result.status === 0) {
-          console.log(
-            "✅ 已從 base commit 複製 start-task Git notes 到新 commit\n"
-          );
-        }
-      }
-    } catch (baseError) {
-      // 沒有找到 Git notes，繼續執行（這不是錯誤）
-    }
-  }
-} catch (error) {
-  // 忽略錯誤，繼續執行（Git notes 複製失敗不應該中斷流程）
-}
+// start-task 計劃已改為使用 `.cursor/tmp/{ticket}/merge-request-description-info.json`，
+// 不再使用 Git notes，因此此處不再複製 notes。
 
 // 獲取當前分支
 const currentBranch = exec("git rev-parse --abbrev-ref HEAD", {

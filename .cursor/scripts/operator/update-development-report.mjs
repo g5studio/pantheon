@@ -1,21 +1,33 @@
 #!/usr/bin/env node
 
 /**
- * 更新開發報告到 Git notes
+ * 更新開發報告到 `.cursor/tmp/{ticket}/merge-request-description-info.json`
  *
- * 此腳本用於在開發完成後，將開發報告保存到 Git notes 中的 startTaskInfo，
- * 以便在建立 MR 時檢附到 MR description。
+ * 此腳本用於在開發完成後，將「開發報告（markdown）」解析為 JSON，
+ * 並寫入 `merge-request-description-info.json` 的 `report` 區塊，供 create-mr / update-mr
+ * 依固定模板渲染到 MR description。
  *
  * 使用方式：
  *   node .cursor/scripts/operator/update-development-report.mjs --report="<report-content>"
  *   node .cursor/scripts/operator/update-development-report.mjs --report-file="<path-to-report-file>"
- *   node .cursor/scripts/operator/update-development-report.mjs --read  # 讀取當前的開發報告
- *   node .cursor/scripts/operator/update-development-report.mjs --format  # 輸出格式化的 MR description
+ *   node .cursor/scripts/operator/update-development-report.mjs --read [--ticket=IN-1234]
+ *   node .cursor/scripts/operator/update-development-report.mjs --format [--ticket=IN-1234]
  */
 
-import { execSync, spawnSync } from "child_process";
+import { execSync } from "child_process";
 import { readFileSync, existsSync } from "fs";
 import { getProjectRoot } from "../utilities/env-loader.mjs";
+import {
+  createDefaultMergeRequestDescriptionInfoJson,
+  ensureTmpDir,
+  getMergeRequestDescriptionInfoJsonPath,
+  normalizeMergeRequestDescriptionInfoJson,
+  parseDevelopmentReportMarkdownToJson,
+  readJsonIfExists,
+  renderMergeRequestDescriptionInfoMarkdown,
+  toJiraTicketUrl,
+  writeJsonFile,
+} from "../cr/development-docs.mjs";
 
 const projectRoot = getProjectRoot();
 
@@ -35,129 +47,14 @@ function exec(command, options = {}) {
   }
 }
 
-// 讀取 start-task 開發計劃（從 Git notes）
-function readStartTaskInfo() {
+function getTicketFromCurrentBranch() {
   try {
-    // 首先嘗試讀取當前 HEAD 的 Git notes
-    const currentCommit = exec("git rev-parse HEAD", { silent: true }).trim();
-    try {
-      const noteContent = exec(
-        `git notes --ref=start-task show ${currentCommit}`,
-        { silent: true }
-      ).trim();
-      if (noteContent) {
-        return { info: JSON.parse(noteContent), commit: currentCommit };
-      }
-    } catch (error) {
-      // 當前 commit 沒有 Git notes，繼續嘗試其他位置
-    }
-
-    // 嘗試從父 commit 讀取
-    try {
-      const parentCommit = exec("git rev-parse HEAD^", { silent: true }).trim();
-      const noteContent = exec(
-        `git notes --ref=start-task show ${parentCommit}`,
-        { silent: true }
-      ).trim();
-      if (noteContent) {
-        return { info: JSON.parse(noteContent), commit: parentCommit };
-      }
-    } catch (error) {
-      // 父 commit 沒有 Git notes，繼續嘗試
-    }
-
-    // 嘗試從分支的 base commit 讀取
-    try {
-      const baseCommit = exec("git merge-base HEAD main", {
-        silent: true,
-      }).trim();
-      const noteContent = exec(
-        `git notes --ref=start-task show ${baseCommit}`,
-        { silent: true }
-      ).trim();
-      if (noteContent) {
-        return { info: JSON.parse(noteContent), commit: baseCommit };
-      }
-    } catch (error) {
-      // base commit 沒有 Git notes
-    }
-
-    return null;
-  } catch (error) {
+    const branch = exec("git branch --show-current", { silent: true }).trim();
+    const match = branch.match(/([A-Z0-9]+-\d+)/);
+    return match ? match[1] : null;
+  } catch {
     return null;
   }
-}
-
-// 更新 Git notes 中的 startTaskInfo
-function updateStartTaskInfo(startTaskInfo) {
-  try {
-    const currentCommit = exec("git rev-parse HEAD", { silent: true }).trim();
-    const noteContent = JSON.stringify(startTaskInfo, null, 2);
-
-    const result = spawnSync(
-      "git",
-      ["notes", "--ref=start-task", "add", "-f", "-F", "-", currentCommit],
-      {
-        cwd: projectRoot,
-        input: noteContent,
-        encoding: "utf-8",
-        stdio: ["pipe", "pipe", "pipe"],
-      }
-    );
-
-    if (result.status === 0) {
-      return true;
-    }
-    return false;
-  } catch (error) {
-    return false;
-  }
-}
-
-// 生成格式化的 MR description（使用表格格式）
-function formatMrDescription(startTaskInfo) {
-  const sections = [];
-
-  // 開發計劃部分
-  if (startTaskInfo.suggestedSteps && startTaskInfo.suggestedSteps.length > 0) {
-    const planSection = [
-      "## 🎯 開發計劃",
-      "",
-      "本 MR 由 `start-task` 命令啟動，以下是初步制定的開發計劃：",
-      "",
-      ...startTaskInfo.suggestedSteps.map((step) => `- ${step}`),
-      "",
-      "| 項目 | 值 |",
-      "|---|---|",
-      `| **Jira Ticket** | ${startTaskInfo.ticket} |`,
-      `| **標題** | ${startTaskInfo.summary} |`,
-      `| **類型** | ${startTaskInfo.issueType} |`,
-      `| **狀態** | ${startTaskInfo.status || "未知"} |`,
-      `| **負責人** | ${startTaskInfo.assignee || "未分配"} |`,
-      `| **優先級** | ${startTaskInfo.priority || "未設置"} |`,
-      `| **啟動時間** | ${new Date(startTaskInfo.startedAt).toLocaleString(
-        "zh-TW"
-      )} |`,
-    ].join("\n");
-
-    sections.push(planSection);
-  }
-
-  // 開發報告部分
-  if (startTaskInfo.developmentReport) {
-    const reportSection = [
-      "",
-      "---",
-      "",
-      "## 📊 開發報告",
-      "",
-      startTaskInfo.developmentReport,
-    ].join("\n");
-
-    sections.push(reportSection);
-  }
-
-  return sections.join("\n");
 }
 
 // 主函數
@@ -169,8 +66,13 @@ function main() {
   let reportFile = null;
   let readMode = false;
   let formatMode = false;
+  let ticket = null;
 
   for (const arg of args) {
+    if (arg.startsWith("--ticket=")) {
+      ticket = arg.slice("--ticket=".length).trim().toUpperCase();
+      continue;
+    }
     if (arg.startsWith("--report=")) {
       reportContent = arg.slice("--report=".length);
     } else if (arg.startsWith("--report-file=")) {
@@ -182,28 +84,10 @@ function main() {
     }
   }
 
-  // 讀取模式：輸出當前的 startTaskInfo
-  if (readMode) {
-    const result = readStartTaskInfo();
-    if (result) {
-      console.log(JSON.stringify(result.info, null, 2));
-    } else {
-      console.error("❌ 找不到 start-task Git notes");
-      process.exit(1);
-    }
-    return;
-  }
-
-  // 格式化模式：輸出格式化的 MR description
-  if (formatMode) {
-    const result = readStartTaskInfo();
-    if (result) {
-      console.log(formatMrDescription(result.info));
-    } else {
-      console.error("❌ 找不到 start-task Git notes");
-      process.exit(1);
-    }
-    return;
+  ticket = ticket || getTicketFromCurrentBranch();
+  if (!ticket || !/^[A-Z0-9]+-\d+$/.test(ticket)) {
+    console.error("❌ 缺少或無法推導 ticket，請提供 --ticket=FE-1234");
+    process.exit(1);
   }
 
   // 從檔案讀取報告內容
@@ -215,24 +99,50 @@ function main() {
     reportContent = readFileSync(reportFile, "utf-8");
   }
 
-  // 更新模式：更新開發報告
+  const jiraTicketUrl = toJiraTicketUrl(ticket);
+  const infoPath = getMergeRequestDescriptionInfoJsonPath(ticket);
+  const existing = readJsonIfExists(infoPath);
+  const base =
+    existing ||
+    createDefaultMergeRequestDescriptionInfoJson({ ticket, jiraTicketUrl });
+
+  // 讀取模式：輸出當前的 JSON
+  if (readMode) {
+    if (!existing) {
+      console.error("❌ 找不到 merge-request-description-info.json");
+      process.exit(1);
+    }
+    console.log(JSON.stringify(existing, null, 2));
+    return;
+  }
+
+  // 格式化模式：輸出固定模板渲染結果（不落地任何 md）
+  if (formatMode) {
+    const info = normalizeMergeRequestDescriptionInfoJson(
+      { ...base, ticket, jiraTicketUrl },
+      { changeFiles: [] }
+    );
+    console.log(renderMergeRequestDescriptionInfoMarkdown(info, { changeFiles: [] }));
+    return;
+  }
+
+  // 更新模式：更新 report（由 markdown 解析）
   if (reportContent) {
-    const result = readStartTaskInfo();
-    if (!result) {
-      console.error("❌ 找不到 start-task Git notes，無法更新開發報告");
-      process.exit(1);
-    }
+    ensureTmpDir(ticket);
+    const reportJson = parseDevelopmentReportMarkdownToJson(reportContent, ticket);
+    const merged = normalizeMergeRequestDescriptionInfoJson(
+      {
+        ...base,
+        ticket,
+        jiraTicketUrl,
+        report: reportJson,
+      },
+      { changeFiles: [] }
+    );
 
-    const startTaskInfo = result.info;
-    startTaskInfo.developmentReport = reportContent;
-
-    if (updateStartTaskInfo(startTaskInfo)) {
-      console.log("✅ 已更新開發報告到 Git notes");
-      console.log("\n📋 開發報告已保存，建立 MR 時將自動檢附到 MR description");
-    } else {
-      console.error("❌ 更新開發報告失敗");
-      process.exit(1);
-    }
+    writeJsonFile(infoPath, merged);
+    console.log("✅ 已更新開發報告（report）到 merge-request-description-info.json");
+    console.log(`📍 Path: ${infoPath}`);
     return;
   }
 
@@ -243,14 +153,15 @@ function main() {
 使用方式：
   node .cursor/scripts/operator/update-development-report.mjs --report="<report-content>"
   node .cursor/scripts/operator/update-development-report.mjs --report-file="<path-to-report-file>"
-  node .cursor/scripts/operator/update-development-report.mjs --read
-  node .cursor/scripts/operator/update-development-report.mjs --format
+  node .cursor/scripts/operator/update-development-report.mjs --read [--ticket=IN-1234]
+  node .cursor/scripts/operator/update-development-report.mjs --format [--ticket=IN-1234]
 
 參數說明：
+  --ticket=...        Jira ticket（可省略：會嘗試從分支推導）
   --report="..."      直接提供報告內容
   --report-file="..." 從檔案讀取報告內容
-  --read              讀取當前的 startTaskInfo（JSON 格式）
-  --format            輸出格式化的 MR description（Markdown 格式）
+  --read              讀取目前的 merge-request-description-info.json（JSON 格式）
+  --format            輸出固定模板渲染後的 MR description（Markdown；不落地檔案）
 `);
 }
 

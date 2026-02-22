@@ -290,52 +290,40 @@ export function isHotfixVersion(fixVersion) {
   return false;
 }
 
-// 讀取 start-task 開發計劃（從 Git notes）
-export function readStartTaskInfo() {
+function hasAnyText(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+// 讀取 start-task 開發計劃（從 `.cursor/tmp/{ticket}/merge-request-description-info.json`）
+export function readStartTaskInfo(ticket) {
   try {
-    const currentCommit = exec("git rev-parse HEAD", { silent: true }).trim();
-    try {
-      const noteContent = exec(
-        `git notes --ref=start-task show ${currentCommit}`,
-        { silent: true }
-      ).trim();
-      if (noteContent) {
-        return JSON.parse(noteContent);
-      }
-    } catch (error) {
-      // 當前 commit 沒有 Git notes
-    }
+    if (!ticket || typeof ticket !== "string") return null;
+    if (!/^[A-Z0-9]+-\d+$/.test(ticket)) return null;
 
-    try {
-      const parentCommit = exec("git rev-parse HEAD^", { silent: true }).trim();
-      const noteContent = exec(
-        `git notes --ref=start-task show ${parentCommit}`,
-        { silent: true }
-      ).trim();
-      if (noteContent) {
-        return JSON.parse(noteContent);
-      }
-    } catch (error) {
-      // 父 commit 沒有 Git notes
-    }
+    const infoPath = join(
+      projectRoot,
+      ".cursor",
+      "tmp",
+      ticket,
+      "merge-request-description-info.json"
+    );
+    if (!existsSync(infoPath)) return null;
 
-    try {
-      const baseCommit = exec("git merge-base HEAD main", {
-        silent: true,
-      }).trim();
-      const noteContent = exec(
-        `git notes --ref=start-task show ${baseCommit}`,
-        { silent: true }
-      ).trim();
-      if (noteContent) {
-        return JSON.parse(noteContent);
-      }
-    } catch (error) {
-      // base commit 沒有 Git notes
-    }
+    const content = readFileSync(infoPath, "utf-8");
+    const parsed = safeJsonParse(content, "merge-request-description-info.json");
+    if (!parsed || typeof parsed !== "object") return null;
 
-    return null;
-  } catch (error) {
+    const plan =
+      parsed.plan && typeof parsed.plan === "object" ? parsed.plan : null;
+    if (!plan) return null;
+
+    // 僅當 plan 真的有內容時，才視為 start-task 啟動
+    const hasPlan =
+      hasAnyText(plan.target) || hasAnyText(plan.scope) || hasAnyText(plan.test);
+    if (!hasPlan) return null;
+
+    return { ticket, plan };
+  } catch {
     return null;
   }
 }
@@ -425,8 +413,8 @@ export async function determineLabels(ticket, options = {}) {
   const labels = [];
   let releaseBranch = null;
 
-  // 檢查是否由 start-task 啟動（透過傳入的參數或讀取 Git notes）
-  const taskInfo = startTaskInfo || readStartTaskInfo();
+  // 檢查是否由 start-task 啟動（透過傳入的參數或讀取 JSON）
+  const taskInfo = startTaskInfo || readStartTaskInfo(ticket);
   if (taskInfo) {
     labels.push("AI");
     console.log("🤖 檢測到由 start-task 啟動，將添加 AI label\n");
