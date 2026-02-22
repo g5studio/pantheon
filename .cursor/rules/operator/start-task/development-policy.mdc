@@ -361,28 +361,27 @@ node .cursor/scripts/cr/create-mr.mjs --labels="<專案labels>,AI" ...
 **實施細節**：
 - 開發計劃由 `generateDevelopmentPlanSection()` 函數生成
 - 關聯單資訊由 `generateRelatedTicketsSection()` 函數生成
-- 開發方案從 Git notes 讀取，確保是最終版本
-- 如果開發過程中用戶調整過計劃方向，Git notes 應該在最終確認時更新
+- 開發方案以 `.cursor/tmp/{ticket}/merge-request-description-info.json` 為唯一資料來源，確保是最終版本
+- 如果開發過程中用戶調整過計劃方向，應更新該 JSON（plan 區塊）並在建立 MR 前再次確認
 
 #### 3. 確保開發方案為最終版本
 
 **CRITICAL**: 開發方案必須反映最終確認的版本，而非開發過程中的臨時版本。
 
 **實施要求**：
-1. **在 start-task 確認時保存**：當用戶確認開發計劃時，將最終版本保存到 Git notes
-2. **在開發過程中更新**：如果用戶在開發過程中調整了計劃方向，應該更新 Git notes 中的計劃
-3. **在 MR 時讀取最新版本**：`readStartTaskInfo()` 從 Git notes 讀取，確保獲取的是最新版本
+1. **在 start-task 確認時保存**：當用戶確認開發計劃時，將最終版本保存到 `.cursor/tmp/{ticket}/merge-request-description-info.json`
+2. **在開發過程中更新**：如果用戶在開發過程中調整了計劃方向，應該更新該 JSON 中的 `plan`
+3. **在 MR 時讀取最新版本**：建立 MR 前，必須以該 JSON 作為開發計劃來源，確保獲取的是最新版本
 
-**更新 Git notes 的時機**：
+**更新開發計劃 JSON 的時機**：
 - 用戶確認初始計劃時（`start-task` 確認階段）
 - 用戶明確要求調整計劃時
 - 開發完成準備建立 MR 前（可選，用於最終確認）
-- **在 commit 之後**：當使用 `agent-commit.mjs` 或類似腳本進行 commit 後，會自動檢查並複製 Git notes 到新 commit，確保 `create-mr.mjs` 能夠讀取到 start-task 信息
+- 建立 MR 前：確認 `.cursor/tmp/{ticket}/merge-request-description-info.json` 已更新且內容為最終版本
 
 **注意事項**：
-- Git notes 使用 `--ref=start-task` 自定義引用，不會影響 commit history
-- 使用 `git notes --ref=start-task add -f` 可以強制更新現有 notes
-- 確保在建立 MR 前，Git notes 中的計劃是最終確認的版本
+- 本流程不再使用 `git notes`（start-task ref）儲存 start-task 資訊；相關舊指令與示例已淘汰
+- 確保在建立 MR 前，JSON 中的 plan 是最終確認的版本
 
 ---
 
@@ -611,8 +610,8 @@ node .cursor/scripts/cr/create-mr.mjs --labels="<專案labels>,AI" ...
 ### 流程步驟
 
 1. **讀取開發計劃**：
-   - 使用 `git notes --ref=start-task show HEAD` 讀取最新的開發計劃
-   - 解析 JSON 格式的 `startTaskInfo` 對象
+   - 讀取 `.cursor/tmp/{ticket}/merge-request-description-info.json` 的 `plan`
+   - 若檔案不存在或格式不完整，必須先補齊/更新後再繼續
 
 2. **生成開發報告**：
    - 根據 Jira card 類型生成對應的報告內容
