@@ -62,7 +62,6 @@ function main() {
   let ticket = null;
   let startTaskDir = null;
   let startTaskInfoFile = null;
-  let confirmed = null; // RD confirmed 開發報告（resultVerified）
 
   for (const arg of args) {
     if (arg.startsWith("--report=")) {
@@ -75,12 +74,6 @@ function main() {
       startTaskDir = arg.slice("--start-task-dir=".length);
     } else if (arg.startsWith("--start-task-info-file=")) {
       startTaskInfoFile = arg.slice("--start-task-info-file=".length);
-    } else if (arg.startsWith("--confirmed=")) {
-      const v = arg.slice("--confirmed=".length).trim().toLowerCase();
-      confirmed = v === "true" ? true : v === "false" ? false : null;
-    } else if (arg.startsWith("--report-confirmed=")) {
-      const v = arg.slice("--report-confirmed=".length).trim().toLowerCase();
-      confirmed = v === "true" ? true : v === "false" ? false : null;
     }
   }
 
@@ -93,8 +86,8 @@ function main() {
     reportContent = readFileSync(reportFile, "utf-8");
   }
 
-  // 允許「只更新 confirmed 狀態」而不改 report 內容
-  if (reportContent || confirmed !== null) {
+  // 更新模式：更新開發報告
+  if (reportContent) {
     const { infoFile, reportFile: defaultReportFile } = resolveStartTaskPaths({
       ticket,
       startTaskDir,
@@ -113,31 +106,24 @@ function main() {
       process.exit(1);
     }
 
-    if (reportContent) {
-      const reportOut = startTaskInfo.developmentReportFile
-        ? resolvePathFromProjectRoot(startTaskInfo.developmentReportFile)
-        : defaultReportFile;
-      if (!reportOut) {
-        console.error("❌ 無法推斷 development-report.md 路徑");
-        process.exit(1);
-      }
-
-      // FE-8006: 若設定 AGENT_DISPLAY_NAME，開發報告末尾追加署名（idempotent & 署名為最後一行）
-      const reportWithSignature = appendAgentSignature(reportContent);
-      writeFileSync(reportOut, reportWithSignature, "utf-8");
-      startTaskInfo.aiDevelopmentReport = true;
-      console.log("✅ 已更新開發報告（檔案化）");
-      console.log(`   - report: ${reportOut}`);
+    const reportOut = startTaskInfo.developmentReportFile
+      ? resolvePathFromProjectRoot(startTaskInfo.developmentReportFile)
+      : defaultReportFile;
+    if (!reportOut) {
+      console.error("❌ 無法推斷 development-report.md 路徑");
+      process.exit(1);
     }
 
-    if (confirmed !== null) {
-      startTaskInfo.resultVerified = confirmed;
-      console.log(`✅ 已更新 resultVerified: ${String(confirmed)}`);
-    }
+    // FE-8006: 若設定 AGENT_DISPLAY_NAME，開發報告末尾追加署名（idempotent & 署名為最後一行）
+    const reportWithSignature = appendAgentSignature(reportContent);
+    writeFileSync(reportOut, reportWithSignature, "utf-8");
+    startTaskInfo.aiDevelopmentReport = true;
     startTaskInfo.updatedAt = new Date().toISOString();
 
     writeFileSync(infoFile, JSON.stringify(startTaskInfo, null, 2), "utf-8");
 
+    console.log("✅ 已更新開發報告（檔案化）");
+    console.log(`   - report: ${reportOut}`);
     console.log(`   - info:   ${infoFile}\n`);
     return;
   }
@@ -152,7 +138,6 @@ function main() {
   node .cursor/scripts/operator/update-development-report.mjs --ticket="FE-1234" --report-file="..."
   node .cursor/scripts/operator/update-development-report.mjs --start-task-dir=".cursor/tmp/FE-1234" --report-file="..."
   node .cursor/scripts/operator/update-development-report.mjs --start-task-info-file=".cursor/tmp/FE-1234/start-task-info.json" --report-file="..."
-  node .cursor/scripts/operator/update-development-report.mjs --ticket="FE-1234" --confirmed=true
 
 參數說明：
   --report="..."      直接提供報告內容

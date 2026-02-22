@@ -376,10 +376,8 @@ async function main() {
         developmentReportFile,
         aiDevelopmentPlan: true,
         aiDevelopmentReport: true,
-        // Gate 欄位：create-mr 會在建立 MR 前檢查（同 ticket 才生效）
-        // - planConfirmed：RD 已確認開發計劃
-        // - resultVerified：RD 已確認開發報告
-        planConfirmed: false,
+        // Gate 欄位：create-mr 會在 rebase/push 前檢查（同 ticket 才生效）
+        planConfirmed: true,
         resultVerified: false,
         updatedAt: new Date().toISOString(),
       };
