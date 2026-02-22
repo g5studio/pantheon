@@ -8,7 +8,7 @@
 import { execSync, spawnSync } from "child_process";
 import { join, isAbsolute } from "path";
 import readline from "readline";
-import { readFileSync, existsSync, statSync, unlinkSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import {
   getProjectRoot,
   loadEnvLocal,
@@ -31,25 +31,6 @@ import { appendAgentSignature } from "../utilities/agent-signature.mjs";
 
 // 使用 env-loader 提供的 projectRoot
 const projectRoot = getProjectRoot();
-
-const DEFAULT_START_TASK_INFO_FILE = join(
-  projectRoot,
-  ".cursor",
-  "tmp",
-  "start-task-info.json"
-);
-const DEFAULT_DEVELOPMENT_PLAN_FILE = join(
-  projectRoot,
-  ".cursor",
-  "tmp",
-  "development-plan.md"
-);
-const DEFAULT_DEVELOPMENT_REPORT_FILE = join(
-  projectRoot,
-  ".cursor",
-  "tmp",
-  "development-report.md"
-);
 
 function exec(command, options = {}) {
   try {
@@ -1537,113 +1518,6 @@ function readUtf8FileFromProjectRoot(filePath) {
   return readFileSync(resolved, "utf-8").replace(/^\uFEFF/, "");
 }
 
-function tryReadUtf8FileFromProjectRoot(filePath) {
-  try {
-    return readUtf8FileFromProjectRoot(filePath);
-  } catch {
-    return null;
-  }
-}
-
-function hasNonEmptyFile(filePath) {
-  const resolved = resolvePathFromProjectRoot(filePath);
-  if (!resolved) return false;
-  try {
-    if (!existsSync(resolved)) return false;
-    const st = statSync(resolved);
-    return st.isFile() && st.size > 0;
-  } catch {
-    return false;
-  }
-}
-
-function safeUnlink(filePath) {
-  const resolved = resolvePathFromProjectRoot(filePath);
-  if (!resolved) return false;
-  try {
-    if (!existsSync(resolved)) return false;
-    unlinkSync(resolved);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function isSameTicket(a, b) {
-  const ta = typeof a === "string" ? a.trim().toUpperCase() : "";
-  const tb = typeof b === "string" ? b.trim().toUpperCase() : "";
-  return !!ta && !!tb && ta === tb;
-}
-
-function extractTicketFromBranch(branchName) {
-  return branchName?.match(/FE-\d+|IN-\d+/)?.[0] || "N/A";
-}
-
-function enforceStartTaskGateIfNeeded({
-  enforce,
-  ticket,
-  startTaskInfo,
-} = {}) {
-  if (!enforce) return;
-  if (!startTaskInfo) return;
-  if (!isSameTicket(startTaskInfo.ticket, ticket)) return;
-
-  const okPlan = startTaskInfo.planConfirmed === true;
-  const okResult = startTaskInfo.resultVerified === true;
-  if (okPlan && okResult) return;
-
-  console.error("\n❌ 已啟用 start-task gate，但尚未完成必要確認，已中止建立 MR\n");
-  console.error(`🎫 ticket: ${ticket}`);
-  console.error(
-    `📋 start-task-info: planConfirmed=${String(
-      startTaskInfo.planConfirmed
-    )}, resultVerified=${String(startTaskInfo.resultVerified)}`
-  );
-  console.error("");
-  console.error("✅ 請先完成以下任一方式後再重試：");
-  console.error(
-    "1) 由上層 start-task 流程在使用者確認/驗證後，將 start-task-info.json 內兩個欄位設為 true："
-  );
-  console.error("   - planConfirmed=true");
-  console.error("   - resultVerified=true");
-  console.error("2) 若你確定要跳過 gate，可加上參數：--skip-start-task-gate\n");
-  process.exit(1);
-}
-
-function cleanupStartTaskArtifactsIfNeeded({
-  enabled,
-  ticket,
-  startTaskInfo,
-  startTaskInfoFile,
-  developmentPlanFile,
-  developmentReportFile,
-} = {}) {
-  if (!enabled) return;
-  if (!startTaskInfo) return;
-  if (!isSameTicket(startTaskInfo.ticket, ticket)) return;
-
-  const infoPath = startTaskInfoFile || DEFAULT_START_TASK_INFO_FILE;
-  const planPath =
-    developmentPlanFile ||
-    startTaskInfo.developmentPlanFile ||
-    DEFAULT_DEVELOPMENT_PLAN_FILE;
-  const reportPath =
-    developmentReportFile ||
-    startTaskInfo.developmentReportFile ||
-    DEFAULT_DEVELOPMENT_REPORT_FILE;
-
-  const removed = [];
-  if (safeUnlink(reportPath)) removed.push(reportPath);
-  if (safeUnlink(planPath)) removed.push(planPath);
-  if (safeUnlink(infoPath)) removed.push(infoPath);
-
-  if (removed.length > 0) {
-    console.log("🧹 已清理 start-task 暫存檔案：");
-    removed.forEach((p) => console.log(`   - ${p}`));
-    console.log("");
-  }
-}
-
 function appendSectionIfMissing(base, section) {
   const baseStr = typeof base === "string" ? base : "";
   const secStr = typeof section === "string" ? section : "";
@@ -1770,32 +1644,6 @@ async function main() {
   let targetBranch = targetBranchArg?.split("=")[1] || "main";
   const draft = !args.includes("--no-draft");
 
-  // start-task 相關參數（供上層 start-task 流程控制；create-mr 本身不做任何互動）
-  const startTaskInfoFileArg = args.find((a) =>
-    a.startsWith("--start-task-info-file=")
-  );
-  const developmentPlanFileArg = args.find((a) =>
-    a.startsWith("--development-plan-file=")
-  );
-  const developmentReportFileArg = args.find((a) =>
-    a.startsWith("--development-report-file=")
-  );
-  const startTaskInfoFile = startTaskInfoFileArg
-    ? startTaskInfoFileArg.split("=").slice(1).join("=")
-    : null;
-  const developmentPlanFile = developmentPlanFileArg
-    ? developmentPlanFileArg.split("=").slice(1).join("=")
-    : null;
-  const developmentReportFile = developmentReportFileArg
-    ? developmentReportFileArg.split("=").slice(1).join("=")
-    : null;
-
-  const enforceStartTaskGate =
-    args.includes("--enforce-start-task-gate") ||
-    !args.includes("--skip-start-task-gate");
-  const cleanupStartTaskArtifactsEnabled =
-    !args.includes("--no-cleanup-start-task-artifacts");
-
   // 解析外部傳入的開發計劃
   const developmentPlanArg = args.find((arg) =>
     arg.startsWith("--development-plan=")
@@ -1837,7 +1685,7 @@ async function main() {
       )
     : null;
 
-  let externalDevelopmentReport = externalDevelopmentReportFromArg;
+  const externalDevelopmentReport = externalDevelopmentReportFromArg;
 
   // 檢查是否有未提交的變更
   const uncommittedChanges = getGitStatus();
@@ -1858,8 +1706,6 @@ async function main() {
 
   // 獲取專案資訊（在函數開始時宣告，供後續使用）
   const projectInfo = getProjectInfo();
-  const startTaskInfo = readStartTaskInfo({ startTaskInfoFile });
-  const ticketFromBranchEarly = extractTicketFromBranch(currentBranch);
 
   // 檢查遠端分支是否存在
   let remoteBranchExists = false;
@@ -1878,13 +1724,6 @@ async function main() {
     console.error("⚠️  必須先推送分支到遠端才能建立 MR\n");
     process.exit(1);
   }
-
-  // 🚨 Gate：必須發生在 rebase/push 之前（僅在同 ticket 且存在 start-task-info 時生效）
-  enforceStartTaskGateIfNeeded({
-    enforce: enforceStartTaskGate,
-    ticket: ticketFromBranchEarly,
-    startTaskInfo,
-  });
 
   // Pre-MR Rebase Requirement
   if (isRebaseInProgress()) {
@@ -1989,7 +1828,7 @@ async function main() {
     ?.split("=")[1];
   const commitMessageFull = getLastCommitMessage();
   const commitMessage = getLastCommitSubject();
-  let ticket = extractTicketFromBranch(currentBranch);
+  let ticket = currentBranch.match(/FE-\d+|IN-\d+/)?.[0] || "N/A";
 
   // 驗證 Jira ticket
   if (ticket !== "N/A" && isFeatureBranch(currentBranch)) {
@@ -2116,7 +1955,8 @@ async function main() {
     }
   }
 
-  const startTaskSameTicket = isSameTicket(startTaskInfo?.ticket, ticket);
+  // 讀取 start-task 的計劃（用於後續的 labels 判斷）
+  const startTaskInfo = readStartTaskInfo();
 
   // 處理開發計劃：優先使用外部傳入，否則使用 start-task 的計劃
   if (externalDevelopmentPlan) {
@@ -2141,28 +1981,11 @@ async function main() {
       }
     }
   } else {
-    // 沒有外部傳入：
-    // 1) 優先讀取 plan 檔案（.cursor/tmp 或參數指定）
-    // 2) 次要回退：若 startTaskInfo 是結構化計劃，則使用 generateDevelopmentPlanSection
-    if (startTaskSameTicket) {
-      const planPath =
-        developmentPlanFile ||
-        startTaskInfo?.developmentPlanFile ||
-        DEFAULT_DEVELOPMENT_PLAN_FILE;
-      const planMarkdown = tryReadUtf8FileFromProjectRoot(planPath);
-      if (planMarkdown && planMarkdown.trim()) {
-        console.log("📋 檢測到開發計劃檔案，將添加到 MR description\n");
-        developmentPlanSectionToAppend = planMarkdown.trim();
-        description = description
-          ? `${description}\n\n${developmentPlanSectionToAppend}`
-          : developmentPlanSectionToAppend;
-      }
-    }
-
-    if (!developmentPlanSectionToAppend && startTaskInfo) {
+    // 沒有外部傳入，使用 start-task 的計劃
+    if (startTaskInfo) {
       const planSection = generateDevelopmentPlanSection(startTaskInfo);
       if (planSection) {
-        console.log("📋 檢測到開發計劃（結構化），將添加到 MR description\n");
+        console.log("📋 檢測到開發計劃，將添加到 MR description\n");
         developmentPlanSectionToAppend = planSection;
         description = description
           ? `${description}\n\n${planSection}`
@@ -2175,17 +1998,6 @@ async function main() {
   // 開發報告與開發計劃不同：
   // - 開發計劃（--development-plan）：開發前的計劃步驟
   // - 開發報告（--development-report）：開發完成後的報告，包含影響範圍、根本原因、改動差異等
-  if (!externalDevelopmentReport && startTaskSameTicket) {
-    const reportPath =
-      developmentReportFile ||
-      startTaskInfo?.developmentReportFile ||
-      DEFAULT_DEVELOPMENT_REPORT_FILE;
-    const reportMarkdown = tryReadUtf8FileFromProjectRoot(reportPath);
-    if (reportMarkdown && reportMarkdown.trim()) {
-      externalDevelopmentReport = reportMarkdown.trim();
-    }
-  }
-
   if (externalDevelopmentReport) {
     console.log("📊 使用外部傳入的開發報告\n");
     developmentReportSectionToAppend = externalDevelopmentReport;
@@ -2195,7 +2007,7 @@ async function main() {
   }
 
   // 添加關聯單資訊區塊（獨立於開發計劃，只顯示單號、標題、類型）
-  if (startTaskInfo && startTaskSameTicket) {
+  if (startTaskInfo) {
     const relatedTicketsSection = generateRelatedTicketsSection(startTaskInfo);
     if (relatedTicketsSection) {
       console.log("📋 添加關聯單資訊到 MR description\n");
@@ -2224,9 +2036,6 @@ async function main() {
 
   const labelResult = await determineLabels(ticket, {
     startTaskInfo,
-    startTaskInfoFile,
-    developmentPlanFile,
-    developmentReportFile,
   });
   labels = labelResult.labels;
 
@@ -2373,7 +2182,7 @@ async function main() {
     console.error(`📋 當前分支: ${currentBranch}`);
     console.error(`📊 現有 MR: !${existingMRId}`);
     console.error(
-      '✅ 請改用：node .cursor/scripts/cr/update-mr.mjs --development-report="<markdown>"（或使用 --development-report-file / .cursor/tmp fallback）\n'
+      '✅ 請改用：node .cursor/scripts/cr/update-mr.mjs --development-report="<markdown>"\n'
     );
     process.exit(1);
   }
@@ -2423,8 +2232,10 @@ async function main() {
       "2) 若你是用 shell 傳參，建議使用 heredoc 或傳入 JSON string（讓腳本自動轉成真正換行）"
     );
     console.error("");
-    console.error("ℹ️  若你採用檔案化流程，也可先把報告寫入檔案再重試：");
-    console.error(`   - ${DEFAULT_DEVELOPMENT_REPORT_FILE}\n`);
+    console.error("ℹ️  也可先更新 Git notes 的開發報告：");
+    console.error(
+      '   node .cursor/scripts/operator/update-development-report.mjs --report-file="development-report.md"\n'
+    );
     process.exit(1);
   }
 
@@ -2562,15 +2373,6 @@ async function main() {
             console.log("⏭️  跳過 AI review（--no-review）\n");
           }
         }
-
-        cleanupStartTaskArtifactsIfNeeded({
-          enabled: cleanupStartTaskArtifactsEnabled,
-          ticket,
-          startTaskInfo,
-          startTaskInfoFile,
-          developmentPlanFile,
-          developmentReportFile,
-        });
         return;
       } catch (error) {
         console.error(`\n❌ glab 執行失敗: ${error.message}\n`);
@@ -2706,15 +2508,6 @@ async function main() {
         console.error(`⚠️  AI review 提交失敗: ${error.message}\n`);
       }
     }
-
-    cleanupStartTaskArtifactsIfNeeded({
-      enabled: cleanupStartTaskArtifactsEnabled,
-      ticket,
-      startTaskInfo,
-      startTaskInfoFile,
-      developmentPlanFile,
-      developmentReportFile,
-    });
   } catch (error) {
     console.error(`\n❌ ${error.message}\n`);
     process.exit(1);
