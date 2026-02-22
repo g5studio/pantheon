@@ -56,7 +56,7 @@ export function appendAgentSignature(message) {
 }
 
 /**
- * 移除訊息末尾署名（若存在）
+ * 移除尾端署名（若存在）
  *
  * 用途：
  * - 在需要於尾端插入其他區塊（例如 Agent Version）前，先移除尾端署名，避免署名被推到中間
@@ -69,34 +69,25 @@ export function appendAgentSignature(message) {
 export function stripTrailingAgentSignature(message) {
   if (typeof message !== "string") return message;
 
-  const displayName = getAgentDisplayName();
+  // 只處理尾端：先去掉尾端多餘換行，避免最後一行是空白
   const base = message.replace(/[\r\n]+$/g, "");
   if (!base) return message;
 
   const lines = base.split(/\r?\n/);
   let i = lines.length - 1;
   while (i >= 0 && lines[i].trim() === "") i--;
-  if (i < 0) return message;
+  const lastNonEmpty = i >= 0 ? lines[i] : "";
 
-  const lastNonEmpty = lines[i];
-
-  // 若能取得 displayName，先做精準移除（避免誤刪其他行）
-  if (displayName) {
-    const escaped = displayName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const signatureRegex = new RegExp(`^—\\s+.*AI助理『${escaped}』$`);
-    if (signatureRegex.test(lastNonEmpty)) {
-      return lines.slice(0, i).join("\n").replace(/[\r\n]+$/g, "");
-    }
-  }
-
-  // fallback：只要符合署名格式就移除（兼容：— {owner}的AI助理『...』 / — AI助理『...』）
+  // 兼容格式：— {owner}的AI助理『{displayName}』 / — AI助理『{displayName}』
   const isSignatureLine =
     typeof lastNonEmpty === "string" &&
     lastNonEmpty.trim().startsWith("— ") &&
     lastNonEmpty.includes("AI助理『") &&
     lastNonEmpty.trim().endsWith("』");
+
   if (!isSignatureLine) return message;
 
+  // 移除最後一個非空白行（署名），保留前面的內容
   const kept = lines.slice(0, i).join("\n").replace(/[\r\n]+$/g, "");
   return kept;
 }

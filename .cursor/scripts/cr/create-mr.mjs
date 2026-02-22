@@ -18,26 +18,10 @@ import {
   getCompassApiToken,
 } from "../utilities/env-loader.mjs";
 import { determineLabels, readStartTaskInfo } from "./label-analyzer.mjs";
-import { callOpenAiJson, resolveLlmModel } from "../utilities/llm-client.mjs";
 import {
   appendAgentSignature,
   stripTrailingAgentSignature,
 } from "../utilities/agent-signature.mjs";
-import {
-  ensureTmpDir,
-  getDevelopmentReportJsonPath,
-  getMergeRequestDescriptionInfoJsonPath,
-  readJsonIfExists,
-  writeJsonFile,
-  toJiraTicketUrl,
-  createDefaultDevelopmentReportJson,
-  createDefaultMergeRequestDescriptionInfoJson,
-  normalizeDevelopmentReportJson,
-  normalizeMergeRequestDescriptionInfoJson,
-  parseDevelopmentReportMarkdownToJson,
-  renderMergeRequestDescriptionInfoMarkdown,
-  removeTmpDirForTicket,
-} from "./development-docs.mjs";
 
 // 使用 env-loader 提供的 projectRoot
 const projectRoot = getProjectRoot();
@@ -1296,9 +1280,7 @@ function readAdaptKnowledgeOrExit() {
   if (!existsSync(filePath)) {
     console.error("\n❌ 找不到 adapt.json，無法驗證 labels 可用性\n");
     console.error(`📁 預期路徑：${filePath}`);
-    console.error(
-      "\n✅ 請先執行：node .cursor/scripts/utilities/adapt.mjs\n",
-    );
+    console.error("\n✅ 請先執行：node .cursor/scripts/utilities/adapt.mjs\n");
     process.exit(1);
   }
 
@@ -1654,268 +1636,6 @@ function normalizeExternalMarkdownArg(input) {
   return content;
 }
 
-function getChangedFilesAgainstTarget(targetBranch) {
-  if (!targetBranch) return [];
-  try {
-    const raw = exec(`git diff --name-status origin/${targetBranch}...HEAD`, {
-      silent: true,
-    })
-      .trim()
-      .split("\n")
-      .map((l) => l.trim())
-      .filter(Boolean);
-
-    return raw.map((line) => {
-      const parts = line.split("\t");
-      const status = parts[0] || "M";
-      // name-status for rename: R100\told\tnew
-      const path =
-        status.startsWith("R") && parts.length >= 3
-          ? parts[2]
-          : parts[1] || "";
-      return { status, path, description: "" };
-    });
-  } catch {
-    return [];
-  }
-}
-
-function getChangesBundleAgainstTarget(targetBranch) {
-  if (!targetBranch) {
-    return {
-      baseRef: null,
-      nameStatus: "",
-      stat: "",
-      diff: "",
-    };
-  }
-
-  const baseRef = `origin/${targetBranch}`;
-  const run = (cmd) => {
-    try {
-      return exec(cmd, { silent: true }).trim();
-    } catch {
-      return "";
-    }
-  };
-
-  return {
-    baseRef,
-    nameStatus: run(`git diff --name-status ${baseRef}...HEAD`),
-    stat: run(`git diff --stat ${baseRef}...HEAD`),
-    diff: run(`git diff ${baseRef}...HEAD`),
-  };
-}
-
-function hasMeaningfulText(v) {
-  if (typeof v !== "string") return false;
-  const t = v.trim();
-  if (!t) return false;
-  if (t === "待補齊") return false;
-  return true;
-}
-
-function shouldAutoFillReportWithLlm(reportJson) {
-  const r = reportJson && typeof reportJson === "object" ? reportJson : null;
-  if (!r) return false;
-
-  if (!hasMeaningfulText(r.changeSummary)) return true;
-
-  const files = Array.isArray(r?.changes?.files) ? r.changes.files : [];
-  for (const f of files) {
-    if (!hasMeaningfulText(f?.description)) return true;
-  }
-
-  const riskFiles = Array.isArray(r?.riskAssessment?.files)
-    ? r.riskAssessment.files
-    : [];
-  for (const rf of riskFiles) {
-    if (!hasMeaningfulText(rf?.reason)) return true;
-  }
-
-  return false;
-}
-
-function clampText(s, maxChars) {
-  const text = String(s || "");
-  if (!maxChars || text.length <= maxChars) return text;
-  return `${text.slice(0, maxChars)}\n... [truncated ${text.length - maxChars} chars]`;
-}
-
-async function autoFillDevelopmentReportJsonWithLlmIfMissing({
-  ticket,
-  targetBranch,
-  mrTitle,
-  changedFiles,
-  reportJson,
-}) {
-  const envLocal = loadEnvLocal();
-  const apiKey = process.env.OPENAI_API_KEY || envLocal.OPENAI_API_KEY || null;
-  if (!apiKey) return reportJson;
-
-  if (!shouldAutoFillReportWithLlm(reportJson)) return reportJson;
-
-  const explicitModel =
-    typeof envLocal.REPORT_LLM_MODEL === "string" ? envLocal.REPORT_LLM_MODEL : null;
-  const model = resolveLlmModel({
-    explicitModel,
-    envLocal,
-    envKeys: ["REPORT_LLM_MODEL", "AI_MODEL", "LLM_MODEL", "OPENAI_MODEL"],
-    defaultModel: "gpt-5.2",
-  });
-
-  const changes = getChangesBundleAgainstTarget(targetBranch);
-  const input = {
-    ticket,
-    targetBranch,
-    mrTitle,
-    changedFiles: Array.isArray(changedFiles) ? changedFiles : [],
-    currentReport: reportJson || null,
-    git: {
-      baseRef: changes.baseRef,
-      nameStatus: clampText(changes.nameStatus, 6000),
-      stat: clampText(changes.stat, 6000),
-      diff: clampText(changes.diff, 16000),
-    },
-  };
-
-  const system = `
-你是一個「Merge Request 開發報告」補齊器。
-你會收到：
-- git diff（name-status / stat / diff）
-- 目前的 report JSON（可能含「待補齊」或空字串）
-- changedFiles（檔案清單）
-
-目標：
-- 只補齊「缺漏」欄位，避免覆蓋已經有意義內容的欄位
-- 產出更可交付的內容，但保持精簡
-- 風險評估請針對每個檔案給出：level（高度/中度/輕度）與 reason（具體、可理解）
-
-輸出必須是 JSON object，格式：
-{
-  "changeSummary": string,
-  "files": { "<path>": { "description": string, "riskLevel": "高度"|"中度"|"輕度", "riskReason": string } }
-}
-  `.trim();
-
-  try {
-    console.log(`🤖 report 缺漏，嘗試用 LLM 補齊... (model=${model})`);
-    const resp = await callOpenAiJson({
-      apiKey,
-      model,
-      system,
-      input,
-      temperature: 0.2,
-    });
-
-    const out = resp && typeof resp === "object" ? resp : null;
-    if (!out) return reportJson;
-
-    const next = reportJson && typeof reportJson === "object" ? { ...reportJson } : {};
-    if (!hasMeaningfulText(next.changeSummary) && hasMeaningfulText(out.changeSummary)) {
-      next.changeSummary = String(out.changeSummary).trim();
-    }
-
-    const byPath = out.files && typeof out.files === "object" ? out.files : {};
-
-    // changes.files
-    if (next.changes && Array.isArray(next?.changes?.files)) {
-      next.changes = { ...next.changes };
-      next.changes.files = next.changes.files.map((f) => {
-        const path = f?.path || "";
-        const suggestion = path ? byPath[path] : null;
-        const desc =
-          !hasMeaningfulText(f?.description) && hasMeaningfulText(suggestion?.description)
-            ? String(suggestion.description).trim()
-            : (f?.description || "");
-        return { ...f, description: desc };
-      });
-    }
-
-    // riskAssessment.files
-    if (next.riskAssessment && Array.isArray(next?.riskAssessment?.files)) {
-      next.riskAssessment = { ...next.riskAssessment };
-      next.riskAssessment.files = next.riskAssessment.files.map((rf) => {
-        const path = rf?.path || "";
-        const suggestion = path ? byPath[path] : null;
-        const level =
-          !hasMeaningfulText(rf?.level) && hasMeaningfulText(suggestion?.riskLevel)
-            ? String(suggestion.riskLevel).trim()
-            : (rf?.level || "中度");
-        const reason =
-          !hasMeaningfulText(rf?.reason) && hasMeaningfulText(suggestion?.riskReason)
-            ? String(suggestion.riskReason).trim()
-            : (rf?.reason || "");
-        return { ...rf, level, reason };
-      });
-    }
-
-    return next;
-  } catch (e) {
-    console.log(`⚠️  report LLM 補齊失敗，將略過：${e.message}\n`);
-    return reportJson;
-  }
-}
-
-function hasMarkdownTable(content, expectedHeaderLine) {
-  if (!content) return false;
-  // normalizeExternalMarkdownArg 已將 CRLF 統一成 LF；這裡只做簡單判斷
-  const headerIdx = content.indexOf(expectedHeaderLine);
-  if (headerIdx === -1) return false;
-  const afterHeader = content.slice(headerIdx);
-  // 必須包含分隔線，且至少有一行資料列（簡單用 "\n|" 判斷）
-  return afterHeader.includes("\n|---|") && /(\n\|.+\|)/.test(afterHeader);
-}
-
-function validateMrDescriptionFormat(description, options = {}) {
-  const desc = typeof description === "string" ? description : "";
-  const missing = [];
-
-  // 1) 關聯單資訊（必須）
-  if (
-    !desc.includes("## 📋 關聯單資訊") ||
-    !hasMarkdownTable(desc, "| 項目 | 值 |")
-  ) {
-    missing.push("## 📋 關聯單資訊（含表格）");
-  }
-
-  // 2) 變更摘要（必須）
-  if (!desc.includes("## 📝 變更摘要")) {
-    missing.push("## 📝 變更摘要");
-  }
-
-  // 3) 變更內容（必須：表格）
-  if (
-    !desc.includes("### 變更內容") ||
-    !hasMarkdownTable(desc, "| 檔案 | 狀態 | 說明 |")
-  ) {
-    missing.push("### 變更內容（含檔案表格：| 檔案 | 狀態 | 說明 |）");
-  }
-
-  // 4) 風險評估（必須：表格）
-  if (
-    !desc.includes("## ⚠️ 風險評估") ||
-    !hasMarkdownTable(desc, "| 檔案 | 風險等級 | 評估說明 |")
-  ) {
-    missing.push("## ⚠️ 風險評估（含表格：| 檔案 | 風險等級 | 評估說明 |）");
-  }
-
-  // 5) Bug 類型（若可辨識為 Bug，強制）
-  const issueType = options?.issueType;
-  const isBug =
-    typeof issueType === "string" && issueType.toLowerCase().includes("bug");
-  if (isBug) {
-    if (!desc.includes("## 影響範圍")) {
-      missing.push("## 影響範圍（Bug 類型必須）");
-    }
-    if (!desc.includes("## 根本原因")) {
-      missing.push("## 根本原因（Bug 類型必須）");
-    }
-  }
-
-  return { ok: missing.length === 0, missing, isBug };
-}
-
 async function main() {
   const args = process.argv.slice(2);
   const targetBranchArg = args.find((arg) => arg.startsWith("--target="));
@@ -1953,16 +1673,18 @@ async function main() {
     ? parseAgentVersion(agentVersionArg.split("=").slice(1).join("="))
     : null;
 
-  // 解析外部傳入的開發報告（Legacy，相容舊流程）
-  // 🚨 新流程：以 `.cursor/tmp/{ticket}/merge-request-description-info.json` 作為 MR description 唯一落地來源，並由固定模板渲染。
+  // 解析外部傳入的開發報告（與開發計劃不同，開發報告是完成後的報告）
+  // 開發報告包含：影響範圍、根本原因、改動前後邏輯差異（Bug）或預期效果、需求覆蓋率、潛在影響風險（Request）
   const developmentReportArg = args.find((arg) =>
     arg.startsWith("--development-report="),
   );
-  const externalDevelopmentReport = developmentReportArg
+  const externalDevelopmentReportFromArg = developmentReportArg
     ? normalizeExternalMarkdownArg(
         developmentReportArg.split("=").slice(1).join("="),
       )
     : null;
+
+  const externalDevelopmentReport = externalDevelopmentReportFromArg;
 
   // 檢查是否有未提交的變更
   const uncommittedChanges = getGitStatus();
@@ -2232,69 +1954,10 @@ async function main() {
     }
   }
 
-  // 讀取 start-task 的計劃（目前僅用於 labels 判斷；MR description 一律以 JSON 模板生成）
-  const startTaskInfo = ticket !== "N/A" ? readStartTaskInfo(ticket) : null;
+  // 讀取 start-task 的計劃（用於後續的 labels 判斷）
+  const startTaskInfo = readStartTaskInfo();
 
-  // 先決定 labels / target branch（避免 Hotfix 自動推斷後 report 還用舊 target 計算）
-  console.log("🔍 分析 Jira ticket 信息...\n");
-  let labels = [];
-  const adaptAllowedLabelSet = getAdaptAllowedLabelSet();
-
-  const labelResult = await determineLabels(ticket, {
-    startTaskInfo,
-    targetBranch,
-  });
-  labels = labelResult.labels;
-
-  if (labelResult.releaseBranch && !userExplicitlySetTarget) {
-    const originalTargetBranch = targetBranch;
-    targetBranch = labelResult.releaseBranch;
-    console.log(
-      `   → 檢測到 Hotfix，自動設置 target branch: ${originalTargetBranch} → ${targetBranch}\n`,
-    );
-  }
-  // ============================================================
-  // MR description info（JSON + 固定模板）：
-  // - 檔案：.cursor/tmp/{ticket}/merge-request-description-info.json
-  // - schema：{ plan: {...}, report: {...} }
-  // ============================================================
-  let changedFiles = [];
-  let mrDescriptionInfoPath = null;
-  let mrDescriptionInfoJson = null;
-  let developmentReportJson = null;
-
-  if (ticket !== "N/A") {
-    ensureTmpDir(ticket);
-    mrDescriptionInfoPath = getMergeRequestDescriptionInfoJsonPath(ticket);
-    mrDescriptionInfoJson = readJsonIfExists(mrDescriptionInfoPath);
-
-    // legacy：若舊檔存在可讀取作遷移來源（但不再新建/寫回）
-    const legacyReportPath = getDevelopmentReportJsonPath(ticket);
-    const legacyReportJson = readJsonIfExists(legacyReportPath);
-    if (legacyReportJson && !mrDescriptionInfoJson?.report) {
-      mrDescriptionInfoJson = {
-        ...(mrDescriptionInfoJson || {}),
-        report: legacyReportJson,
-      };
-    }
-  }
-
-  // Legacy markdown → JSON（方便舊流程無痛轉換）
-  if (externalDevelopmentReport && ticket !== "N/A") {
-    const parsedFromMarkdown = parseDevelopmentReportMarkdownToJson(
-      externalDevelopmentReport,
-      ticket
-    );
-    mrDescriptionInfoJson = {
-      ...(mrDescriptionInfoJson || {}),
-      report: {
-        ...(mrDescriptionInfoJson?.report || {}),
-        ...(parsedFromMarkdown || {}),
-      },
-    };
-  }
-
-  // 處理開發計劃：legacy 仍保留 externalDevelopmentPlan（但不再從 start-task notes 自動生成）
+  // 處理開發計劃：優先使用外部傳入，否則使用 start-task 的計劃
   if (externalDevelopmentPlan) {
     if (externalDevelopmentPlan.raw) {
       // 外部傳入完整計劃，直接使用
@@ -2317,10 +1980,82 @@ async function main() {
       }
     }
   } else {
-    // 新流程：開發計劃固定由 merge-request-description-info.json 的 plan 填模板；若無 plan 內容則不輸出
+    // 沒有外部傳入，使用 start-task 的計劃
+    if (startTaskInfo) {
+      const planSection = generateDevelopmentPlanSection(startTaskInfo);
+      if (planSection) {
+        console.log("📋 檢測到開發計劃，將添加到 MR description\n");
+        developmentPlanSectionToAppend = planSection;
+        description = description
+          ? `${description}\n\n${planSection}`
+          : planSection;
+      }
+    }
   }
 
-  // 處理開發計劃 + 開發報告：固定由 info JSON 渲染模板
+  // 處理開發報告：外部傳入的開發報告直接添加到 description
+  // 開發報告與開發計劃不同：
+  // - 開發計劃（--development-plan）：開發前的計劃步驟
+  // - 開發報告（--development-report）：開發完成後的報告，包含影響範圍、根本原因、改動差異等
+  if (externalDevelopmentReport) {
+    console.log("📊 使用外部傳入的開發報告\n");
+    developmentReportSectionToAppend = externalDevelopmentReport;
+    description = description
+      ? `${description}\n\n${externalDevelopmentReport}`
+      : externalDevelopmentReport;
+  }
+
+  // 添加關聯單資訊區塊（獨立於開發計劃，只顯示單號、標題、類型）
+  if (startTaskInfo) {
+    const relatedTicketsSection = generateRelatedTicketsSection(startTaskInfo);
+    if (relatedTicketsSection) {
+      console.log("📋 添加關聯單資訊到 MR description\n");
+      relatedTicketsSectionToAppend = relatedTicketsSection;
+      description = description
+        ? `${description}\n\n${relatedTicketsSection}`
+        : relatedTicketsSection;
+    }
+  }
+
+  // FE-8004: 確保「署名永遠最後一行」
+  // - 報告/計劃內容可能已經自帶署名
+  // - 若後續再追加 Agent Version/其他區塊，署名可能被推到中間造成重複
+  description = stripTrailingAgentSignature(description);
+
+  // 添加 Agent 版本資訊到 description 最下方
+  if (agentVersionInfo) {
+    const versionSection = generateAgentVersionSection(agentVersionInfo);
+    if (versionSection) {
+      console.log("🤖 檢測到 Agent 版本資訊，將添加到 MR description 最下方\n");
+      agentVersionSectionToAppend = versionSection;
+      description = description
+        ? `${description}\n\n${versionSection}`
+        : versionSection;
+    }
+  }
+
+  // FE-8004: 署名必須為 MR description 的最後一行（可見內容）
+  description = appendAgentSignature(description);
+
+  // 根據 Jira ticket 決定 labels（不再自動分析 v3/v4，由外部傳入）
+  console.log("🔍 分析 Jira ticket 信息...\n");
+  let labels = [];
+  const adaptAllowedLabelSet = getAdaptAllowedLabelSet();
+
+  const labelResult = await determineLabels(ticket, {
+    startTaskInfo,
+    targetBranch,
+  });
+  labels = labelResult.labels;
+
+  if (labelResult.releaseBranch) {
+    const originalTargetBranch = targetBranch;
+    targetBranch = labelResult.releaseBranch;
+    console.log(
+      `   → 檢測到 Hotfix，自動設置 target branch: ${originalTargetBranch} → ${targetBranch}\n`,
+    );
+  }
+
   // 🚨 CRITICAL: 任何準備帶入 GitLab API 的 labels，必須先通過 adapt.json 可用性白名單
   if (labels.length > 0) {
     const adaptCheck = filterLabelsByAdaptAllowed(
@@ -2418,94 +2153,6 @@ async function main() {
     });
   }
 
-  // 最終 target branch 確定後，再生成/同步 report（避免 Hotfix 推斷後清單不一致）
-  if (ticket !== "N/A") {
-    changedFiles = getChangedFilesAgainstTarget(targetBranch);
-
-    const jiraTicketUrl = toJiraTicketUrl(ticket);
-    developmentReportJson =
-      mrDescriptionInfoJson?.report ||
-      createDefaultDevelopmentReportJson({
-        ticket,
-        jiraTitle: mrTitle?.includes(`(${ticket})`)
-          ? mrTitle.split(":").slice(1).join(":").trim()
-          : "",
-        issueType: "",
-        changeFiles: changedFiles,
-      });
-
-    mrDescriptionInfoJson =
-      mrDescriptionInfoJson ||
-      createDefaultMergeRequestDescriptionInfoJson({
-        ticket,
-        jiraTicketUrl,
-      });
-
-    // 先正規化（同步檔案清單 / 風險表列）
-    mrDescriptionInfoJson = {
-      ...mrDescriptionInfoJson,
-      report: normalizeDevelopmentReportJson(developmentReportJson, {
-        changeFiles: changedFiles,
-      }),
-    };
-
-    // 若仍有缺漏，再用 LLM double-check 補齊（只補缺漏，不覆蓋既有內容）
-    mrDescriptionInfoJson = {
-      ...mrDescriptionInfoJson,
-      report: await autoFillDevelopmentReportJsonWithLlmIfMissing({
-        ticket,
-        targetBranch,
-        mrTitle,
-        changedFiles,
-        reportJson: mrDescriptionInfoJson.report,
-      }),
-    };
-
-    mrDescriptionInfoJson = normalizeMergeRequestDescriptionInfoJson(
-      mrDescriptionInfoJson,
-      { changeFiles: changedFiles }
-    );
-
-    writeJsonFile(mrDescriptionInfoPath, mrDescriptionInfoJson);
-
-    console.log(
-      `🧾 以 JSON 產生 MR description（${join(
-        ".cursor",
-        "tmp",
-        ticket,
-        "merge-request-description-info.json"
-      )}）\n`
-    );
-    const infoMarkdown = renderMergeRequestDescriptionInfoMarkdown(
-      mrDescriptionInfoJson,
-      { changeFiles: changedFiles }
-    );
-    if (infoMarkdown && infoMarkdown.trim()) {
-      developmentReportSectionToAppend = infoMarkdown;
-      description = description
-        ? `${description}\n\n${infoMarkdown}`
-        : infoMarkdown;
-    }
-  }
-
-  // FE-8004: 確保「署名永遠最後一行」
-  description = stripTrailingAgentSignature(description);
-
-  // 添加 Agent 版本資訊到 description 最下方
-  if (agentVersionInfo) {
-    const versionSection = generateAgentVersionSection(agentVersionInfo);
-    if (versionSection) {
-      console.log("🤖 檢測到 Agent 版本資訊，將添加到 MR description 最下方\n");
-      agentVersionSectionToAppend = versionSection;
-      description = description
-        ? `${description}\n\n${versionSection}`
-        : versionSection;
-    }
-  }
-
-  // FE-8004: 署名必須為 MR description 的最後一行（可見內容）
-  description = appendAgentSignature(description);
-
   // 查找現有 MR
   let existingMR = null;
   let existingMRId = null;
@@ -2557,7 +2204,7 @@ async function main() {
     console.error(`📋 當前分支: ${currentBranch}`);
     console.error(`📊 現有 MR: !${existingMRId}`);
     console.error(
-      "✅ 請改用：node .cursor/scripts/cr/update-mr.mjs\n"
+      '✅ 請改用：node .cursor/scripts/cr/update-mr.mjs --development-report="<markdown>"\n',
     );
     process.exit(1);
   }
@@ -2578,41 +2225,6 @@ async function main() {
       console.log(`ℹ️  現有 MR 已有 reviewer: ${existingReviewers}`);
       console.log(`   用戶未明確指定 reviewer，將保留現有 reviewer\n`);
     }
-  }
-
-  // 🚨 CRITICAL: MR description 開發報告格式回歸檢查（提交/更新 MR 前必須通過）
-  // - 規範來源：.cursor/rules/cr/commit-and-mr-guidelines.mdc（Development Report Requirement）
-  // - 若不符合，直接中止並提示補齊 JSON（或 legacy --development-report）
-  const descriptionValidation = validateMrDescriptionFormat(
-    description,
-    { issueType: mrDescriptionInfoJson?.report?.issueType || "" }
-  );
-  if (!descriptionValidation.ok) {
-    console.error(
-      "\n❌ MR description 開發報告格式不符合規範，已中止建立/更新 MR\n",
-    );
-    console.error("📋 缺少以下必要區塊：");
-    descriptionValidation.missing.forEach((m) => console.error(`- ${m}`));
-    console.error("");
-    if (descriptionValidation.isBug) {
-      console.error(
-        "💡 已偵測到 issueType 為 Bug，因此額外要求：## 影響範圍、## 根本原因\n",
-      );
-    }
-    console.error("✅ 修正方式建議（擇一）：");
-    if (ticket !== "N/A") {
-      console.error(
-        `1) 補齊 JSON：.cursor/tmp/${ticket}/merge-request-description-info.json（再重跑 create-mr）`
-      );
-      console.error("2) （Legacy）使用 --development-report 傳入完整 markdown");
-    } else {
-      console.error("1) （Legacy）使用 --development-report 傳入完整 markdown");
-    }
-    console.error("");
-    console.error(
-      "ℹ️  提醒：依新流程不會自動產生 md 檔，僅會讀寫 merge-request-description-info.json\n"
-    );
-    process.exit(1);
   }
 
   console.log("\n🔨 建立 Merge Request...\n");
@@ -2749,13 +2361,6 @@ async function main() {
             console.log("⏭️  跳過 AI review（--no-review）\n");
           }
         }
-
-        if (ticket !== "N/A") {
-          const removed = removeTmpDirForTicket(ticket);
-          if (removed) {
-            console.log(`🧹 已移除 tmp 資料夾: .cursor/tmp/${ticket}\n`);
-          }
-        }
         return;
       } catch (error) {
         console.error(`\n❌ glab 執行失敗: ${error.message}\n`);
@@ -2889,13 +2494,6 @@ async function main() {
         }
       } catch (error) {
         console.error(`⚠️  AI review 提交失敗: ${error.message}\n`);
-      }
-    }
-
-    if (ticket !== "N/A") {
-      const removed = removeTmpDirForTicket(ticket);
-      if (removed) {
-        console.log(`🧹 已移除 tmp 資料夾: .cursor/tmp/${ticket}\n`);
       }
     }
   } catch (error) {
