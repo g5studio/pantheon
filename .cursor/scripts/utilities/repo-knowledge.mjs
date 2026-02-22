@@ -3,7 +3,7 @@
 /**
  * Repo Knowledge JSON CRUD 工具（含 schema 驗證）
  *
- * 預設檔案位置：.cursor/tmp/pantheon/adapt.json
+ * 預設檔案位置：adapt.json（專案根目錄）
  *
  * Commands:
  *   init
@@ -38,7 +38,7 @@ function parseArgs(argv) {
 }
 
 function getDefaultKnowledgeFile() {
-  return join(projectRoot, ".cursor", "tmp", "pantheon", "adapt.json");
+  return join(projectRoot, "adapt.json");
 }
 
 function ensureDirForFile(filePath) {
@@ -169,7 +169,7 @@ function writeKnowledge(filePath, obj) {
 }
 
 function showHelp() {
-  const relDefault = join(".cursor", "tmp", "pantheon", "adapt.json");
+  const relDefault = "adapt.json";
   console.log(`
 Repo Knowledge JSON CRUD
 

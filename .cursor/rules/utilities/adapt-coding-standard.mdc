@@ -4,7 +4,7 @@ description: Use adapt.json coding-standard as repo-specific guidance
 
 # Adapt Coding Standard（Repo Knowledge）
 
-本規則用於讓 Cursor 互動式 AI 在執行開發/改碼任務時，**參考並遵循**由 `adapt` 產出的 repo 知識庫：`.cursor/tmp/pantheon/adapt.json` 內的 `coding-standard`。
+本規則用於讓 Cursor 互動式 AI 在執行開發/改碼任務時，**參考並遵循**由 `adapt` 產出的 repo 知識庫：`adapt.json` 內的 `coding-standard`。
 
 ## 適用範圍
 
@@ -15,7 +15,7 @@ description: Use adapt.json coding-standard as repo-specific guidance
 
 ### 1) 開始改碼前，先讀取 repo knowledge（best-effort）
 
-- 讀取檔案：`.cursor/tmp/pantheon/adapt.json`
+- 讀取檔案：`adapt.json`
 - 解析 `coding-standard`（為 array，每筆為 `{ rule, example }`）
 - 將其中每一條 `rule` 視為 **repo-specific coding standard**，在本次任務中盡量遵循
 - `example` 作為具體寫法參考
@@ -23,7 +23,7 @@ description: Use adapt.json coding-standard as repo-specific guidance
 ### 2) 檔案不存在 / 內容缺失時，不阻塞但要告知
 
 若符合以下任一狀況：
-- `.cursor/tmp/pantheon/adapt.json` 不存在
+- `adapt.json` 不存在
 - JSON 解析失敗
 - 缺少 `coding-standard` 或其為空陣列
 

@@ -10,3 +10,6 @@
 # 工具設定檔案 / 範本
 .cursor/.env.example
 
+# Repo knowledge（開發工具輸出）
+adapt.json
+

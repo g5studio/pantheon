@@ -1,0 +1,571 @@
+{
+  "labels": [
+    {
+      "name": "AI",
+      "applicable": {
+        "ok": true,
+        "reason": "多次用於標記與AI相關功能開發，且與本專案中自動化腳本和工具相關，符合本專案用途。"
+      },
+      "scenario": "標記涉及AI功能開發或改進的合併請求，如自動化腳本、智能決策或AI輔助工具的新增與優化。"
+    },
+    {
+      "name": "FE Board",
+      "applicable": {
+        "ok": true,
+        "reason": "大量合併請求使用此標籤，且用於內部優化及外部協作，符合本專案管理流程。"
+      },
+      "scenario": "標記不影響產品功能的內部優化或協作相關合併請求，確保改動不會影響生產環境。"
+    },
+    {
+      "name": "Hotfix",
+      "applicable": {
+        "ok": true,
+        "reason": "為跨專案通用的緊急修復標籤，適用於本專案快速修正問題。"
+      },
+      "scenario": "用於標記緊急修復的合併請求，允許直接合併以快速解決生產問題。"
+    },
+    {
+      "name": "Static File",
+      "applicable": {
+        "ok": true,
+        "reason": "標記純靜態資產改動，適用於本專案中靜態資源管理。"
+      },
+      "scenario": "用於標記只修改靜態資產（如assets目錄下檔案）的合併請求。"
+    },
+    {
+      "name": "3.0UI",
+      "applicable": {
+        "ok": false,
+        "reason": "此標籤未在近期合併請求中使用，且名稱暗示為特定版本UI，與本工具庫專案核心功能無直接關聯。"
+      },
+      "scenario": "用於標記與3.0版本UI相關的功能或修正，通常在UI專案中標記版本特定的介面調整。"
+    },
+    {
+      "name": "4.0UI",
+      "applicable": {
+        "ok": false,
+        "reason": "此標籤未在近期合併請求中使用，且名稱暗示為特定版本UI，與本工具庫專案核心功能無直接關聯。"
+      },
+      "scenario": "用於標記與4.0版本UI相關的功能或修正，通常在UI專案中標記版本特定的介面調整。"
+    },
+    {
+      "name": "C2C",
+      "applicable": {
+        "ok": false,
+        "reason": "未見與本專案相關的C2C功能開發使用紀錄，且名稱暗示為特定業務功能，與本專案工具庫無直接關聯。"
+      },
+      "scenario": "用於標記C2C（客戶對客戶）相關功能的開發合併請求，通常涉及業務邏輯實作。"
+    },
+    {
+      "name": "Casino",
+      "applicable": {
+        "ok": false,
+        "reason": "無近期使用紀錄，且名稱指涉賭場相關功能，與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記與賭場相關功能或模組的開發或修正。"
+    },
+    {
+      "name": "Dark Mode",
+      "applicable": {
+        "ok": false,
+        "reason": "無使用紀錄且名稱指涉UI主題功能，與本專案工具庫無直接關聯。"
+      },
+      "scenario": "用於標記暗黑模式相關的UI調整或功能新增。"
+    },
+    {
+      "name": "Email Verification",
+      "applicable": {
+        "ok": false,
+        "reason": "無使用紀錄且名稱指涉電郵認證功能，與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記涉及電郵驗證功能的開發或修正。"
+    },
+    {
+      "name": "Europe Cup",
+      "applicable": {
+        "ok": false,
+        "reason": "無使用紀錄且名稱指涉特定活動或賽事，與本專案工具庫無直接關聯。"
+      },
+      "scenario": "用於標記與歐洲盃相關的功能或活動開發。"
+    },
+    {
+      "name": "IM",
+      "applicable": {
+        "ok": false,
+        "reason": "無使用紀錄且名稱指涉即時通訊功能，與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記與即時通訊相關功能的開發或修正。"
+    },
+    {
+      "name": "New Brand",
+      "applicable": {
+        "ok": false,
+        "reason": "無使用紀錄且名稱指涉新增業主專案，與本專案工具庫無直接關聯。"
+      },
+      "scenario": "用於標記新增業主相關專案的改動。"
+    },
+    {
+      "name": "Plan",
+      "applicable": {
+        "ok": false,
+        "reason": "無使用紀錄且名稱指涉大型項目管理，與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記包含多個需求組成的大型項目合併請求，需共享主分支並獨立測試。"
+    },
+    {
+      "name": "Promotion",
+      "applicable": {
+        "ok": false,
+        "reason": "無使用紀錄且名稱指涉優惠功能，與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記與優惠相關功能的開發或修正。"
+    },
+    {
+      "name": "Record",
+      "applicable": {
+        "ok": false,
+        "reason": "無使用紀錄且名稱指涉紀錄模組改動，與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記涉及注單紀錄、交易紀錄等模組的改動。"
+    },
+    {
+      "name": "Sport",
+      "applicable": {
+        "ok": false,
+        "reason": "無使用紀錄且名稱指涉體育相關功能，與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記與體育功能（包含聊天室）相關的開發或修正。"
+    },
+    {
+      "name": "Sub Bug",
+      "applicable": {
+        "ok": false,
+        "reason": "無使用紀錄且名稱指涉漏洞單相關，與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對需求所開漏洞單的合併請求。"
+    },
+    {
+      "name": "UI/UX",
+      "applicable": {
+        "ok": false,
+        "reason": "無使用紀錄且名稱指涉UI/UX變更，與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記僅涉及UI/UX變更且不影響業務邏輯的合併請求。"
+    },
+    {
+      "name": "v4.12",
+      "applicable": {
+        "ok": false,
+        "reason": "版本標籤無使用紀錄，且本專案主要為工具庫，版本標籤對開發流程影響有限。"
+      },
+      "scenario": "標記針對4.12版本的修正或功能。"
+    },
+    {
+      "name": "v4.13",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對4.13版本的修正或功能。"
+    },
+    {
+      "name": "v4.14",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對4.14版本的修正或功能。"
+    },
+    {
+      "name": "v4.15",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對4.15版本的修正或功能。"
+    },
+    {
+      "name": "v4.16",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對4.16版本的修正或功能。"
+    },
+    {
+      "name": "v4.17",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對4.17版本的修正或功能。"
+    },
+    {
+      "name": "v4.21",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對4.21版本的修正或功能。"
+    },
+    {
+      "name": "v4.22",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對4.22版本的修正或功能。"
+    },
+    {
+      "name": "v4.23",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對4.23版本的修正或功能。"
+    },
+    {
+      "name": "v4.24",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對4.24版本的修正或功能。"
+    },
+    {
+      "name": "v5.10",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.10版本的修正或功能。"
+    },
+    {
+      "name": "v5.11",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.11版本的修正或功能。"
+    },
+    {
+      "name": "v5.12",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.12版本的修正或功能。"
+    },
+    {
+      "name": "v5.13",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.13版本的修正或功能。"
+    },
+    {
+      "name": "v5.14",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.14版本的修正或功能。"
+    },
+    {
+      "name": "v5.15",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.15版本的修正或功能。"
+    },
+    {
+      "name": "v5.16",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.16版本的修正或功能。"
+    },
+    {
+      "name": "v5.17",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.17版本的修正或功能。"
+    },
+    {
+      "name": "v5.18",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.18版本的修正或功能。"
+    },
+    {
+      "name": "v5.19",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.19版本的修正或功能。"
+    },
+    {
+      "name": "v5.20",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.20版本的修正或功能。"
+    },
+    {
+      "name": "v5.21",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.21版本的修正或功能。"
+    },
+    {
+      "name": "v5.22",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.22版本的修正或功能。"
+    },
+    {
+      "name": "v5.23",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.23版本的修正或功能。"
+    },
+    {
+      "name": "v5.24",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.24版本的修正或功能。"
+    },
+    {
+      "name": "v5.25",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.25版本的修正或功能。"
+    },
+    {
+      "name": "v5.26",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.26版本的修正或功能。"
+    },
+    {
+      "name": "v5.27",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.27版本的修正或功能。"
+    },
+    {
+      "name": "v5.28",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.28版本的修正或功能。"
+    },
+    {
+      "name": "v5.29",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.29版本的修正或功能。"
+    },
+    {
+      "name": "v5.30",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.30版本的修正或功能。"
+    },
+    {
+      "name": "v5.31",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.31版本的修正或功能。"
+    },
+    {
+      "name": "v5.32",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.32版本的修正或功能。"
+    },
+    {
+      "name": "v5.33",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.33版本的修正或功能。"
+    },
+    {
+      "name": "v5.34",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.34版本的修正或功能。"
+    },
+    {
+      "name": "v5.35",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.35版本的修正或功能。"
+    },
+    {
+      "name": "v5.36",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.36版本的修正或功能。"
+    },
+    {
+      "name": "v5.37",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.37版本的修正或功能。"
+    },
+    {
+      "name": "v5.38",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.38版本的修正或功能。"
+    },
+    {
+      "name": "v5.39",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.39版本的修正或功能。"
+    },
+    {
+      "name": "v5.40",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.40版本的修正或功能。"
+    },
+    {
+      "name": "v5.41",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.41版本的修正或功能。"
+    },
+    {
+      "name": "v5.42",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.42版本的修正或功能。"
+    },
+    {
+      "name": "v5.43",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.43版本的修正或功能。"
+    },
+    {
+      "name": "v5.9",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，版本標籤無使用紀錄且與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記針對5.9版本的修正或功能。"
+    },
+    {
+      "name": "Vendor Customization",
+      "applicable": {
+        "ok": false,
+        "reason": "無使用紀錄且名稱指涉供應商變數相關改動，與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記新增或編輯供應商變數的改動。"
+    },
+    {
+      "name": "VIP Optimization",
+      "applicable": {
+        "ok": false,
+        "reason": "無使用紀錄且名稱指涉特定優化，與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記VIP相關優化的合併請求。"
+    },
+    {
+      "name": "Wire Transfer",
+      "applicable": {
+        "ok": false,
+        "reason": "無使用紀錄且名稱指涉匯款相關功能，與本專案工具庫無直接關聯。"
+      },
+      "scenario": "標記與匯款功能相關的開發或修正。"
+    }
+  ],
+  "coding-standard": [
+    {
+      "rule": "避免直接使用使用者輸入的URL進行HTTP請求，以防止伺服器端請求偽造（SSRF）攻擊。",
+      "example": "// 錯誤示範\nfetch(userInputUrl);\n\n// 正確示範\nconst allowedUrls = ['https://safe.example.com/api'];\nif (allowedUrls.includes(userInputUrl)) {\n  fetch(userInputUrl);\n} else {\n  throw new Error('不允許的URL');\n}"
+    }
+  ],
+  "meta": {
+    "schemaVersion": 1,
+    "generatedAt": "2026-02-12T12:46:01.986Z",
+    "updatedAt": "2026-02-13T06:49:25.400Z",
+    "repo": {
+      "host": "https://gitlab.service-hub.tech",
+      "fullPath": "frontend/pantheon"
+    }
+  },
+  "sources": {
+    "gitlab": {
+      "labelsCount": 67,
+      "mrCount": 25,
+      "mrCreatedAfter": "2025-11-13T06:49:10.481Z",
+      "mrFilterField": "created_at"
+    }
+  },
+  "cache": {
+    "inputHash": "6546d672895c306521c5a7091e54caa6b676d8777813911a504fb00d1a97b39d",
+    "llm": {
+      "provider": "openai",
+      "model": "gpt-4.1-mini",
+      "analyzedAt": "2026-02-13T06:49:25.400Z"
+    }
+  }
+}

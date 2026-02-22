@@ -1292,7 +1292,7 @@ function getProjectLabelsWithGlab(projectPath) {
 }
 
 function readAdaptKnowledgeOrExit() {
-  const filePath = join(projectRoot, ".cursor", "tmp", "pantheon", "adapt.json");
+  const filePath = join(projectRoot, "adapt.json");
   if (!existsSync(filePath)) {
     console.error("\n❌ 找不到 adapt.json，無法驗證 labels 可用性\n");
     console.error(`📁 預期路徑：${filePath}`);
