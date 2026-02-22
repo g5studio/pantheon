@@ -13,8 +13,6 @@
  */
 
 import { execSync, spawnSync } from "child_process";
-import { existsSync, readFileSync, statSync, unlinkSync, rmSync } from "fs";
-import { isAbsolute, join } from "path";
 import readline from "readline";
 import {
   getProjectRoot,
@@ -24,64 +22,9 @@ import {
   getJiraEmail,
   getGitLabToken as getGitLabTokenFromEnvLoader,
 } from "../utilities/env-loader.mjs";
-import { determineLabels, readStartTaskInfo } from "./label-analyzer.mjs";
-import {
-  appendAgentSignature,
-  stripTrailingAgentSignature,
-} from "../utilities/agent-signature.mjs";
-import { readAgentVersionInfo } from "../utilities/agent-version.mjs";
+import { readStartTaskInfo } from "./label-analyzer.mjs";
 
 const projectRoot = getProjectRoot();
-
-const DEFAULT_START_TASK_INFO_FILE = join(
-  projectRoot,
-  ".cursor",
-  "tmp",
-  "start-task-info.json",
-);
-const DEFAULT_DEVELOPMENT_PLAN_FILE = join(
-  projectRoot,
-  ".cursor",
-  "tmp",
-  "development-plan.md",
-);
-const DEFAULT_DEVELOPMENT_REPORT_FILE = join(
-  projectRoot,
-  ".cursor",
-  "tmp",
-  "development-report.md",
-);
-
-function generateAgentVersionSection(versionInfo) {
-  if (!versionInfo || Object.keys(versionInfo).length === 0) {
-    return null;
-  }
-
-  const lines = [
-    "---",
-    "",
-    "### 🤖 Agent Version",
-    "",
-    "| Deity Agent | Version |",
-    "|-------------|---------|",
-  ];
-
-  for (const [component, version] of Object.entries(versionInfo)) {
-    lines.push(`| ${component} | ${version} |`);
-  }
-
-  return lines.join("\n");
-}
-
-function stripAgentVersionSectionFromDescription(description) {
-  const base = typeof description === "string" ? description : "";
-  const idx = base.lastIndexOf("### 🤖 Agent Version");
-  if (idx === -1) return base;
-
-  const start = Math.max(base.lastIndexOf("\n---", idx), idx);
-  const before = base.slice(0, start).trimEnd();
-  return before ? `${before}\n` : "";
-}
 
 function exec(command, options = {}) {
   try {
@@ -96,131 +39,6 @@ function exec(command, options = {}) {
       console.error(`錯誤: ${error.message}`);
     }
     throw error;
-  }
-}
-
-function resolvePathFromProjectRoot(filePath) {
-  if (!filePath) return null;
-  return isAbsolute(filePath) ? filePath : join(projectRoot, filePath);
-}
-
-function readUtf8FileFromProjectRoot(filePath) {
-  const resolved = resolvePathFromProjectRoot(filePath);
-  if (!resolved) return null;
-  if (!existsSync(resolved)) {
-    throw new Error(`找不到檔案: ${filePath}`);
-  }
-  return readFileSync(resolved, "utf-8").replace(/^\uFEFF/, "");
-}
-
-function tryReadUtf8FileFromProjectRoot(filePath) {
-  try {
-    return readUtf8FileFromProjectRoot(filePath);
-  } catch {
-    return null;
-  }
-}
-
-function hasNonEmptyFile(filePath) {
-  const resolved = resolvePathFromProjectRoot(filePath);
-  if (!resolved) return false;
-  try {
-    if (!existsSync(resolved)) return false;
-    const st = statSync(resolved);
-    return st.isFile() && st.size > 0;
-  } catch {
-    return false;
-  }
-}
-
-function safeUnlink(filePath) {
-  const resolved = resolvePathFromProjectRoot(filePath);
-  if (!resolved) return false;
-  try {
-    if (!existsSync(resolved)) return false;
-    unlinkSync(resolved);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function safeRmStartTaskDir(dirPath, ticket) {
-  if (!dirPath) return false;
-  const resolved = resolvePathFromProjectRoot(dirPath);
-  if (!resolved) return false;
-
-  const tmpRoot = join(projectRoot, ".cursor", "tmp");
-  const resolvedTmpRoot = resolvePathFromProjectRoot(tmpRoot);
-  if (!resolvedTmpRoot) return false;
-
-  // 只允許刪除 .cursor/tmp 之下的資料夾，且禁止刪除根目錄
-  if (!resolved.startsWith(resolvedTmpRoot)) return false;
-  if (resolved === resolvedTmpRoot) return false;
-
-  // 只允許刪除 ticket 目錄（避免誤刪其他 ticket）
-  const expectedTicketDir = ticket
-    ? join(resolvedTmpRoot, ticket)
-    : null;
-  if (!expectedTicketDir || resolved !== expectedTicketDir) return false;
-
-  try {
-    rmSync(resolved, { recursive: true, force: true });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function isSameTicket(a, b) {
-  const ta = typeof a === "string" ? a.trim().toUpperCase() : "";
-  const tb = typeof b === "string" ? b.trim().toUpperCase() : "";
-  return !!ta && !!tb && ta === tb;
-}
-
-function extractTicketFromBranch(branchName) {
-  return branchName?.match(/FE-\d+|IN-\d+/)?.[0] || "N/A";
-}
-
-function cleanupStartTaskArtifactsIfNeeded({
-  enabled,
-  ticket,
-  startTaskInfo,
-  startTaskInfoFile,
-  developmentPlanFile,
-  developmentReportFile,
-} = {}) {
-  if (!enabled) return;
-  if (!startTaskInfo) return;
-  if (!isSameTicket(startTaskInfo.ticket, ticket)) return;
-
-  // FE-8006: 一律清除 `.cursor/tmp/{TICKET}/` 整個目錄（保留 --no-cleanup-start-task-artifacts 例外）
-  const ticketDir = join(".cursor", "tmp", ticket);
-  if (safeRmStartTaskDir(ticketDir, ticket)) {
-    console.log("🧹 已清理 start-task 暫存資料夾：");
-    console.log(`   - ${ticketDir}\n`);
-    return;
-  }
-
-  const infoPath = startTaskInfoFile || DEFAULT_START_TASK_INFO_FILE;
-  const planPath =
-    developmentPlanFile ||
-    startTaskInfo.developmentPlanFile ||
-    DEFAULT_DEVELOPMENT_PLAN_FILE;
-  const reportPath =
-    developmentReportFile ||
-    startTaskInfo.developmentReportFile ||
-    DEFAULT_DEVELOPMENT_REPORT_FILE;
-
-  const removed = [];
-  if (safeUnlink(reportPath)) removed.push(reportPath);
-  if (safeUnlink(planPath)) removed.push(planPath);
-  if (safeUnlink(infoPath)) removed.push(infoPath);
-
-  if (removed.length > 0) {
-    console.log("🧹 已清理 start-task 暫存檔案：");
-    removed.forEach((p) => console.log(`   - ${p}`));
-    console.log("");
   }
 }
 
@@ -414,7 +232,7 @@ function findExistingMRWithGlab(sourceBranch) {
   try {
     const result = exec(
       `glab mr list --source-branch ${sourceBranch} --state opened`,
-      { silent: true },
+      { silent: true }
     );
     const match = result.match(/!(\d+)/);
     return match ? match[1] : null;
@@ -436,7 +254,7 @@ function getMRDetailsWithGlab(mrId) {
 async function findExistingMR(token, host, projectPath, sourceBranch) {
   try {
     const url = `${host}/api/v4/projects/${projectPath}/merge_requests?source_branch=${encodeURIComponent(
-      sourceBranch,
+      sourceBranch
     )}&state=opened`;
     const response = await fetch(url, {
       headers: { "PRIVATE-TOKEN": token },
@@ -467,14 +285,10 @@ async function updateMRDescription(
   host,
   projectPath,
   mrIid,
-  description,
-  labels = null,
+  description
 ) {
   const url = `${host}/api/v4/projects/${projectPath}/merge_requests/${mrIid}`;
   const body = { description };
-  if (Array.isArray(labels) && labels.length > 0) {
-    body.labels = labels.join(",");
-  }
   const response = await fetch(url, {
     method: "PUT",
     headers: {
@@ -590,13 +404,13 @@ async function upsertAiReviewMarkerNote(
   host,
   projectPath,
   mrIid,
-  headSha,
+  headSha
 ) {
   const notes = await listMrNotes(token, host, projectPath, mrIid, 100);
-  const body = appendAgentSignature(buildAiReviewMarkerBody(headSha));
+  const body = buildAiReviewMarkerBody(headSha);
   const existing = notes.find(
     (n) =>
-      typeof n.body === "string" && n.body.includes(AI_REVIEW_MARKER_PREFIX),
+      typeof n.body === "string" && n.body.includes(AI_REVIEW_MARKER_PREFIX)
   );
 
   if (existing?.id) {
@@ -680,52 +494,14 @@ async function main() {
     process.exit(1);
   }
 
-  // start-task 相關參數（供上層 start-task 流程控制；update-mr 本身不做任何互動）
-  const startTaskInfoFileArg = args.find((a) =>
-    a.startsWith("--start-task-info-file="),
-  );
-  const developmentPlanFileArg = args.find((a) =>
-    a.startsWith("--development-plan-file="),
-  );
-  const developmentReportFileArg = args.find((a) =>
-    a.startsWith("--development-report-file="),
-  );
-  const startTaskInfoFile = startTaskInfoFileArg
-    ? startTaskInfoFileArg.split("=").slice(1).join("=")
-    : null;
-  const developmentPlanFile = developmentPlanFileArg
-    ? developmentPlanFileArg.split("=").slice(1).join("=")
-    : null;
-  const developmentReportFile = developmentReportFileArg
-    ? developmentReportFileArg.split("=").slice(1).join("=")
-    : null;
-
-  const cleanupStartTaskArtifactsEnabled = !args.includes(
-    "--no-cleanup-start-task-artifacts",
-  );
-
   const reportArg = args.find((a) => a.startsWith("--development-report="));
-  let externalReport = reportArg
+  const externalReport = reportArg
     ? normalizeExternalMarkdownArg(reportArg.split("=").slice(1).join("="))
     : null;
 
-  // 若未提供 --development-report，嘗試讀取檔案：
-  // 1) --development-report-file
-  // 2) 預設 .cursor/tmp/development-report.md
   if (!externalReport || !externalReport.trim()) {
-    const reportPath = developmentReportFile || DEFAULT_DEVELOPMENT_REPORT_FILE;
-    const reportMarkdown = tryReadUtf8FileFromProjectRoot(reportPath);
-    if (reportMarkdown && reportMarkdown.trim()) {
-      externalReport = reportMarkdown.trim();
-    }
-  }
-
-  if (!externalReport || !externalReport.trim()) {
-    console.error("\n❌ update-mr 需要提供開發報告\n");
-    console.error("✅ 請擇一提供：");
-    console.error('   1) --development-report="<markdown>"');
-    console.error("   2) --development-report-file=<path>");
-    console.error(`   3) ${DEFAULT_DEVELOPMENT_REPORT_FILE}\n`);
+    console.error("\n❌ update-mr 需要提供 --development-report\n");
+    console.error("💡 必須確保傳入的 markdown 不跑版（避免字面 \\\\n）\n");
     process.exit(1);
   }
 
@@ -763,7 +539,7 @@ async function main() {
       token,
       projectInfo.host,
       projectInfo.projectPath,
-      currentBranch,
+      currentBranch
     );
     if (mr) {
       mrIid = mr.iid;
@@ -771,7 +547,7 @@ async function main() {
         token,
         projectInfo.host,
         projectInfo.projectPath,
-        mrIid,
+        mrIid
       );
     }
   } else if (mrIid && !mrDetails && token) {
@@ -779,7 +555,7 @@ async function main() {
       token,
       projectInfo.host,
       projectInfo.projectPath,
-      mrIid,
+      mrIid
     );
   }
 
@@ -793,61 +569,25 @@ async function main() {
   // merge description（避免重複）
   const existingDescription =
     typeof mrDetails.description === "string" ? mrDetails.description : "";
-  let mergedDescription = upsertDevelopmentReport(existingDescription, externalReport);
-
-  // FE-8006:
-  // - Agent Version 需「一定呈現在報告中」
-  // - 署名需為 MR description 的最後一行（可見內容）
-  mergedDescription = stripAgentVersionSectionFromDescription(mergedDescription);
-  const agentVersionInfoAuto = readAgentVersionInfo() || {};
-  const agentVersionSection = generateAgentVersionSection(
-    Object.keys(agentVersionInfoAuto).length > 0
-      ? agentVersionInfoAuto
-      : { pantheon: "N/A" }
+  const mergedDescription = upsertDevelopmentReport(
+    existingDescription,
+    externalReport
   );
-  if (agentVersionSection && !mergedDescription.includes("### 🤖 Agent Version")) {
-    mergedDescription = `${mergedDescription.trimEnd()}\n\n${agentVersionSection}\n`;
-  }
-  mergedDescription = appendAgentSignature(mergedDescription);
 
   // 格式驗證（回歸檢查）
-  const ticket = extractTicketFromBranch(currentBranch);
-  const startTaskInfo = readStartTaskInfo({ startTaskInfoFile });
+  const startTaskInfo = readStartTaskInfo();
   const validation = validateMrDescriptionFormat(
     mergedDescription,
-    startTaskInfo,
+    startTaskInfo
   );
   if (!validation.ok) {
     console.error(
-      "\n❌ MR description 開發報告格式不符合規範，已中止更新 MR\n",
+      "\n❌ MR description 開發報告格式不符合規範，已中止更新 MR\n"
     );
     console.error("📋 缺少以下必要區塊：");
     validation.missing.forEach((m) => console.error(`- ${m}`));
     console.error("");
     process.exit(1);
-  }
-
-  // AI label：僅在「同 ticket 且存在 AI plan/report 檔案」時才追加（不移除既有 AI label）
-  let nextLabels = null;
-  try {
-    const existingLabels = Array.isArray(mrDetails.labels)
-      ? [...mrDetails.labels]
-      : [];
-    const labelResult = await determineLabels(ticket, {
-      startTaskInfo,
-      startTaskInfoFile,
-      developmentPlanFile,
-      developmentReportFile,
-    });
-    const shouldHaveAi = labelResult.labels.includes("AI");
-    if (shouldHaveAi && !existingLabels.includes("AI")) {
-      existingLabels.push("AI");
-    }
-    if (existingLabels.length > 0) {
-      nextLabels = existingLabels;
-    }
-  } catch {
-    // ignore label failures (do not block update)
   }
 
   // 更新 MR（使用 API token；若沒有 token，嘗試引導 glab token login）
@@ -858,7 +598,7 @@ async function main() {
     }
     // 如果 glab 已登入但沒 token，仍可嘗試要求用戶輸入 token 以走 API（避免 glab update flags 差異）
     console.log(
-      "\n🔐 請輸入 GitLab Personal Access Token 以更新 MR（需要 api 權限）\n",
+      "\n🔐 請輸入 GitLab Personal Access Token 以更新 MR（需要 api 權限）\n"
     );
     const rl = readline.createInterface({
       input: process.stdin,
@@ -868,7 +608,7 @@ async function main() {
       rl.question("Token: ", (t) => {
         rl.close();
         resolve(t.trim());
-      }),
+      })
     );
     if (!token) process.exit(1);
     try {
@@ -885,23 +625,12 @@ async function main() {
     projectInfo.host,
     projectInfo.projectPath,
     mrIid,
-    mergedDescription,
-    nextLabels,
+    mergedDescription
   );
 
   console.log("\n✅ MR 更新成功！\n");
   console.log(`🔗 MR 連結: [MR !${updated.iid}](${updated.web_url})`);
   console.log(`📊 MR ID: !${updated.iid}`);
-
-  // cleanup：MR description/labels 更新成功後才清理（失敗則保留以便重跑）
-  cleanupStartTaskArtifactsIfNeeded({
-    enabled: cleanupStartTaskArtifactsEnabled,
-    ticket,
-    startTaskInfo,
-    startTaskInfoFile,
-    developmentPlanFile,
-    developmentReportFile,
-  });
 
   // AI review 規則（根源級）：
   // - 用戶可用 --no-review 明確跳過
@@ -934,7 +663,7 @@ async function main() {
       projectInfo.host,
       projectInfo.projectPath,
       mrIid,
-      100,
+      100
     );
     for (const n of notes) {
       const sha = extractAiReviewShaFromText(n?.body);
@@ -949,7 +678,7 @@ async function main() {
 
   if (lastReviewedSha && lastReviewedSha === mrHeadSha) {
     console.log(
-      "\n⏭️  未偵測到 new commit（MR head SHA 與上次已送審 SHA 相同），跳過 AI review\n",
+      "\n⏭️  未偵測到 new commit（MR head SHA 與上次已送審 SHA 相同），跳過 AI review\n"
     );
     return;
   }
@@ -961,7 +690,7 @@ async function main() {
     const originHead = getOriginHeadSha(currentBranch);
     if (originHead !== localHead) {
       console.error(
-        "\n❌ 偵測到本地有新 commit 尚未推送，請先 push 後再更新/送審\n",
+        "\n❌ 偵測到本地有新 commit 尚未推送，請先 push 後再更新/送審\n"
       );
       process.exit(1);
     }
@@ -989,7 +718,7 @@ async function main() {
       projectInfo.host,
       projectInfo.projectPath,
       mrIid,
-      mrHeadSha,
+      mrHeadSha
     );
     console.log(`🧷 已更新 AI_REVIEW_SHA 狀態: ${mrHeadSha}\n`);
   } catch (error) {
