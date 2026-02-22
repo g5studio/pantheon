@@ -23,7 +23,10 @@ import {
   getGitLabToken as getGitLabTokenFromEnvLoader,
 } from "../utilities/env-loader.mjs";
 import { readStartTaskInfo } from "./label-analyzer.mjs";
-import { appendAgentSignature } from "../utilities/agent-signature.mjs";
+import {
+  appendAgentSignature,
+  stripTrailingAgentSignature,
+} from "../utilities/agent-signature.mjs";
 
 const projectRoot = getProjectRoot();
 
@@ -570,9 +573,14 @@ async function main() {
   // merge description（避免重複）
   const existingDescription =
     typeof mrDetails.description === "string" ? mrDetails.description : "";
-  const mergedDescription = upsertDevelopmentReport(
+  const reportForDescription = stripTrailingAgentSignature(externalReport);
+  let mergedDescription = upsertDevelopmentReport(
     existingDescription,
-    externalReport
+    reportForDescription
+  );
+  // FE-8004: 署名必須為 MR description 的最後一行（可見內容）
+  mergedDescription = appendAgentSignature(
+    stripTrailingAgentSignature(mergedDescription)
   );
 
   // 格式驗證（回歸檢查）
