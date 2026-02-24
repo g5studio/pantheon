@@ -54,6 +54,7 @@ export async function callOpenAiChatCompletions({
   messages,
   temperature = 0.2,
   url = "https://api.openai.com/v1/chat/completions",
+  responseFormat = null,
 }) {
   const effectiveApiKey =
     typeof apiKey === "string" && apiKey.trim()
@@ -74,6 +75,9 @@ export async function callOpenAiChatCompletions({
     temperature,
     messages,
   };
+  if (responseFormat && typeof responseFormat === "object") {
+    body.response_format = responseFormat;
+  }
 
   const resp = await fetch(url, {
     method: "POST",
@@ -98,17 +102,32 @@ export async function callOpenAiJson({
   system,
   input,
   temperature = 0.2,
+  schema = null,
+  schemaName = "structured_output",
 }) {
   const messages = [
     { role: "system", content: String(system || "") },
     { role: "user", content: JSON.stringify(input) },
   ];
 
+  let responseFormat = null;
+  if (schema && typeof schema === "object") {
+    responseFormat = {
+      type: "json_schema",
+      json_schema: {
+        name: String(schemaName || "structured_output"),
+        strict: true,
+        schema,
+      },
+    };
+  }
+
   const data = await callOpenAiChatCompletions({
     apiKey,
     model,
     messages,
     temperature,
+    responseFormat,
   });
 
   const content = data?.choices?.[0]?.message?.content;

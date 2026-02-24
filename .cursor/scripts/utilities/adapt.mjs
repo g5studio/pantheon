@@ -492,6 +492,97 @@ function getAdaptSystemPrompt() {
   ].join("\n");
 }
 
+function getAdaptResponseJsonSchema() {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["labels", "coding-standard", "git-flow"],
+    properties: {
+      labels: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["name", "applicable", "scenario"],
+          properties: {
+            name: { type: "string", minLength: 1 },
+            applicable: {
+              type: "object",
+              additionalProperties: false,
+              required: ["ok", "reason"],
+              properties: {
+                ok: { type: "boolean" },
+                reason: { type: "string", minLength: 1 },
+              },
+            },
+            scenario: { type: "string", minLength: 1 },
+          },
+        },
+      },
+      "coding-standard": {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["rule", "example"],
+          properties: {
+            rule: { type: "string", minLength: 1 },
+            example: { type: "string", minLength: 1 },
+          },
+        },
+      },
+      "git-flow": {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "flowType",
+          "defaultBranch",
+          "summary",
+          "branches",
+          "mergeFlow",
+          "branchNaming",
+          "mrTargets",
+        ],
+        properties: {
+          flowType: { type: "string", minLength: 1 },
+          defaultBranch: { type: "string", minLength: 1 },
+          summary: { type: "string", minLength: 1 },
+          branches: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["name", "role", "description"],
+              properties: {
+                name: { type: "string", minLength: 1 },
+                role: { type: "string", minLength: 1 },
+                description: { type: "string", minLength: 1 },
+              },
+            },
+          },
+          mergeFlow: { type: "string", minLength: 1 },
+          branchNaming: {
+            type: "object",
+            additionalProperties: false,
+            required: ["format", "examples"],
+            properties: {
+              format: { type: "string", minLength: 1 },
+              examples: {
+                type: "array",
+                items: { type: "string", minLength: 1 },
+              },
+            },
+          },
+          mrTargets: {
+            type: "array",
+            items: { type: "string", minLength: 1 },
+          },
+        },
+      },
+    },
+  };
+}
+
 /**
  * Collect git-flow related data from local repo (no GitLab API needed).
  * Used as input for LLM to infer and output git-flow section.
@@ -913,6 +1004,8 @@ async function main() {
     model,
     system: getAdaptSystemPrompt(),
     input: inputPayload,
+    schema: getAdaptResponseJsonSchema(),
+    schemaName: "adapt_repo_knowledge",
   });
 
   const rawOutLabels = llmOutput?.labels;
