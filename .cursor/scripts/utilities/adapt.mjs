@@ -134,6 +134,83 @@ function validateLabelsSection(value) {
   return { ok: true };
 }
 
+/**
+ * Infer a minimal git-flow object from collected git data (no LLM).
+ * Used when --no-llm or when no API key.
+ */
+function inferGitFlowFromData(gitFlowData) {
+  if (!gitFlowData || !gitFlowData.branches?.remote?.length) return null;
+
+  const defaultBranch = gitFlowData.remoteHead || "main";
+  const hasRelease = (gitFlowData.branchNamePatterns?.release?.length ?? 0) > 0;
+  const hasDev = gitFlowData.branches.remote.some((b) => b === "dev");
+  const hasMain = gitFlowData.branches.remote.some((b) => b === "main");
+
+  const branches = [];
+  if (hasMain) branches.push({ name: "main", role: "生產主線", description: "接收 release 分支合併，對應生產環境" });
+  if (hasDev) branches.push({ name: "dev", role: "開發整合主線", description: "預設分支，接收 feature/fix 與 release 分支合併" });
+  if (hasRelease) {
+    const samples = (gitFlowData.branchNamePatterns?.release ?? []).slice(0, 3);
+    branches.push({
+      name: "release/X.Y.Z",
+      role: "版本 release 分支",
+      description: `範例：${samples.join(", ")}。接收該版本的 fix/feat 合併後再合併回 dev` + (hasMain ? " 或 main" : ""),
+    });
+  }
+  const featSamples = (gitFlowData.branchNamePatterns?.feat ?? []).slice(0, 3);
+  const fixSamples = (gitFlowData.branchNamePatterns?.fix ?? []).slice(0, 3);
+  if (featSamples.length || fixSamples.length) {
+    branches.push({
+      name: "feat/|fix/",
+      role: "短期功能/修復分支",
+      description: `範例：${[...featSamples, ...fixSamples].filter(Boolean).slice(0, 3).join(", ")}。依 ticket 開發後合併至 dev 或 release`,
+    });
+  }
+
+  const flowType = hasRelease && (hasDev || hasMain)
+    ? "Git Flow 變體（含 release 分支）"
+    : hasDev && hasMain
+      ? "Git Flow"
+      : "Trunk-based 或簡化分支";
+
+  const mergeFlow = hasRelease
+    ? `feat/fix → release/X.Y.Z → ${hasDev ? "dev" : ""}${hasDev && hasMain ? "；release → main" : ""}`
+    : hasDev
+      ? "feat/fix → dev"
+      : "feat/fix → main";
+
+  const examples = [
+    ...(gitFlowData.branchNamePatterns?.feat ?? []).slice(0, 2),
+    ...(gitFlowData.branchNamePatterns?.fix ?? []).slice(0, 2),
+  ].filter(Boolean);
+
+  return {
+    flowType,
+    defaultBranch,
+    summary: `預設分支為 ${defaultBranch}。${hasRelease ? "有 release 分支管理版本。" : ""}${hasDev ? "dev 為開發整合主線。" : ""}分支命名格式為 type/TICKET。`,
+    branches,
+    mergeFlow,
+    branchNaming: { format: "type/TICKET", examples: examples.length ? examples : ["feat/OPR-1234", "fix/IN-113575"] },
+    mrTargets: [...new Set([hasDev && "dev", hasRelease && "release/X.Y.Z", hasMain && "main"].filter(Boolean))],
+  };
+}
+
+function validateGitFlowSection(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ok: false, error: "git-flow 必須是 object" };
+  }
+  if (typeof value.flowType !== "string" || !value.flowType.trim()) {
+    return { ok: false, error: "git-flow.flowType 必須是非空字串" };
+  }
+  if (typeof value.defaultBranch !== "string" || !value.defaultBranch.trim()) {
+    return { ok: false, error: "git-flow.defaultBranch 必須是非空字串" };
+  }
+  if (typeof value.summary !== "string" || !value.summary.trim()) {
+    return { ok: false, error: "git-flow.summary 必須是非空字串" };
+  }
+  return { ok: true };
+}
+
 function validateCodingStandardSection(value) {
   if (!Array.isArray(value)) return { ok: false, error: "coding-standard 必須是 array" };
   for (let i = 0; i < value.length; i++) {
@@ -163,6 +240,10 @@ function validateRepoKnowledgeObject(obj) {
     if (k in obj && obj[k] !== null && !isPlainObject(obj[k])) {
       return { ok: false, error: `${k} 必須是 object（或省略）` };
     }
+  }
+  if ("git-flow" in obj && obj["git-flow"] != null) {
+    const gf = validateGitFlowSection(obj["git-flow"]);
+    if (!gf.ok) return gf;
   }
   return { ok: true };
 }
@@ -382,9 +463,9 @@ function stableStringify(value) {
 function getAdaptSystemPrompt() {
   return [
     "You are a senior engineer helping to build a reusable repository knowledge base.",
-    "Given GitLab labels and recent merge request samples, infer reusable knowledge.",
+    "Given GitLab labels, recent merge request samples, and git-flow data (branches, merge patterns), infer reusable knowledge.",
     "Return ONLY valid JSON (no markdown, no comments) matching this exact schema:",
-    '{ "labels": [{ "name": string, "applicable": { "ok": boolean, "reason": string }, "scenario": string }], "coding-standard": [{ "rule": string, "example": string }] }',
+    '{ "labels": [...], "coding-standard": [...], "git-flow": { "flowType": string, "defaultBranch": string, "summary": string, "branches": [{ "name": string, "role": string, "description": string }], "mergeFlow": string, "branchNaming": { "format": string, "examples": [string] }, "mrTargets": [string] } }',
     "",
     "Critical requirements for labels:",
     "- You MUST output one item for EVERY label in input.labels (use the same label name).",
@@ -397,7 +478,118 @@ function getAdaptSystemPrompt() {
     "- For labels not seen in recent MRs, infer scenario from label name + description + repoStructure (project layout).",
     "- Prefer generic, reusable guidance (the 'most common' scenario), not edge cases.",
     "- Write scenario/rule/example in Traditional Chinese.",
+    "",
+    "Critical requirements for git-flow:",
+    "- You MUST analyze input.gitFlowData (remoteHead, branches, mergePatterns, branchNamePatterns, recentMergeLog).",
+    "- flowType: infer the overall flow (e.g. Git Flow 變體、GitHub Flow、Trunk-based).",
+    "- defaultBranch: from gitFlowData.remoteHead or the branch that origin/HEAD points to.",
+    "- summary: 1-3 sentences describing the flow in Traditional Chinese.",
+    "- branches: list main long-lived branches with role and description (main, dev, release pattern, feat/fix pattern).",
+    "- mergeFlow: describe merge direction (e.g. feat/fix -> release -> dev; release -> main).",
+    "- branchNaming: infer format (e.g. type/TICKET) and examples from branchNamePatterns.",
+    "- mrTargets: typical MR target branches (e.g. dev, release/X.Y.Z, main).",
+    "- Write all git-flow fields in Traditional Chinese.",
   ].join("\n");
+}
+
+/**
+ * Collect git-flow related data from local repo (no GitLab API needed).
+ * Used as input for LLM to infer and output git-flow section.
+ */
+function collectGitFlowData() {
+  const result = {
+    remoteHead: null,
+    branches: { local: [], remote: [] },
+    mergePatterns: [],
+    branchNamePatterns: { feat: [], fix: [], release: [], other: [] },
+    recentMergeLog: [],
+  };
+
+  try {
+    // origin/HEAD -> default branch
+    const headRef = exec("git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null || true", {
+      silent: true,
+      throwOnError: false,
+    });
+    if (headRef && headRef.trim()) {
+      const m = headRef.trim().match(/refs\/remotes\/origin\/(.+)/);
+      result.remoteHead = m ? m[1] : headRef.replace("refs/remotes/origin/", "");
+    }
+
+    // All branches
+    const branchOut = exec("git branch -a 2>/dev/null || true", {
+      silent: true,
+      throwOnError: false,
+    });
+    if (branchOut) {
+      const lines = branchOut.split("\n").map((s) => s.trim()).filter(Boolean);
+      for (const line of lines) {
+        const name = line.replace(/^\*\s*/, "").replace(/^remotes\/origin\//, "").trim();
+        if (!name || name === "HEAD") continue;
+        if (line.startsWith("remotes/")) {
+          if (!result.branches.remote.includes(name)) result.branches.remote.push(name);
+        } else {
+          if (!result.branches.local.includes(name)) result.branches.local.push(name);
+        }
+      }
+    }
+
+    // Recent merge commits (last 30)
+    const mergeLog = exec(
+      'git log --oneline --grep="Merge branch" -30 2>/dev/null || true',
+      { silent: true, throwOnError: false }
+    );
+    if (mergeLog) {
+      result.recentMergeLog = mergeLog
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .slice(0, 25);
+    }
+
+    // Infer branch name patterns from remote branch names
+    const remoteNames = result.branches.remote;
+    for (const name of remoteNames) {
+      if (/^feat[/-]/i.test(name) || /^feature\//i.test(name)) {
+        result.branchNamePatterns.feat.push(name);
+      } else if (/^fix\//i.test(name)) {
+        result.branchNamePatterns.fix.push(name);
+      } else if (/^release\//i.test(name)) {
+        result.branchNamePatterns.release.push(name);
+      } else if (!["main", "master", "dev"].includes(name) && !/^origin\//.test(name)) {
+        result.branchNamePatterns.other.push(name);
+      }
+    }
+    result.branchNamePatterns.feat = result.branchNamePatterns.feat.slice(0, 15);
+    result.branchNamePatterns.fix = result.branchNamePatterns.fix.slice(0, 15);
+    result.branchNamePatterns.release = result.branchNamePatterns.release.slice(0, 20);
+    result.branchNamePatterns.other = result.branchNamePatterns.other.slice(0, 10);
+
+    // Extract merge patterns from merge log
+    const mergeInto = new Map();
+    for (const line of result.recentMergeLog) {
+      const m = line.match(/Merge branch '([^']+)' into '([^']+)'/);
+      if (m) {
+        const [, fromBranch, intoBranch] = m;
+        const key = `${fromBranch} -> ${intoBranch}`;
+        mergeInto.set(key, (mergeInto.get(key) || 0) + 1);
+      } else {
+        const m2 = line.match(/Merge branch '([^']+)'/);
+        if (m2) {
+          const key = `${m2[1]} -> (main/master?)`;
+          mergeInto.set(key, (mergeInto.get(key) || 0) + 1);
+        }
+      }
+    }
+    result.mergePatterns = Array.from(mergeInto.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 15)
+      .map(([k, v]) => `${k} (${v}次)`);
+
+    return result;
+  } catch {
+    return result;
+  }
 }
 
 function getRepoStructureSummary() {
@@ -511,6 +703,8 @@ async function main() {
   console.log(`🔢 max MRs: ${maxMrs}`);
   console.log(`🔌 GitLab data source: ${useGlab ? "glab" : "token"}`);
 
+  const gitFlowData = collectGitFlowData();
+
   const labels = await listProjectLabels({
     token,
     host: hostname,
@@ -534,7 +728,10 @@ async function main() {
   });
 
   console.log(`🏷️  labels: ${labels.length}`);
-  console.log(`🔀 merge requests: ${mrs.length}\n`);
+  console.log(`🔀 merge requests: ${mrs.length}`);
+  console.log(
+    `🌿 git-flow: remoteHead=${gitFlowData.remoteHead ?? "?"} branches=${gitFlowData.branches?.remote?.length ?? 0} mergePatterns=${gitFlowData.mergePatterns?.length ?? 0}\n`
+  );
 
   const mrSamples = [];
   for (const mr of mrs) {
@@ -597,6 +794,7 @@ async function main() {
         .map((l) => [l.name, labelUsageCount.get(String(l.name)) || 0])
     ),
     repoStructure,
+    gitFlowData,
     definition: {
       label: "primary label id (0 if none or unknown)",
       commentsLineFallback: "null when line info is not available",
@@ -629,6 +827,11 @@ async function main() {
     mrCreatedAfter: createdAfterIso,
     mrFilterField: "created_at",
   };
+  base.sources.gitFlow = {
+    remoteHead: gitFlowData.remoteHead,
+    remoteBranchCount: gitFlowData.branches?.remote?.length ?? 0,
+    mergePatternCount: gitFlowData.mergePatterns?.length ?? 0,
+  };
 
   base.cache = isPlainObject(base.cache) ? base.cache : {};
 
@@ -640,6 +843,9 @@ async function main() {
     console.log("⏭️  跳過 LLM（--no-llm）");
     base.cache.inputHash = inputHash;
     base.cache.note = "llm skipped";
+    // Still infer git-flow from local data (no API needed)
+    const inferredGitFlow = inferGitFlowFromData(gitFlowData);
+    if (inferredGitFlow) base["git-flow"] = inferredGitFlow;
     writeKnowledge(filePath, base);
     console.log(`✅ 已更新：${filePath}\n`);
     return;
@@ -711,11 +917,16 @@ async function main() {
 
   const rawOutLabels = llmOutput?.labels;
   const outCs = llmOutput?.["coding-standard"];
+  const outGitFlow = llmOutput?.["git-flow"];
 
   const a = validateLabelsSection(rawOutLabels);
   if (!a.ok) throw new Error(`LLM output schema 錯誤：${a.error}`);
   const b = validateCodingStandardSection(outCs);
   if (!b.ok) throw new Error(`LLM output schema 錯誤：${b.error}`);
+  if (outGitFlow != null) {
+    const c = validateGitFlowSection(outGitFlow);
+    if (!c.ok) throw new Error(`LLM output schema 錯誤：${c.error}`);
+  }
 
   // Normalize labels output:
   // - Must cover ALL project labels
@@ -778,6 +989,14 @@ async function main() {
     return String(a.name || "").localeCompare(String(b.name || ""));
   });
   base["coding-standard"] = outCs;
+
+  if (outGitFlow != null && validateGitFlowSection(outGitFlow).ok) {
+    base["git-flow"] = outGitFlow;
+  } else {
+    // Fallback: infer from local data when LLM didn't return valid git-flow
+    const inferred = inferGitFlowFromData(gitFlowData);
+    if (inferred) base["git-flow"] = inferred;
+  }
 
   base.cache.inputHash = inputHash;
   base.cache.llm = { provider, model, analyzedAt: nowIso };
