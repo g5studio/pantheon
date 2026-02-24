@@ -546,7 +546,7 @@
   "meta": {
     "schemaVersion": 1,
     "generatedAt": "2026-02-12T12:46:01.986Z",
-    "updatedAt": "2026-02-13T06:49:25.400Z",
+    "updatedAt": "2026-02-24T06:53:36.641Z",
     "repo": {
       "host": "https://gitlab.service-hub.tech",
       "fullPath": "frontend/pantheon"
@@ -555,17 +555,51 @@
   "sources": {
     "gitlab": {
       "labelsCount": 67,
-      "mrCount": 25,
-      "mrCreatedAfter": "2025-11-13T06:49:10.481Z",
+      "mrCount": 30,
+      "mrCreatedAfter": "2025-11-24T06:53:20.567Z",
       "mrFilterField": "created_at"
+    },
+    "gitFlow": {
+      "remoteHead": "main",
+      "remoteBranchCount": 9,
+      "mergePatternCount": 10
     }
   },
   "cache": {
-    "inputHash": "6546d672895c306521c5a7091e54caa6b676d8777813911a504fb00d1a97b39d",
+    "inputHash": "14ada2378e08142218137d14653690f3bf10889e1cef45cfa4042a76c38f4396",
     "llm": {
       "provider": "openai",
       "model": "gpt-4.1-mini",
       "analyzedAt": "2026-02-13T06:49:25.400Z"
-    }
+    },
+    "note": "llm skipped"
+  },
+  "git-flow": {
+    "flowType": "Trunk-based 或簡化分支",
+    "defaultBranch": "main",
+    "summary": "預設分支為 main。分支命名格式為 type/TICKET。",
+    "branches": [
+      {
+        "name": "main",
+        "role": "生產主線",
+        "description": "接收 release 分支合併，對應生產環境"
+      },
+      {
+        "name": "feat/|fix/",
+        "role": "短期功能/修復分支",
+        "description": "範例：feature/FE-8003, feature/FE-8006, feature/FE-8007。依 ticket 開發後合併至 dev 或 release"
+      }
+    ],
+    "mergeFlow": "feat/fix → main",
+    "branchNaming": {
+      "format": "type/TICKET",
+      "examples": [
+        "feature/FE-8003",
+        "feature/FE-8006"
+      ]
+    },
+    "mrTargets": [
+      "main"
+    ]
   }
 }
