@@ -7,7 +7,7 @@
  *
  * Commands:
  *   init
- *   read [--section=labels|coding-standard|meta|sources|cache]
+ *   read [--section=labels|coding-standard|git-flow|meta|sources|cache]
  *   update --section=... (--input='JSON' | --input-file='path/to.json')
  *   clear --section=...
  *   delete
@@ -97,6 +97,22 @@ function validateLabelsSection(value) {
   return { ok: true };
 }
 
+function validateGitFlowSection(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ok: false, error: "git-flow 必須是 object" };
+  }
+  if (typeof value.flowType !== "string" || !value.flowType.trim()) {
+    return { ok: false, error: "git-flow.flowType 必須是非空字串" };
+  }
+  if (typeof value.defaultBranch !== "string" || !value.defaultBranch.trim()) {
+    return { ok: false, error: "git-flow.defaultBranch 必須是非空字串" };
+  }
+  if (typeof value.summary !== "string" || !value.summary.trim()) {
+    return { ok: false, error: "git-flow.summary 必須是非空字串" };
+  }
+  return { ok: true };
+}
+
 function validateCodingStandardSection(value) {
   if (!Array.isArray(value)) {
     return { ok: false, error: "coding-standard 必須是 array" };
@@ -134,6 +150,11 @@ function validateRepoKnowledgeObject(obj) {
     if (k in obj && obj[k] !== null && !isPlainObject(obj[k])) {
       return { ok: false, error: `${k} 必須是 object（或省略）` };
     }
+  }
+
+  if ("git-flow" in obj && obj["git-flow"] != null) {
+    const gf = validateGitFlowSection(obj["git-flow"]);
+    if (!gf.ok) return gf;
   }
 
   return { ok: true };
@@ -178,7 +199,7 @@ Usage:
 
 Commands:
   init
-  read [--section=labels|coding-standard|meta|sources|cache]
+  read [--section=labels|coding-standard|git-flow|meta|sources|cache]
   update --section=<...> (--input='<JSON>' | --input-file='<path>')
   clear --section=<...>
   delete
@@ -235,26 +256,29 @@ async function main() {
     );
   }
 
+  const KNOWN_SECTIONS = ["labels", "coding-standard", "git-flow", "meta", "sources", "cache"];
+
   if (command === "read") {
     const section = args.section;
     if (!section) {
       console.log(JSON.stringify(knowledge, null, 2));
       return;
     }
-    if (!(section in knowledge)) {
+    if (!KNOWN_SECTIONS.includes(section)) {
       throw new Error(`未知 section：${section}`);
     }
-    console.log(JSON.stringify(knowledge[section], null, 2));
+    console.log(JSON.stringify(section in knowledge ? knowledge[section] : null, null, 2));
     return;
   }
 
   if (command === "clear") {
     const section = args.section;
     if (!section) throw new Error("clear 需要 --section");
-    if (!(section in knowledge)) throw new Error(`未知 section：${section}`);
+    if (!KNOWN_SECTIONS.includes(section)) throw new Error(`未知 section：${section}`);
 
     if (section === "labels") knowledge.labels = [];
     else if (section === "coding-standard") knowledge["coding-standard"] = [];
+    else if (section === "git-flow") delete knowledge["git-flow"];
     else if (section === "meta") knowledge.meta = {};
     else if (section === "sources") knowledge.sources = {};
     else if (section === "cache") knowledge.cache = {};
@@ -276,7 +300,7 @@ async function main() {
   if (command === "update") {
     const section = args.section;
     if (!section) throw new Error("update 需要 --section");
-    if (!(section in knowledge)) throw new Error(`未知 section：${section}`);
+    if (!KNOWN_SECTIONS.includes(section)) throw new Error(`未知 section：${section}`);
 
     let inputText = null;
     if (typeof args.input === "string") inputText = args.input;
@@ -299,6 +323,10 @@ async function main() {
       const check = validateCodingStandardSection(incoming);
       if (!check.ok) throw new Error(`schema 驗證失敗：${check.error}`);
       knowledge["coding-standard"] = incoming;
+    } else if (section === "git-flow") {
+      const check = validateGitFlowSection(incoming);
+      if (!check.ok) throw new Error(`schema 驗證失敗：${check.error}`);
+      knowledge["git-flow"] = incoming;
     } else if (section === "meta" || section === "sources" || section === "cache") {
       if (!isPlainObject(incoming)) {
         throw new Error(`${section} 必須是 object`);

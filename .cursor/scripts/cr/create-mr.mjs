@@ -17,7 +17,13 @@ import {
   getJiraEmail,
   getCompassApiToken,
 } from "../utilities/env-loader.mjs";
-import { determineLabels, readStartTaskInfo } from "./label-analyzer.mjs";
+import {
+  determineLabels,
+  readStartTaskInfo,
+  getJiraFixVersion,
+  isHotfixVersion,
+  extractReleaseBranch,
+} from "./label-analyzer.mjs";
 import {
   appendAgentSignature,
   stripTrailingAgentSignature,
@@ -1275,6 +1281,52 @@ function getProjectLabelsWithGlab(projectPath) {
   }
 }
 
+function readAdaptKnowledge() {
+  const filePath = join(projectRoot, "adapt.json");
+  if (!existsSync(filePath)) return null;
+  try {
+    const text = readFileSync(filePath, "utf-8").replace(/^\uFEFF/, "");
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 根據 adapt.json git-flow + Jira ticket 推演 target branch
+ * 優先順序：用戶指定 -> adapt 推演 -> 預設 main
+ * @param {string} ticket - Jira ticket（可為 N/A）
+ * @returns {Promise<string|null>} 推演出的 target branch，無則 null
+ */
+async function inferTargetBranchFromAdaptAndJira(ticket) {
+  const adapt = readAdaptKnowledge();
+  const gitFlow = adapt?.["git-flow"];
+  if (!gitFlow || typeof gitFlow !== "object") return null;
+
+  let fixVersion = null;
+  if (ticket && ticket !== "N/A") {
+    try {
+      fixVersion = await getJiraFixVersion(ticket);
+    } catch {
+      // 略過 Jira 錯誤，繼續用 git-flow 推演
+    }
+  }
+
+  // Hotfix：fix version patch !== 0 → release/X.Y
+  if (fixVersion && isHotfixVersion(fixVersion)) {
+    const releaseBranch = extractReleaseBranch(fixVersion);
+    if (releaseBranch) return releaseBranch;
+  }
+
+  // 一般：使用 git-flow.defaultBranch 或 mrTargets 首項
+  const defaultBranch = typeof gitFlow.defaultBranch === "string" ? gitFlow.defaultBranch.trim() : null;
+  if (defaultBranch) return defaultBranch;
+
+  const mrTargets = Array.isArray(gitFlow.mrTargets) ? gitFlow.mrTargets : [];
+  const first = mrTargets.find((t) => typeof t === "string" && t.trim());
+  return first ? first.trim() : null;
+}
+
 function readAdaptKnowledgeOrExit() {
   const filePath = join(projectRoot, "adapt.json");
   if (!existsSync(filePath)) {
@@ -1704,6 +1756,16 @@ async function main() {
   }
 
   let currentBranch = getCurrentBranch();
+
+  // 目標分支優先順序：用戶指定 -> adapt 推演 -> 預設 main
+  if (!userExplicitlySetTarget) {
+    const ticketForInference = currentBranch.match(/[A-Z0-9]+-\d+/)?.[0] || "N/A";
+    const inferredTarget = await inferTargetBranchFromAdaptAndJira(ticketForInference);
+    if (inferredTarget) {
+      targetBranch = inferredTarget;
+      console.log(`🌿 依 adapt.json git-flow + Jira 推演 target branch: ${targetBranch}\n`);
+    }
+  }
 
   // 獲取專案資訊（在函數開始時宣告，供後續使用）
   const projectInfo = getProjectInfo();
