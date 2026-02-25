@@ -1,0 +1,28 @@
+{
+  "name": "pantheon",
+  "version": "1.0.8",
+  "private": true,
+  "scripts": {
+    "notify-cursor-rules-failed": "node .cursor/scripts/notification/notify-cursor-rules-failed.mjs",
+    "agent-commit": "node .cursor/scripts/cr/agent-commit.mjs",
+    "auto-commit-and-mr": "node .cursor/scripts/cr/auto-commit-and-mr.mjs",
+    "create-mr": "node .cursor/scripts/cr/create-mr.mjs",
+    "update-mr": "node .cursor/scripts/cr/update-mr.mjs",
+    "label-analyzer": "node .cursor/scripts/cr/label-analyzer.mjs",
+    "read-jira-ticket": "node .cursor/scripts/jira/read-jira-ticket.mjs",
+    "read-confluence-page": "node .cursor/scripts/jira/read-confluence-page.mjs",
+    "update-jira": "node .cursor/scripts/jira/update-jira.mjs",
+    "transition-jira-ticket": "node .cursor/scripts/jira/transition-jira-ticket.mjs",
+    "add-jira-comment": "node .cursor/scripts/jira/add-jira-comment.mjs",
+    "update-confluence-page": "node .cursor/scripts/jira/update-confluence-page.mjs",
+    "mr-comment": "node .cursor/scripts/gitlab/mr-comment.mjs",
+    "bump-version": "node .cursor/scripts/utilities/bump-version.mjs",
+    "parameter-detector": "node .cursor/scripts/utilities/parameter-detector.mjs",
+    "oracle": "node .cursor/scripts/utilities/oracle.mjs",
+    "repo-knowledge": "node .cursor/scripts/utilities/repo-knowledge.mjs",
+    "adapt": "node .cursor/scripts/utilities/adapt.mjs",
+    "agent-signature": "node .cursor/scripts/utilities/agent-signature.mjs",
+    "llm-client": "node .cursor/scripts/utilities/llm-client.mjs",
+    "env-loader": "node .cursor/scripts/utilities/env-loader.mjs"
+  }
+}
