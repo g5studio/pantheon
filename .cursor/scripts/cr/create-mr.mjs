@@ -2017,7 +2017,7 @@ async function main() {
   }
 
   // 讀取 start-task 的計劃（用於後續的 labels 判斷）
-  const startTaskInfo = readStartTaskInfo();
+  const startTaskInfo = readStartTaskInfo(ticket);
 
   // 處理開發計劃：優先使用外部傳入，否則使用 start-task 的計劃
   if (externalDevelopmentPlan) {

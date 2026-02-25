@@ -537,7 +537,7 @@ async function main() {
   const labelsArg =
     args.find((a) => a.startsWith("--add-labels=")) ||
     args.find((a) => a.startsWith("--labels="));
-  const requestedLabels = labelsArg
+  const requestedLabelsRaw = labelsArg
     ? labelsArg
         .split("=")
         .slice(1)
@@ -546,6 +546,7 @@ async function main() {
         .map((l) => l.trim())
         .filter((l) => l.length > 0)
     : [];
+  const requestedLabels = [...new Set(requestedLabelsRaw)];
 
   const uncommitted = getGitStatus();
   if (uncommitted.length > 0) {
@@ -649,12 +650,24 @@ async function main() {
     }
   }
 
+  // start-task 流程保底：若檢測到 start-task context，強制補 AI label（再走白名單過濾）
+  const branchTicket = currentBranch.match(/[A-Z0-9]+-\d+/)?.[0] || null;
+  const startTaskInfo = readStartTaskInfo(branchTicket);
+  const requestedLabelsWithStartTaskFallback = [...requestedLabels];
+  if (
+    startTaskInfo &&
+    !requestedLabelsWithStartTaskFallback.includes("AI")
+  ) {
+    requestedLabelsWithStartTaskFallback.push("AI");
+    console.log("🤖 檢測到 start-task context，已自動補上 AI label\n");
+  }
+
   // 🚨 CRITICAL: update-mr 若要新增 labels，必須先通過 adapt.json 可用性白名單
   let labelsToAdd = [];
-  if (requestedLabels.length > 0) {
+  if (requestedLabelsWithStartTaskFallback.length > 0) {
     const adaptAllowedLabelSet = getAdaptAllowedLabelSet();
     const adaptCheck = filterLabelsByAdaptAllowed(
-      requestedLabels,
+      requestedLabelsWithStartTaskFallback,
       adaptAllowedLabelSet,
       "外部傳入（準備新增）",
     );
