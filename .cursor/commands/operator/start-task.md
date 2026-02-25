@@ -296,8 +296,8 @@ Ticket: {TICKET}
 
 | Deity Agent | Version |
 |-------------|---------|
-| pantheon | [版本號] |
-| prometheus | [版本號] |
+| pantheon | [版本號(version.json內紀錄的版本)] |
+| prometheus | [版本號(version.json內紀錄的版本)] |
 ```
 
 **禁止行為：**
