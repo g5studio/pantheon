@@ -81,16 +81,80 @@ function getChangesSinceBase(baseRef) {
     silent: true,
   });
   const stat = exec(`git diff --stat ${ref}...HEAD`, { silent: true });
-  // diff 可能很大：只截斷後給 LLM
-  const diff = exec(`git diff ${ref}...HEAD`, { silent: true });
+  const numstat = exec(`git diff --numstat ${ref}...HEAD`, { silent: true });
   const commits = exec(`git log --oneline ${ref}..HEAD`, { silent: true });
+
+  // diff 可能很大（例如大量 json / 二進位），直接抓完整 patch 容易在 pipe 階段炸掉（ENOBUFS / maxBuffer）
+  // 策略：先用 numstat 評估規模，只在「小變更」才抓 patch；失敗則降級略過 patch（但流程不中斷）
+  const maxPatchFiles = Number(process.env.LABEL_ANALYZER_MAX_PATCH_FILES || 80);
+  const maxPatchLines = Number(process.env.LABEL_ANALYZER_MAX_PATCH_LINES || 2000);
+  const patchMaxBufferBytes = Number(
+    process.env.LABEL_ANALYZER_PATCH_MAX_BUFFER_BYTES || 50 * 1024 * 1024,
+  );
+
+  function parseNumstatSummary(text) {
+    const lines = String(text || "")
+      .trim()
+      .split("\n")
+      .filter((l) => l.trim().length > 0);
+
+    let fileCount = 0;
+    let textLineChanges = 0;
+    let binaryFiles = 0;
+
+    for (const line of lines) {
+      const parts = line.split("\t");
+      if (parts.length < 3) continue;
+      const [aRaw, dRaw] = parts;
+      fileCount += 1;
+
+      const isBinary = aRaw === "-" || dRaw === "-";
+      if (isBinary) {
+        binaryFiles += 1;
+        continue;
+      }
+
+      const a = Number(aRaw);
+      const d = Number(dRaw);
+      if (Number.isFinite(a)) textLineChanges += a;
+      if (Number.isFinite(d)) textLineChanges += d;
+    }
+
+    return { fileCount, textLineChanges, binaryFiles };
+  }
+
+  const numstatSummary = parseNumstatSummary(numstat);
+  const shouldIncludePatch =
+    numstatSummary.fileCount > 0 &&
+    numstatSummary.fileCount <= maxPatchFiles &&
+    numstatSummary.textLineChanges <= maxPatchLines;
+
+  let diff = "";
+  let diffOmittedReason = "";
+  if (shouldIncludePatch) {
+    try {
+      diff = exec(`git diff ${ref}...HEAD --no-color`, {
+        silent: true,
+        maxBuffer: patchMaxBufferBytes,
+      });
+    } catch (e) {
+      diff = "";
+      diffOmittedReason = `diff omitted due to error: ${e?.code || ""} ${e?.message || e}`;
+    }
+  } else {
+    diff = "";
+    diffOmittedReason = `diff omitted due to size: files=${numstatSummary.fileCount}, textLineChanges=${numstatSummary.textLineChanges}, binaryFiles=${numstatSummary.binaryFiles}`;
+  }
 
   return {
     baseRef: ref,
     nameStatus: nameStatus || "",
     stat: stat || "",
+    numstat: numstat || "",
     commits: commits || "",
-    diff: diff || "",
+    diff: diff || (diffOmittedReason ? `[${diffOmittedReason}]` : ""),
+    diffOmittedReason: diffOmittedReason || "",
+    numstatSummary,
   };
 }
 
@@ -384,9 +448,12 @@ async function suggestLabelsWithLlm({
     changes: {
       baseRef: changes?.baseRef || null,
       nameStatus: truncateText(changes?.nameStatus, 4000),
+      numstat: truncateText(changes?.numstat, 4000),
       stat: truncateText(changes?.stat, 4000),
       commits: truncateText(changes?.commits, 4000),
       diff: truncateText(changes?.diff, 12000),
+      diffOmittedReason: truncateText(changes?.diffOmittedReason, 400),
+      numstatSummary: changes?.numstatSummary || null,
     },
     adapt,
     existingLabels,

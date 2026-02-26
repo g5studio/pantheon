@@ -300,6 +300,29 @@ function getProjectInfo() {
   throw new Error("無法解析 remote URL");
 }
 
+async function findUserId(token, host, username) {
+  try {
+    const cleanUsername = String(username || "").replace(/^@/, "");
+    if (!cleanUsername) return null;
+
+    const response = await fetch(
+      `${host}/api/v4/users?username=${encodeURIComponent(cleanUsername)}`,
+      {
+        headers: { "PRIVATE-TOKEN": token },
+      },
+    );
+    if (!response.ok) return null;
+
+    const users = await response.json();
+    if (Array.isArray(users) && users.length > 0) {
+      return users[0]?.id ?? null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function findExistingMRWithGlab(sourceBranch) {
   try {
     const result = exec(
@@ -358,13 +381,17 @@ async function updateMRDescription(
   projectPath,
   mrIid,
   description,
-  addLabels = []
+  addLabels = [],
+  reviewerId = null
 ) {
   const url = `${host}/api/v4/projects/${projectPath}/merge_requests/${mrIid}`;
   const body = { description };
   if (Array.isArray(addLabels) && addLabels.length > 0) {
     // 只帶入 add_labels，避免覆寫現有 labels
     body.add_labels = addLabels.join(",");
+  }
+  if (reviewerId) {
+    body.reviewer_ids = [reviewerId];
   }
   const response = await fetch(url, {
     method: "PUT",
@@ -536,6 +563,10 @@ async function main() {
   }
 
   const skipReview = args.includes("--no-review");
+  const reviewerArg = args.find((a) => a.startsWith("--reviewer="));
+  const requestedReviewer = reviewerArg
+    ? reviewerArg.split("=").slice(1).join("=").trim()
+    : null;
   const labelsArg =
     args.find((a) => a.startsWith("--add-labels=")) ||
     args.find((a) => a.startsWith("--labels="));
@@ -651,6 +682,17 @@ async function main() {
     }
   }
 
+  // reviewer：只在用戶明確指定 --reviewer 時才更新（避免覆寫既有 reviewer）
+  let reviewerId = null;
+  if (requestedReviewer) {
+    reviewerId = await findUserId(token, projectInfo.host, requestedReviewer);
+    if (!reviewerId) {
+      console.error(`\n❌ 找不到 reviewer: ${requestedReviewer}\n`);
+      process.exit(1);
+    }
+    console.log(`\n👤 將更新 reviewer: ${requestedReviewer}\n`);
+  }
+
   // 🚨 CRITICAL: update-mr 若要新增 labels，必須先通過 adapt.json 可用性白名單
   let labelsToAdd = [];
   if (requestedLabels.length > 0) {
@@ -675,7 +717,8 @@ async function main() {
     projectInfo.projectPath,
     mrIid,
     mergedDescription,
-    labelsToAdd
+    labelsToAdd,
+    reviewerId
   );
 
   console.log("\n✅ MR 更新成功！\n");
