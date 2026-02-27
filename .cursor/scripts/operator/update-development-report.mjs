@@ -15,7 +15,13 @@
 
 import { execSync, spawnSync } from "child_process";
 import { readFileSync, existsSync } from "fs";
-import { getProjectRoot } from "../utilities/env-loader.mjs";
+import { join } from "path";
+import {
+  getProjectRoot,
+  loadEnvLocal,
+  getCompassApiToken,
+} from "../utilities/env-loader.mjs";
+import { callOpenAiJson, resolveLlmModel } from "../utilities/llm-client.mjs";
 
 const projectRoot = getProjectRoot();
 
@@ -32,6 +38,324 @@ function exec(command, options = {}) {
       console.error(`錯誤: ${error.message}`);
     }
     throw error;
+  }
+}
+
+function readTextIfExists(filePath) {
+  try {
+    if (!filePath) return null;
+    if (!existsSync(filePath)) return null;
+    return readFileSync(filePath, "utf-8");
+  } catch {
+    return null;
+  }
+}
+
+function resolvePantheonFilePath(relativePathFromRoot) {
+  const candidates = [
+    join(projectRoot, ".pantheon", relativePathFromRoot),
+    join(projectRoot, relativePathFromRoot),
+  ];
+  for (const p of candidates) {
+    if (existsSync(p)) return p;
+  }
+  return candidates[0];
+}
+
+function extractDevelopmentReportRulesText(commitAndMrGuidelinesText) {
+  const text = String(commitAndMrGuidelinesText || "");
+  if (!text.trim()) return "";
+
+  const start = text.indexOf("### Development Report Requirement");
+  if (start < 0) return text;
+
+  // keep the most relevant part, but avoid bringing the entire file into the prompt
+  const tail = text.slice(start);
+  const maxChars = 22000;
+  return tail.length > maxChars ? tail.slice(0, maxChars) : tail;
+}
+
+function getRelevantRulesText() {
+  const commitAndMrPath = resolvePantheonFilePath(
+    join(".cursor", "rules", "cr", "commit-and-mr-guidelines.mdc"),
+  );
+  const commitAndMrText = readTextIfExists(commitAndMrPath) || "";
+
+  const extracted = extractDevelopmentReportRulesText(commitAndMrText);
+  const commitAndMrRules = extracted.trim() ? extracted : commitAndMrText;
+
+  const startTaskCommandPath = resolvePantheonFilePath(
+    join(".cursor", "commands", "operator", "start-task.md"),
+  );
+  const startTaskCommandText = readTextIfExists(startTaskCommandPath) || "";
+
+  const startTaskTemplate = extractStartTaskDevelopmentReportTemplateText(
+    startTaskCommandText,
+  );
+
+  const parts = [];
+  if (commitAndMrRules.trim()) {
+    parts.push("## 規範來源：commit-and-mr-guidelines.mdc（摘錄）");
+    parts.push(commitAndMrRules.trim());
+  }
+  if (startTaskTemplate.trim()) {
+    parts.push("## 規範來源：start-task.md（開發報告範本摘錄）");
+    parts.push(startTaskTemplate.trim());
+  }
+
+  return parts.filter(Boolean).join("\n\n");
+}
+
+function getCurrentChangeSnapshot() {
+  const snapshot = {};
+
+  try {
+    snapshot.branch = exec("git rev-parse --abbrev-ref HEAD", {
+      silent: true,
+    }).trim();
+  } catch {
+    snapshot.branch = "unknown";
+  }
+
+  let baseCommit = null;
+  try {
+    baseCommit = exec("git merge-base HEAD main", { silent: true }).trim();
+  } catch {
+    baseCommit = null;
+  }
+  snapshot.baseCommit = baseCommit;
+
+  try {
+    snapshot.statusPorcelain = exec("git status --porcelain", {
+      silent: true,
+    });
+  } catch {
+    snapshot.statusPorcelain = "";
+  }
+
+  const rangeTripleDot = baseCommit ? `${baseCommit}...HEAD` : null;
+  try {
+    snapshot.diffNameStatus = rangeTripleDot
+      ? exec(`git diff --name-status ${rangeTripleDot}`, { silent: true })
+      : exec("git diff --name-status", { silent: true });
+  } catch {
+    snapshot.diffNameStatus = "";
+  }
+
+  try {
+    snapshot.diffStat = rangeTripleDot
+      ? exec(`git diff --stat ${rangeTripleDot}`, { silent: true })
+      : exec("git diff --stat", { silent: true });
+  } catch {
+    snapshot.diffStat = "";
+  }
+
+  try {
+    snapshot.commits = baseCommit
+      ? exec(`git log --oneline ${baseCommit}..HEAD`, { silent: true })
+      : exec("git log -n 30 --oneline", { silent: true });
+  } catch {
+    snapshot.commits = "";
+  }
+
+  return snapshot;
+}
+
+function extractStartTaskDevelopmentReportTemplateText(startTaskCommandText) {
+  const text = String(startTaskCommandText || "");
+  if (!text.trim()) return "";
+
+  const startCandidates = [
+    "### 🧾 開發報告格式範例（CRITICAL）",
+    "🧾 開發報告格式範例",
+    "Request 特有區塊固定模板",
+  ];
+  let start = -1;
+  for (const s of startCandidates) {
+    const i = text.indexOf(s);
+    if (i >= 0) {
+      start = i;
+      break;
+    }
+  }
+  if (start < 0) return "";
+
+  const endCandidates = ["**使用方式：**", "**執行範例：**", "## "];
+  let end = -1;
+  for (const e of endCandidates) {
+    const i = text.indexOf(e, start + 1);
+    if (i >= 0) {
+      end = i;
+      break;
+    }
+  }
+  const slice = end > start ? text.slice(start, end) : text.slice(start);
+
+  const maxChars = 22000;
+  return slice.length > maxChars ? slice.slice(0, maxChars) : slice;
+}
+
+function coerceJsonObjectFromModel(text) {
+  const trimmed = String(text || "").trim();
+  if (!trimmed) throw new Error("LLM 回傳為空");
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {}
+
+  const first = trimmed.indexOf("{");
+  const last = trimmed.lastIndexOf("}");
+  if (first >= 0 && last > first) {
+    const slice = trimmed.slice(first, last + 1);
+    return JSON.parse(slice);
+  }
+
+  throw new Error("無法從 LLM 回傳中解析 JSON");
+}
+
+async function callCompassOperatorProxyJson({ model, system, input }) {
+  const token = getCompassApiToken();
+  if (!token) {
+    throw new Error(
+      "缺少 LLM 認證（請設定 OPENAI_API_KEY 或 COMPASS_API_TOKEN）",
+    );
+  }
+
+  const url =
+    process.env.COMPASS_OPERATOR_PROXY_URL ||
+    "https://mac09demac-mini.balinese-python.ts.net/api/workflows/operator-proxy";
+
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Api-Key": token,
+    },
+    body: JSON.stringify({
+      provider: "openai",
+      model,
+      system: String(system || ""),
+      content: JSON.stringify(input),
+    }),
+  });
+
+  const rawText = await resp.text().catch(() => "");
+  let json = null;
+  try {
+    json = JSON.parse(rawText);
+  } catch {
+    json = null;
+  }
+
+  if (!resp.ok) {
+    const msg =
+      (json && typeof json.error === "string" && json.error.trim()) ||
+      rawText ||
+      resp.statusText ||
+      "Unknown error";
+    throw new Error(`Compass operator-proxy 失敗: ${resp.status} ${msg}`.trim());
+  }
+
+  if (!json || typeof json !== "object") {
+    throw new Error("Compass operator-proxy 回傳格式錯誤（非 JSON）");
+  }
+  if (json.ok !== true) {
+    const msg = typeof json.error === "string" ? json.error : "Unknown error";
+    throw new Error(`Compass operator-proxy 失敗: ${msg}`.trim());
+  }
+
+  const resultText =
+    typeof json?.result === "string" ? String(json.result) : "";
+  return coerceJsonObjectFromModel(resultText);
+}
+
+async function reviewDevelopmentReportWithLlm({ reportContent, startTaskInfo }) {
+  const rulesText = getRelevantRulesText();
+  const changeSnapshot = getCurrentChangeSnapshot();
+  const envLocal = loadEnvLocal();
+
+  const model = resolveLlmModel({
+    explicitModel: null,
+    envLocal,
+    envKeys: ["OPERATOR_LLM_MODEL", "LLM_MODEL", "OPENAI_MODEL"],
+    defaultModel: "gpt-5.2",
+  });
+
+  const schema = {
+    type: "object",
+    additionalProperties: false,
+    required: ["ok", "final", "reason"],
+    properties: {
+      ok: { type: "boolean" },
+      final: { type: "string" },
+      reason: { type: "string" },
+    },
+  };
+
+  const system = [
+    "你是一個嚴格的 MR 開發報告審查器。",
+    "請根據輸入的規範文字（rules）以及當前異動摘要（changes），檢查 report 是否符合規範、是否包含必要區塊與表格、且內容與 changes 一致。",
+    "你必須回傳 JSON，格式為：{ ok: boolean, final: string, reason: string }。",
+    "- ok=true：代表原始 report 已符合規範，此時 final 必須等於原始 report（不可改寫）。",
+    "- ok=false：代表原始 report 不符合規範或與 changes 不一致；你必須在 final 內輸出「已修正且符合規範」的 report（Markdown 內容），並保留語言為繁體中文。",
+    "- reason：必填。請用條列摘要說明檢查重點：缺哪些區塊/表格、與 changes 不一致處、以及你做了哪些修正（若 ok=true 則說明為何判定通過）。",
+    "輸出不得包含任何額外文字、不得用 Markdown code fence 包住 JSON。",
+  ].join("\n");
+
+  const input = {
+    report: String(reportContent || ""),
+    rules: String(rulesText || ""),
+    changes: changeSnapshot,
+    startTaskInfo: startTaskInfo
+      ? {
+          ticket: startTaskInfo.ticket ?? null,
+          summary: startTaskInfo.summary ?? null,
+          issueType: startTaskInfo.issueType ?? null,
+        }
+      : null,
+  };
+
+  try {
+    const obj = await callOpenAiJson({
+      model,
+      system,
+      input,
+      temperature: 0.1,
+      schema,
+      schemaName: "development_report_review",
+    });
+
+    if (
+      typeof obj?.ok !== "boolean" ||
+      typeof obj?.final !== "string" ||
+      typeof obj?.reason !== "string"
+    ) {
+      throw new Error("LLM 回傳格式錯誤（缺少 ok/final/reason）");
+    }
+    return obj;
+  } catch (error) {
+    // fallback to Compass operator-proxy if OpenAI key missing / OpenAI API is unavailable
+    const msg = String(error?.message || "");
+    const shouldFallback =
+      msg.includes("缺少 OpenAI API key") ||
+      msg.includes("OpenAI API 失敗") ||
+      msg.includes("fetch failed");
+
+    if (!shouldFallback) throw error;
+
+    const obj = await callCompassOperatorProxyJson({
+      model,
+      system,
+      input,
+    });
+    if (
+      typeof obj?.ok !== "boolean" ||
+      typeof obj?.final !== "string" ||
+      typeof obj?.reason !== "string"
+    ) {
+      throw new Error("LLM 回傳格式錯誤（缺少 ok/final/reason）");
+    }
+    return obj;
   }
 }
 
@@ -161,7 +485,7 @@ function formatMrDescription(startTaskInfo) {
 }
 
 // 主函數
-function main() {
+async function main() {
   const args = process.argv.slice(2);
 
   // 解析參數
@@ -224,7 +548,42 @@ function main() {
     }
 
     const startTaskInfo = result.info;
-    startTaskInfo.developmentReport = reportContent;
+
+    // 先送 LLM 複查（report + 規範 + 當前異動內容），依 ok 決定採用原文或修正版
+    let finalReport = reportContent;
+    try {
+      const review = await reviewDevelopmentReportWithLlm({
+        reportContent,
+        startTaskInfo,
+      });
+      const reason = String(review.reason || "").trim();
+      if (reason) {
+        console.log("\n🧾 LLM 複查原因（reason）：\n");
+        console.log(reason);
+        console.log("");
+      }
+      if (review.ok === true) {
+        if (review.final !== reportContent) {
+          console.log(
+            "⚠️ LLM 回 ok=true 但 final 與原始內容不同，已忽略 final 並使用原始開發報告",
+          );
+        }
+        finalReport = reportContent;
+        console.log("✅ LLM 複查通過（ok=true），將使用原始開發報告");
+      } else {
+        if (!review.final.trim()) {
+          throw new Error("LLM 回 ok=false 但 final 為空，無法套用修正版");
+        }
+        finalReport = review.final;
+        console.log("⚠️ LLM 複查未通過（ok=false），將改用 LLM 修正版開發報告");
+      }
+    } catch (error) {
+      console.error("❌ LLM 複查失敗，已停止更新（避免寫入未審查內容）");
+      console.error(`錯誤: ${error.message}`);
+      process.exit(1);
+    }
+
+    startTaskInfo.developmentReport = finalReport;
 
     if (updateStartTaskInfo(startTaskInfo)) {
       console.log("✅ 已更新開發報告到 Git notes");
@@ -254,4 +613,8 @@ function main() {
 `);
 }
 
-main();
+main().catch((error) => {
+  console.error("❌ 執行失敗");
+  console.error(`錯誤: ${error?.message || error}`);
+  process.exit(1);
+});
