@@ -413,6 +413,12 @@ async function suggestLabelsWithLlm({
 }) {
   const envLocal = loadEnvLocal();
   const apiKey = process.env.OPENAI_API_KEY || envLocal.OPENAI_API_KEY || null;
+  const compassApiToken =
+    process.env.COMPASS_API_TOKEN || envLocal.COMPASS_API_TOKEN || null;
+  const compassOperatorProxyUrl =
+    process.env.COMPASS_OPERATOR_PROXY_URL ||
+    envLocal.COMPASS_OPERATOR_PROXY_URL ||
+    null;
 
   const explicitModel =
     typeof envLocal.LABEL_LLM_MODEL === "string" ? envLocal.LABEL_LLM_MODEL : null;
@@ -462,6 +468,8 @@ async function suggestLabelsWithLlm({
   console.log(`🤖 正在請 LLM 建議 labels... (model=${model})`);
   const resp = await callOpenAiJson({
     apiKey,
+    compassApiToken,
+    compassOperatorProxyUrl,
     model,
     system,
     input,
