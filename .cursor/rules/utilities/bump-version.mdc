@@ -1,7 +1,7 @@
 ---
-alwaysApply: true
+description: 用戶使用 `bump-version` command 或是在 chat 中直接交付版本更新任務，都必須遵循此規則。
+alwaysApply: false
 ---
-
 # 版本號跳板規則
 
 此規則定義了版本號的格式、跳板邏輯，以及在不同專案中版本檔案的偵測方式。無論用戶是使用 `bump-version` command 或是在 chat 中直接交付版本更新任務，都必須遵循此規則。
