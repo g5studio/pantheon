@@ -1690,6 +1690,7 @@ function normalizeExternalMarkdownArg(input) {
 
 async function main() {
   const args = process.argv.slice(2);
+  const updateIfExists = args.includes("--update-if-exists");
   const targetBranchArg = args.find((arg) => arg.startsWith("--target="));
   const userExplicitlySetTarget = !!targetBranchArg;
   let targetBranch = targetBranchArg?.split("=")[1] || "main";
@@ -2262,13 +2263,63 @@ async function main() {
 
   // 🚨 CRITICAL: create-mr 僅用於「建立新 MR」；若已存在 MR，必須改用 update-mr 更新
   if (existingMRId) {
-    console.error("\n❌ 已存在 MR，create-mr 不會更新既有 MR\n");
-    console.error(`📋 當前分支: ${currentBranch}`);
-    console.error(`📊 現有 MR: !${existingMRId}`);
-    console.error(
-      '✅ 請改用：node .cursor/scripts/cr/update-mr.mjs --development-report="<markdown>"\n',
-    );
-    process.exit(1);
+    if (!updateIfExists) {
+      console.error("\n❌ 已存在 MR，create-mr 不會更新既有 MR\n");
+      console.error(`📋 當前分支: ${currentBranch}`);
+      console.error(`📊 現有 MR: !${existingMRId}`);
+      console.error(
+        '✅ 請改用：node .cursor/scripts/cr/update-mr.mjs --development-report="<markdown>"\n',
+      );
+      console.error(
+        '   或加上：--update-if-exists（自動改走 update-mr 流程）\n',
+      );
+      process.exit(1);
+    }
+
+    if (!externalDevelopmentReport || !externalDevelopmentReport.trim()) {
+      console.error("\n❌ 使用 --update-if-exists 需要提供 --development-report\n");
+      console.error(
+        "💡 因為更新既有 MR 必須帶開發報告（用於補齊/更新 description），避免覆蓋原內容\n",
+      );
+      process.exit(1);
+    }
+
+    console.log(`\n🔁 已存在 MR（!${existingMRId}），將改用 update-mr 更新...\n`);
+
+    const updateArgs = [
+      ".cursor/scripts/cr/update-mr.mjs",
+      `--development-report=${JSON.stringify(externalDevelopmentReport)}`,
+    ];
+
+    if (skipReview) {
+      updateArgs.push("--no-review");
+    }
+
+    // labels：update-mr 只做 add_labels（不覆寫），可用於補齊 AI / FE Board / Hotfix... 等
+    if (labels && labels.length > 0) {
+      updateArgs.push(`--add-labels=${labels.join(",")}`);
+    }
+
+    // reviewer：只在用戶明確指定 reviewer 時才更新（避免覆寫既有 reviewer）
+    if (userExplicitlySetReviewer && reviewer) {
+      updateArgs.push(`--reviewer=${reviewer}`);
+    }
+
+    const result = spawnSync("node", updateArgs, {
+      cwd: projectRoot,
+      encoding: "utf-8",
+      stdio: "inherit",
+    });
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    if (result.status !== 0) {
+      process.exit(result.status || 1);
+    }
+
+    return;
   }
 
   // 檢查是否應該更新 reviewer

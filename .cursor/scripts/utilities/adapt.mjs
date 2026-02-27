@@ -955,29 +955,42 @@ async function main() {
   const explicitModel = typeof args["llm-model"] === "string" ? args["llm-model"] : null;
 
   const openaiKey = process.env.OPENAI_API_KEY || env.OPENAI_API_KEY || null;
+  const compassApiToken = process.env.COMPASS_API_TOKEN || env.COMPASS_API_TOKEN || null;
+  const compassOperatorProxyUrl =
+    process.env.COMPASS_OPERATOR_PROXY_URL || env.COMPASS_OPERATOR_PROXY_URL || null;
 
   // Provider selection policy:
   // - Prefer OpenAI when OPENAI_API_KEY exists
-  // - If no OPENAI_API_KEY, degrade to no-llm automatically (do NOT fail)
+  // - If no OPENAI_API_KEY but COMPASS_API_TOKEN exists, fallback to Compass operator-proxy
+  // - If neither exists, degrade to no-llm automatically (do NOT fail)
   let provider = null;
   let degradedReason = null;
 
   if (explicitProvider) {
     const want = String(explicitProvider).toLowerCase();
     if (want === "openai") {
-      if (openaiKey) provider = "openai";
+      if (openaiKey) {
+        provider = "openai";
+      } else if (compassApiToken) {
+        provider = "compass";
+        degradedReason =
+          "指定 openai provider 但缺少 OPENAI_API_KEY，將改走 Compass operator-proxy";
+      } else {
+        degradedReason = "指定 openai provider 但缺少 OPENAI_API_KEY";
+      }
     } else if (want === "compass") {
-      degradedReason = "不支援 compass provider（已移除）";
+      if (compassApiToken) provider = "compass";
+      else degradedReason = "指定 compass provider 但缺少 COMPASS_API_TOKEN";
     } else {
       degradedReason = `未知 llm provider：${explicitProvider}`;
     }
   } else {
-    provider = openaiKey ? "openai" : null;
+    provider = openaiKey ? "openai" : compassApiToken ? "compass" : null;
   }
 
   if (!provider) {
     console.log(
-      "\n⏭️  未配置 OPENAI_API_KEY，將自動以 --no-llm 模式執行（只更新 sources/meta/cache）\n"
+      "\n⏭️  未配置 OPENAI_API_KEY 且缺少 COMPASS_API_TOKEN，將自動以 --no-llm 模式執行（只更新 sources/meta/cache）\n"
     );
     base.cache.inputHash = inputHash;
     base.cache.note = "llm skipped: no api key";
@@ -1000,7 +1013,9 @@ async function main() {
   console.log(`🤖 LLM: provider=${provider} model=${model}`);
 
   const llmOutput = await callOpenAiJson({
-    apiKey: openaiKey,
+    apiKey: provider === "openai" ? openaiKey : null,
+    compassApiToken,
+    compassOperatorProxyUrl,
     model,
     system: getAdaptSystemPrompt(),
     input: inputPayload,
