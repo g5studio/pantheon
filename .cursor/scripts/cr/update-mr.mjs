@@ -681,6 +681,17 @@ async function main() {
     }
   }
 
+  // reviewer：只在用戶明確指定 --reviewer 時才更新（避免覆寫既有 reviewer）
+  let reviewerId = null;
+  if (requestedReviewer) {
+    reviewerId = await findUserId(token, projectInfo.host, requestedReviewer);
+    if (!reviewerId) {
+      console.error(`\n❌ 找不到 reviewer: ${requestedReviewer}\n`);
+      process.exit(1);
+    }
+    console.log(`\n👤 將更新 reviewer: ${requestedReviewer}\n`);
+  }
+
   // start-task 流程保底：若檢測到 start-task context，強制補 AI label（再走白名單過濾）
   const branchTicket = currentBranch.match(/[A-Z0-9]+-\d+/)?.[0] || null;
   const startTaskInfo = readStartTaskInfo(branchTicket);
@@ -688,16 +699,6 @@ async function main() {
   if (startTaskInfo && !requestedLabelsWithStartTaskFallback.includes("AI")) {
     requestedLabelsWithStartTaskFallback.push("AI");
     console.log("🤖 檢測到 start-task context，已自動補上 AI label\n");
-    // reviewer：只在用戶明確指定 --reviewer 時才更新（避免覆寫既有 reviewer）
-    let reviewerId = null;
-    if (requestedReviewer) {
-      reviewerId = await findUserId(token, projectInfo.host, requestedReviewer);
-      if (!reviewerId) {
-        console.error(`\n❌ 找不到 reviewer: ${requestedReviewer}\n`);
-        process.exit(1);
-      }
-      console.log(`\n👤 將更新 reviewer: ${requestedReviewer}\n`);
-    }
   }
 
   // 🚨 CRITICAL: update-mr 若要新增 labels，必須先通過 adapt.json 可用性白名單
