@@ -1,8 +1,7 @@
 ---
 description: 當用戶提供 Confluence 或 Jira 鏈接時，自動使用腳本讀取內容
-alwaysApply: true
+alwaysApply: false
 ---
-
 # 自動讀取 Confluence 和 Jira 內容規則
 
 此規則定義了當用戶在 chat 中提供 Confluence 或 Jira 鏈接時，AI 應該自動使用對應的腳本讀取內容。
