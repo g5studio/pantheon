@@ -164,11 +164,6 @@ export async function callOpenAiChatCompletions({
     typeof apiKey === "string" && apiKey.trim()
       ? apiKey.trim()
       : (process.env.OPENAI_API_KEY || "").trim();
-  if (typeof effectiveApiKey !== "string" || !effectiveApiKey.trim()) {
-    throw new Error(
-      "缺少 OpenAI API key（請設定 OPENAI_API_KEY 或傳入 apiKey）",
-    );
-  }
   if (typeof model !== "string" || !model.trim()) {
     throw new Error("缺少 OpenAI model");
   }
