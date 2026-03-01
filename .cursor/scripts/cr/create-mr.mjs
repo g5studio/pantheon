@@ -1333,7 +1333,9 @@ function readAdaptKnowledgeOrExit() {
     console.error("\n❌ 找不到 adapt.json，無法驗證 labels 可用性\n");
     console.error(`📁 預期路徑：${filePath}`);
     console.error(
-      "\n✅ 請先執行：node .cursor/scripts/utilities/adapt.mjs\n",
+      "\n✅ 請先執行（擇一）：\n" +
+        "   - node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs\n" +
+        "   - node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs\n",
     );
     process.exit(1);
   }
@@ -2270,7 +2272,9 @@ async function main() {
       console.error(`📋 當前分支: ${currentBranch}`);
       console.error(`📊 現有 MR: !${existingMRId}`);
       console.error(
-        '✅ 請改用：node .cursor/scripts/cr/update-mr.mjs --development-report="<markdown>"\n',
+        "✅ 請改用（擇一）：\n" +
+          '   - node .cursor/scripts/utilities/run-pantheon-script.mjs cr/update-mr.mjs -- --development-report="<markdown>"\n' +
+          '   - node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs cr/update-mr.mjs -- --development-report="<markdown>"\n',
       );
       console.error(
         '   或加上：--update-if-exists（自動改走 update-mr 流程）\n',
@@ -2288,30 +2292,59 @@ async function main() {
 
     console.log(`\n🔁 已存在 MR（!${existingMRId}），將改用 update-mr 更新...\n`);
 
-    const updateArgs = [
-      ".cursor/scripts/cr/update-mr.mjs",
+    const runnerCandidates = [
+      join(
+        projectRoot,
+        ".pantheon",
+        ".cursor",
+        "scripts",
+        "utilities",
+        "run-pantheon-script.mjs",
+      ),
+      join(projectRoot, ".cursor", "scripts", "utilities", "run-pantheon-script.mjs"),
+      join(
+        projectRoot,
+        ".cursor",
+        "scripts",
+        "prometheus",
+        "utilities",
+        "run-pantheon-script.mjs",
+      ),
+    ];
+    const runnerPath = runnerCandidates.find((p) => existsSync(p));
+    if (!runnerPath) {
+      console.error("\n❌ 找不到 run-pantheon-script.mjs，無法執行 update-mr\n");
+      runnerCandidates.forEach((p) => console.error(`   - ${p}`));
+      process.exit(1);
+    }
+
+    const forwardArgs = [
       `--development-report=${JSON.stringify(externalDevelopmentReport)}`,
     ];
 
     if (skipReview) {
-      updateArgs.push("--no-review");
+      forwardArgs.push("--no-review");
     }
 
     // labels：update-mr 只做 add_labels（不覆寫），可用於補齊 AI / FE Board / Hotfix... 等
     if (labels && labels.length > 0) {
-      updateArgs.push(`--add-labels=${labels.join(",")}`);
+      forwardArgs.push(`--add-labels=${labels.join(",")}`);
     }
 
     // reviewer：只在用戶明確指定 reviewer 時才更新（避免覆寫既有 reviewer）
     if (userExplicitlySetReviewer && reviewer) {
-      updateArgs.push(`--reviewer=${reviewer}`);
+      forwardArgs.push(`--reviewer=${reviewer}`);
     }
 
-    const result = spawnSync("node", updateArgs, {
+    const result = spawnSync(
+      process.execPath,
+      [runnerPath, "cr/update-mr.mjs", "--", ...forwardArgs],
+      {
       cwd: projectRoot,
       encoding: "utf-8",
       stdio: "inherit",
-    });
+      },
+    );
 
     if (result.error) {
       throw result.error;

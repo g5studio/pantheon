@@ -54,7 +54,9 @@ function readAdaptKnowledgeOrExit() {
     console.error("\n❌ 找不到 adapt.json，無法驗證 labels 可用性\n");
     console.error(`📁 預期路徑：${filePath}`);
     console.error(
-      "\n✅ 請先執行：node .cursor/scripts/utilities/adapt.mjs\n",
+      "\n✅ 請先執行（擇一）：\n" +
+        "   - node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs\n" +
+        "   - node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs\n",
     );
     process.exit(1);
   }
