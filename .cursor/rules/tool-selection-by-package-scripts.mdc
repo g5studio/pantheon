@@ -1,0 +1,33 @@
+---
+description: Always check package scripts before taking actions
+alwaysApply: true
+---
+
+# Tool Selection by Package Scripts
+
+## Purpose
+
+Before executing any task, first inspect `package.json` to identify available project scripts and utilities.
+
+## Required Workflow
+
+1. Read `package.json` and review `scripts` entries before selecting tools or commands.
+2. If a matching project script exists, use that script first.
+3. Only use direct external API/web calls when no suitable script exists or when script execution fails.
+4. If falling back to direct API/web calls, explain why the fallback is necessary.
+
+## Priority Rules
+
+- For Jira ticket retrieval, prioritize `pnpm run read-jira-ticket` over direct web/API requests.
+- For Confluence retrieval, prioritize `pnpm run read-confluence-page`.
+- For Jira updates/transitions/comments, prioritize:
+  - `pnpm run update-jira`
+  - `pnpm run transition-jira-ticket`
+  - `pnpm run add-jira-comment`
+- For MR or commit-related automation, prioritize project scripts in `package.json` over custom ad-hoc commands.
+
+## Examples
+
+- Jira lookup: `pnpm run read-jira-ticket -- --ticket=FE-1234`
+- Confluence lookup: `pnpm run read-confluence-page -- --url="<confluence-url>"`
+
