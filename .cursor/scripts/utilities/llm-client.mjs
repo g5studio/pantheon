@@ -51,6 +51,7 @@ async function callCompassOperatorProxy({
   system,
   provider = "openai",
   model,
+  responseFormat = null,
 }) {
   const effectiveCompassApiToken =
     typeof compassApiToken === "string" && compassApiToken.trim()
@@ -67,18 +68,23 @@ async function callCompassOperatorProxy({
       : (process.env.COMPASS_OPERATOR_PROXY_URL ||
           "https://mac09demac-mini.balinese-python.ts.net/api/workflows/operator-proxy");
 
+  const requestBody = {
+    content,
+    system,
+    provider,
+    model,
+  };
+  if (responseFormat && typeof responseFormat === "object") {
+    requestBody.response_format = responseFormat;
+  }
+
   const resp = await fetch(effectiveUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "X-Api-Key": effectiveCompassApiToken,
     },
-    body: JSON.stringify({
-      content,
-      system,
-      provider,
-      model,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   const rawText = await resp.text().catch(() => "");
@@ -180,6 +186,7 @@ export async function callOpenAiChatCompletions({
         system,
         provider: "openai",
         model,
+        responseFormat,
       });
 
       const result = typeof compassResp?.result === "string" ? compassResp.result : "";
