@@ -6,6 +6,17 @@ description: 自動執行 commit 和建立 MR 的完整流程
 
 ## 簡化指令
 
+### 掛載專案命中規則（例如 fluid-two）
+
+**CRITICAL**：先檢查當前專案 `package.json` 是否有對應 script。
+
+- 若有：使用 `pnpm run <script> -- <args>`
+- 若沒有（fluid-two 當前就是這種情況）：改用
+  - `node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs <script-path> <args>`
+  - 在 Pantheon repo 本身可用 `node .cursor/scripts/utilities/run-pantheon-script.mjs <script-path> <args>`
+
+**禁止**在指令文件中把可用的 package script 寫成硬編碼路徑（例如 `node .cursor/scripts/...`）。
+
 **`cr multiple-ticket`** - 快速執行 commit 並建立 MR，**必須**提供多於一個 Jira ticket（預設送審，可用 `--no-review` 跳過）
 
 **CRITICAL**: `cr multiple-ticket` 指令**必須**提供多於一個 Jira ticket（當前分支單號 + 至少一個關聯單號）。如果只有一個 ticket，請使用 `cr single-ticket` 指令。
@@ -27,7 +38,7 @@ description: 自動執行 commit 和建立 MR 的完整流程
 2. **用戶語意暗示「主單與所有子任務」**：
    - 偵測關鍵字：「所有子任務」、「子項目」、「包含子任務」、「主單和子任務」、「all subtasks」、「with subtasks」等
    - → 自動詢問用戶確認
-   - → 確認後透過 Jira API 讀取子任務：`node .cursor/scripts/jira/read-jira-ticket.mjs "<ticket-id>"`
+   - → 確認後優先透過 Pantheon 內建工具讀取子任務：`pnpm run read-jira-ticket -- --ticket="<ticket-id>"`（若 host 專案無此 script，改用 `node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs jira/read-jira-ticket.mjs --ticket="<ticket-id>"`）
    - → 從回傳 JSON 的 `raw.fields.subtasks` 提取子任務單號
    - → 自動設置為 `--related-tickets` 參數
 
@@ -432,7 +443,7 @@ git log --oneline --all --grep="sportGuestClient"
 如果已經獲取到所有必要信息（type, ticket, message），且**已確認代碼符合 Cursor rules**，直接使用腳本：
 
 ```bash
-pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--skip-lint] [--auto-push]
+pnpm run agent-commit -- --type={type} --ticket={ticket} --message="{message}" [--skip-lint] [--auto-push]
 ```
 
 參數說明：
@@ -704,13 +715,13 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
    腳本會自動使用 GitLab CLI (glab) 或 API token 建立 MR：
    
    ```bash
-   node .cursor/scripts/cr/create-mr.mjs --development-report="<markdown>" --agent-version='<版本JSON>' --labels="label1,label2" [--reviewer="@username"] [--target=main] [--no-draft] [--no-review] [--related-tickets="IN-1235,IN-1236"] [--no-notify]
+   pnpm run create-mr -- --development-report="<markdown>" --agent-version='<版本JSON>' --labels="label1,label2" [--reviewer="@username"] [--target=main] [--no-draft] [--no-review] [--related-tickets="IN-1235,IN-1236"] [--no-notify]
    ```
 
    **方法 B: 更新既有 MR：使用 update-mr 腳本（任何 MR 修改一律走此腳本）**
 
    ```bash
-   node .cursor/scripts/cr/update-mr.mjs --development-report="<markdown>"
+   pnpm run update-mr -- --development-report="<markdown>"
    ```
    
    **參數說明：**
@@ -750,7 +761,7 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
    
    2. **根據用戶的回應**：
       - 如果選擇「使用預設」：重新執行 `pnpm run create-mr`（不傳遞 `--reviewer` 參數，讓腳本使用預設值 `@william.chiang`）
-      - 如果選擇「重新輸入」：詢問用戶輸入新的 reviewer 用戶名，然後重新執行 `pnpm run create-mr --reviewer="<新的reviewer>" ...`
+      - 如果選擇「重新輸入」：詢問用戶輸入新的 reviewer 用戶名，然後重新執行 `pnpm run create-mr -- --reviewer="<新的reviewer>" ...`
    
    3. **重複步驟 1-2**，直到找到有效的 reviewer 或用戶選擇使用預設 reviewer
    
@@ -881,8 +892,8 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
    - Type: feat (從變更內容推斷)
    - Ticket: FE-7841 (從分支名稱推斷)
    - Message: add ocr image locale check tool (從變更檔案推斷)
-4. 自動執行: pnpm run agent-commit --type=feat --ticket=FE-7841 --message="add ocr image locale check tool" --auto-push
-5. 自動執行: pnpm run create-mr --related-tickets="IN-1235,IN-1236"
+4. 自動執行: pnpm run agent-commit -- --type=feat --ticket=FE-7841 --message="add ocr image locale check tool" --auto-push
+5. 自動執行: pnpm run create-mr -- --related-tickets="IN-1235,IN-1236"
 6. MR description: FE-7841 , IN-1235 , IN-1236
 7. 預設提交 AI review（如需不送審，可用 `--no-review`）
 8. 在 chat 中提供格式化的執行結果（包含 Commit 資訊、MR 資訊、變更內容）
@@ -904,7 +915,7 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
     2. 否，我會手動提供關聯單號"
 
 4. 用戶選擇: 1
-5. AI 執行: node .cursor/scripts/jira/read-jira-ticket.mjs "FE-7841"
+5. AI 執行: pnpm run read-jira-ticket -- --ticket="FE-7841"（若無 script 則改用 `.pantheon` runner）
 6. 從回傳 JSON 的 raw.fields.subtasks 提取子任務：FE-7842, FE-7843, FE-7844
 7. AI 確認：
    "找到以下子任務：
@@ -918,7 +929,7 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
     3. 取消，改用其他方式"
 
 8. 用戶選擇: 1
-9. 自動執行 commit 和 create-mr --related-tickets="FE-7842,FE-7843,FE-7844"
+9. 自動執行 commit 和 `pnpm run create-mr -- --related-tickets="FE-7842,FE-7843,FE-7844"`
 10. MR description: FE-7841 , FE-7842 , FE-7843 , FE-7844
 11. 自動提交 AI review
 ```
@@ -950,7 +961,7 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
    - Type: feat (從變更內容推斷)
    - Ticket: FE-7841 (從分支名稱推斷)
    - Message: add ocr image locale check tool (從變更檔案推斷)
-3. 自動執行: pnpm run agent-commit --type=feat --ticket=FE-7841 --message="add ocr image locale check tool" --auto-push
+3. 自動執行: pnpm run agent-commit -- --type=feat --ticket=FE-7841 --message="add ocr image locale check tool" --auto-push
 4. 從分支名稱提取單號（例如：feature/FE-7841 → FE-7841）
 5. **略過關聯單號詢問環節**，直接使用當前分支單號
 6. 自動執行: pnpm run create-mr（不傳遞 --reviewer 參數，讓腳本自動從環境變數讀取或使用預設值）
@@ -968,7 +979,7 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
    - Type: feat (從變更內容推斷)
    - Ticket: FE-7841 (從分支名稱推斷)
    - Message: add ocr image locale check tool (從變更檔案推斷)
-3. 自動執行: pnpm run agent-commit --type=feat --ticket=FE-7841 --message="add ocr image locale check tool" --auto-push
+3. 自動執行: pnpm run agent-commit -- --type=feat --ticket=FE-7841 --message="add ocr image locale check tool" --auto-push
 4. `commit-and-push` 指令僅執行 commit 和 push，不建立 MR，也不送審
 5. 流程結束
 ```
@@ -981,7 +992,7 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
    - Type: feat (新功能)
    - Ticket: FE-7838 (從對話中獲取)
    - Message: enable new sport baseball in stg, dev, and demo environments
-4. 執行: pnpm run agent-commit --type=feat --ticket=FE-7838 --message="enable new sport baseball in stg, dev, and demo environments" --auto-push
+4. 執行: pnpm run agent-commit -- --type=feat --ticket=FE-7838 --message="enable new sport baseball in stg, dev, and demo environments" --auto-push
 ```
 
 **範例 2: 用戶說「提交代碼，ticket 是 FE-7838」**
@@ -1022,7 +1033,7 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
 4. 用戶選擇：1（有）
 5. 詢問用戶：請提供關聯單號（多個單號請用空格或逗號分隔）
 6. 用戶輸入：IN-1235 IN-1236
-7. 執行: pnpm run create-mr --related-tickets="IN-1235,IN-1236"（不傳遞 --reviewer 參數，讓腳本自動從環境變數讀取或使用預設值）
+7. 執行: pnpm run create-mr -- --related-tickets="IN-1235,IN-1236"（不傳遞 --reviewer 參數，讓腳本自動從環境變數讀取或使用預設值）
 9. 腳本會自動使用 glab 或 API token 建立 MR
 10. MR description: IN-1234 , IN-1235 , IN-1236
 11. 預設提交 AI review
@@ -1037,7 +1048,7 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
    選項：1. 有  2. 無
 4. 用戶選擇：2（無）
 5. 檢查用戶訊息 → 檢測到「不送審」意圖
-6. 執行: pnpm run create-mr --no-review（不傳遞 --reviewer 參數，讓腳本自動從環境變數讀取或使用預設值）
+6. 執行: pnpm run create-mr -- --no-review（不傳遞 --reviewer 參數，讓腳本自動從環境變數讀取或使用預設值）
 7. 腳本會自動使用 glab 或 API token 建立 MR
 8. MR description: IN-1234
 9. 跳過 AI review 提交（--no-review）
@@ -1048,12 +1059,12 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
 ```
 1. 檢查 git 狀態 → 發現變更
 2. 推斷 commit 信息
-3. 執行: pnpm run agent-commit --type=feat --ticket=FE-7838 --message="..." --auto-push
+3. 執行: pnpm run agent-commit -- --type=feat --ticket=FE-7838 --message="..." --auto-push
 4. 從分支名稱提取單號（例如：feature/FE-7838 → FE-7838）
 5. 詢問用戶：除了當前分支單號 FE-7838 外，是否有同步修復其他單號？
    選項：1. 有  2. 無
 6. 用戶選擇：2（無）
-7. **檢測到用戶明確指定了 reviewer: @john.doe** → 執行: pnpm run create-mr --reviewer="@john.doe"
+7. **檢測到用戶明確指定了 reviewer: @john.doe** → 執行: pnpm run create-mr -- --reviewer="@john.doe"
    - **注意**：因為用戶明確指定了 reviewer，所以必須傳遞 `--reviewer` 參數
 8. MR description: FE-7838
 9. 預設提交 AI review（如需不送審，可用 `--no-review`）
@@ -1065,12 +1076,12 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
 1. 檢查 git 狀態 → 發現變更
 2. **驗證多 ticket 要求**：偵測到 IN-1235 → 驗證通過
 3. 自動從上下文推斷 commit 信息
-4. 執行: pnpm run agent-commit --type=feat --ticket=FE-7838 --message="..." --auto-push
+4. 執行: pnpm run agent-commit -- --type=feat --ticket=FE-7838 --message="..." --auto-push
 5. **智能偵測到文字描述中的 reviewer: @john.doe**
 6. 詢問用戶：偵測到文字描述中提到了 reviewer：@john.doe，是否要將此用戶設置為 --reviewer 參數？
    選項：1. 是，使用 @john.doe 作為 reviewer  2. 否，不使用 reviewer 參數
 7. 用戶選擇：1（是）
-8. **因為用戶明確指定了 reviewer** → 執行: pnpm run create-mr --reviewer="@john.doe" --related-tickets="IN-1235"
+8. **因為用戶明確指定了 reviewer** → 執行: pnpm run create-mr -- --reviewer="@john.doe" --related-tickets="IN-1235"
 9. MR description: FE-7838 , IN-1235
 10. 預設提交 AI review（如需不送審，可用 `--no-review`）
 13. 在 chat 中提供格式化的執行結果（包含 Commit 資訊、MR 資訊、變更內容）
@@ -1109,6 +1120,7 @@ pnpm run agent-commit --type={type} --ticket={ticket} --message="{message}" [--s
 
 ```bash
 pnpm run agent-commit \
+  -- \
   --type={推斷或獲取的 type} \
   --ticket={推斷或獲取的 ticket} \
   --message="{推斷或獲取的 message}" \
@@ -1121,6 +1133,7 @@ Commit 並推送完成後，建立 MR：
 
 ```bash
 pnpm run create-mr \
+  -- \
   --labels="{labels 用逗號分隔，例：4.0UI,Static File}" \
   --reviewer="@william.chiang" \
   --target=main
@@ -1133,6 +1146,7 @@ pnpm run create-mr \
 ```bash
 # 1. Commit 並推送
 pnpm run agent-commit \
+  -- \
   --type={type} \
   --ticket={ticket} \
   --message="{message}" \
@@ -1140,6 +1154,7 @@ pnpm run agent-commit \
 
 # 2. 建立 MR
 pnpm run create-mr \
+  -- \
   --labels="{labels 用逗號分隔，例：4.0UI,Static File}" \
   --reviewer="@william.chiang" \
   --target=main
