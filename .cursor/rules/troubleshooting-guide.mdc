@@ -110,6 +110,48 @@ pnpm run agent-commit --type=feat --ticket=FE-1234 --message="..."
 - 如果 `8192` 仍不足，可視機器資源調整（例如 12288 / 16384），但請避免超過可用記憶體造成系統換頁（swap）反而更慢或卡死
 - 若只在 CI / 特定機器發生，優先視為該環境資源限制問題，而非程式碼或 ESLint 規則錯誤
 
+### 用例 3：查無可用腳本時的掛載專案路徑處理（Pantheon mount-safe）
+
+**問題描述**：
+- 執行指令時發現 host 專案 `package.json` 沒有對應 script
+- 直接執行 `.cursor/scripts/...` 路徑失敗（常見於 Pantheon 掛載到其他專案）
+- 錯誤訊息常見為找不到腳本或 command not found
+
+**判斷標準**：
+- 已先檢查 host 專案 `package.json`，確認無對應 script
+- 目前情境屬於 Pantheon 掛載專案（可使用 `.pantheon` 路徑）
+- 原本腳本路徑在 host 專案中不存在或不可用
+
+**處理方式**：
+- **優先採用**：先檢查 host 專案 `package.json` 是否有對應 script
+  - 有對應 script：使用 `pnpm run <script> -- <args>`
+  - 無對應 script：使用 `node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs <script-path> <args>`
+- **避免硬編碼**：避免直接使用 `node .cursor/scripts/<pantheon-script>.mjs`（在掛載情境容易失效）
+
+**執行範例**：
+
+**錯誤情況**：
+```bash
+pnpm run read-jira-ticket -- --ticket=FE-1234
+# 錯誤：Missing script: read-jira-ticket
+```
+
+**正確處理**：
+```bash
+# 1) 先檢查 host 專案 package.json 是否有對應 script
+# 2) 若無，改用 Pantheon runner（掛載路徑）
+node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs jira/read-jira-ticket.mjs --ticket=FE-1234
+```
+
+**常見適用場景**：
+- `cr single-ticket` / `cr multiple-ticket` 流程中的 Jira 讀取
+- `start-task` / `reverse-engineering` 等 operator 指令流程
+- 任何在 host 專案找不到 script、但可由 Pantheon 提供腳本能力的情境
+
+**注意事項**：
+- 若 `.pantheon` 路徑也不可用，才回報錯誤並依一般錯誤流程處理
+- 此用例的重點是「先檢查 host script，再 fallback `.pantheon` runner」
+
 ## 使用流程
 
 當 AI 遇到問題時，應遵循以下流程：
