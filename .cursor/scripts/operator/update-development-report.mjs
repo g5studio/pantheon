@@ -213,7 +213,13 @@ function coerceJsonObjectFromModel(text) {
   throw new Error("無法從 LLM 回傳中解析 JSON");
 }
 
-async function callCompassOperatorProxyJson({ model, system, input }) {
+async function callCompassOperatorProxyJson({
+  model,
+  system,
+  input,
+  schema,
+  schemaName = "structured_output",
+}) {
   const token = getCompassApiToken();
   if (!token) {
     throw new Error(
@@ -225,18 +231,30 @@ async function callCompassOperatorProxyJson({ model, system, input }) {
     process.env.COMPASS_OPERATOR_PROXY_URL ||
     "https://mac09demac-mini.balinese-python.ts.net/api/workflows/operator-proxy";
 
+  const requestBody = {
+    provider: "openai",
+    model,
+    system: String(system || ""),
+    content: JSON.stringify(input),
+  };
+  if (schema && typeof schema === "object") {
+    requestBody.response_format = {
+      type: "json_schema",
+      json_schema: {
+        name: String(schemaName || "structured_output"),
+        strict: true,
+        schema,
+      },
+    };
+  }
+
   const resp = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "X-Api-Key": token,
     },
-    body: JSON.stringify({
-      provider: "openai",
-      model,
-      system: String(system || ""),
-      content: JSON.stringify(input),
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   const rawText = await resp.text().catch(() => "");
@@ -347,6 +365,8 @@ async function reviewDevelopmentReportWithLlm({ reportContent, startTaskInfo }) 
       model,
       system,
       input,
+      schema,
+      schemaName: "development_report_review",
     });
     if (
       typeof obj?.ok !== "boolean" ||
