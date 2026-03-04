@@ -4,6 +4,12 @@ description: 問題定位功能：無法重現/機率性發生的線上問題排
 
 當用戶輸入 `reverse-engineering` 時，**所有交互都在 Cursor chat 中完成**，執行以下完整流程：
 
+**CRITICAL（掛載專案命中）**：在 fluid-two 這類 Pantheon 掛載情境下，先檢查 host 專案 `package.json`：
+- 有對應 script：使用 `pnpm run <script> -- <args>`
+- 無對應 script：使用 `node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs <script-path> <args>`
+
+避免使用硬編碼 Pantheon 腳本路徑（例如 `node .cursor/scripts/<pantheon-script>.mjs`），以確保 Cursor 可以準確命中實際腳本位置。
+
 ## 流程說明
 
 ### 1. 詢問 Jira 單號

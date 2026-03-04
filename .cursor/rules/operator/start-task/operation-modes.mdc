@@ -13,6 +13,12 @@ alwaysApply: false
 
 此規則適用於 `start-task` 指令執行的起始階段，當詢問用戶 Jira 單號**之前**，必須先詢問用戶選擇行為模式。
 
+**CRITICAL（掛載專案命中）**：在 fluid-two 這類 Pantheon 掛載情境下，先檢查 host 專案 `package.json`：
+- 有對應 script：使用 `pnpm run <script> -- <args>`
+- 無對應 script：使用 `node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs <script-path> <args>`
+
+避免使用硬編碼 Pantheon 腳本路徑（例如 `node .cursor/scripts/<pantheon-script>.mjs`），以確保 Cursor 可以準確命中實際腳本位置。
+
 ---
 
 ## 模式選擇流程
