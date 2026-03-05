@@ -25,6 +25,7 @@
 
 import { execSync } from "child_process";
 import { getProjectRoot, getGitLabToken } from "../utilities/env-loader.mjs";
+import { appendAgentSignature } from "../utilities/agent-signature.mjs";
 
 const projectRoot = getProjectRoot();
 
@@ -381,7 +382,7 @@ async function main() {
   }
 
   // 檢查留言內容
-  const message = args.message;
+  const message = appendAgentSignature(args.message);
   if (!message) {
     console.error("❌ 請提供 --message=<留言內容>\n");
     showUsage();

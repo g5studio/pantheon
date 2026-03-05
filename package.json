@@ -1,0 +1,28 @@
+{
+  "name": "pantheon",
+  "version": "1.1.2",
+  "private": true,
+  "scripts": {
+    "notify-cursor-rules-failed": "node .cursor/scripts/utilities/run-pantheon-script.mjs notification/notify-cursor-rules-failed.mjs",
+    "agent-commit": "node .cursor/scripts/utilities/run-pantheon-script.mjs cr/agent-commit.mjs",
+    "auto-commit-and-mr": "node .cursor/scripts/utilities/run-pantheon-script.mjs cr/auto-commit-and-mr.mjs",
+    "create-mr": "node .cursor/scripts/utilities/run-pantheon-script.mjs cr/create-mr.mjs",
+    "update-mr": "node .cursor/scripts/utilities/run-pantheon-script.mjs cr/update-mr.mjs",
+    "label-analyzer": "node .cursor/scripts/utilities/run-pantheon-script.mjs cr/label-analyzer.mjs",
+    "read-jira-ticket": "node .cursor/scripts/utilities/run-pantheon-script.mjs jira/read-jira-ticket.mjs",
+    "read-confluence-page": "node .cursor/scripts/utilities/run-pantheon-script.mjs jira/read-confluence-page.mjs",
+    "update-jira": "node .cursor/scripts/utilities/run-pantheon-script.mjs jira/update-jira.mjs",
+    "transition-jira-ticket": "node .cursor/scripts/utilities/run-pantheon-script.mjs jira/transition-jira-ticket.mjs",
+    "add-jira-comment": "node .cursor/scripts/utilities/run-pantheon-script.mjs jira/add-jira-comment.mjs",
+    "update-confluence-page": "node .cursor/scripts/utilities/run-pantheon-script.mjs jira/update-confluence-page.mjs",
+    "mr-comment": "node .cursor/scripts/utilities/run-pantheon-script.mjs gitlab/mr-comment.mjs",
+    "bump-version": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/bump-version.mjs",
+    "parameter-detector": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/parameter-detector.mjs",
+    "oracle": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/oracle.mjs",
+    "repo-knowledge": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/repo-knowledge.mjs",
+    "adapt": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs",
+    "agent-signature": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/agent-signature.mjs",
+    "llm-client": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/llm-client.mjs",
+    "env-loader": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/env-loader.mjs"
+  }
+}

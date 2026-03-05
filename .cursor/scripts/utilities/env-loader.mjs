@@ -13,7 +13,7 @@
  */
 
 import { readFileSync, existsSync } from "fs";
-import { join } from "path";
+import { join, sep } from "path";
 import { execSync } from "child_process";
 
 /**
@@ -22,7 +22,30 @@ import { execSync } from "child_process";
  * 確保在 submodule 環境下也能正確找到配置文件。
  */
 export function getProjectRoot() {
-  return process.cwd();
+  const cwd = process.cwd();
+
+  /**
+   * 根治常見誤用：
+   * - 當 Pantheon 以 submodule 掛載在主專案的 `.pantheon/` 時
+   * - 使用者/agent 可能會 `cd .pantheon` 後直接執行腳本
+   *
+   * 若仍以 cwd 當作專案根目錄，會導致：
+   * - 讀不到主專案根目錄的 `.env.local` 或 `.cursor/.env.local`
+   * - 進而誤判為「Jira 配置缺失」
+   *
+   * 因此：若 cwd 位於 `.pantheon` 內，將根目錄校正為主專案根目錄。
+   */
+  const pantheonSegment = `${sep}.pantheon${sep}`;
+  if (cwd.includes(pantheonSegment)) {
+    return cwd.split(pantheonSegment)[0];
+  }
+
+  const pantheonDirSuffix = `${sep}.pantheon`;
+  if (cwd.endsWith(pantheonDirSuffix)) {
+    return cwd.slice(0, -pantheonDirSuffix.length) || cwd;
+  }
+
+  return cwd;
 }
 
 /**
@@ -216,4 +239,31 @@ export function getCompassApiToken() {
 export function getMRReviewer() {
   const envLocal = loadEnvLocal();
   return process.env.MR_REVIEWER || envLocal.MR_REVIEWER || null;
+}
+
+/**
+ * 獲取個性化 agent 顯示名稱（從環境變數或 .env.local）
+ *
+ * - 未設置 / 空字串：回傳 null（視同無此功能，行為保持既有不變）
+ * - 建議限制長度：預設最多 40 字元（超過則截斷）
+ *
+ * @param {Object} options
+ * @param {number} options.maxLength - 最大長度（預設 40）
+ * @returns {string|null}
+ */
+export function getAgentDisplayName(options = {}) {
+  const envLocal = loadEnvLocal();
+  const raw = process.env.AGENT_DISPLAY_NAME ?? envLocal.AGENT_DISPLAY_NAME;
+  if (typeof raw !== "string") return null;
+
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const maxLength =
+    typeof options.maxLength === "number" && options.maxLength > 0
+      ? options.maxLength
+      : 40;
+
+  if (trimmed.length > maxLength) return trimmed.slice(0, maxLength);
+  return trimmed;
 }

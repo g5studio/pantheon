@@ -13,6 +13,8 @@
  */
 
 import { execSync, spawnSync } from "child_process";
+import { existsSync, readFileSync } from "fs";
+import { join } from "path";
 import readline from "readline";
 import {
   getProjectRoot,
@@ -23,6 +25,10 @@ import {
   getGitLabToken as getGitLabTokenFromEnvLoader,
 } from "../utilities/env-loader.mjs";
 import { readStartTaskInfo } from "./label-analyzer.mjs";
+import {
+  appendAgentSignature,
+  stripTrailingAgentSignature,
+} from "../utilities/agent-signature.mjs";
 
 const projectRoot = getProjectRoot();
 
@@ -40,6 +46,74 @@ function exec(command, options = {}) {
     }
     throw error;
   }
+}
+
+function readAdaptKnowledgeOrExit() {
+  const filePath = join(projectRoot, "adapt.json");
+  if (!existsSync(filePath)) {
+    console.error("\n❌ 找不到 adapt.json，無法驗證 labels 可用性\n");
+    console.error(`📁 預期路徑：${filePath}`);
+    console.error(
+      "\n✅ 請先執行（擇一）：\n" +
+        "   - node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs\n" +
+        "   - node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs\n",
+    );
+    process.exit(1);
+  }
+
+  try {
+    const text = readFileSync(filePath, "utf-8").replace(/^\uFEFF/, "");
+    return JSON.parse(text);
+  } catch (e) {
+    console.error("\n❌ 讀取 adapt.json 失敗，無法驗證 labels 可用性\n");
+    console.error(`📁 路徑：${filePath}`);
+    console.error(`原因：${e.message}\n`);
+    process.exit(1);
+  }
+}
+
+function getAdaptAllowedLabelSet() {
+  const knowledge = readAdaptKnowledgeOrExit();
+  const list = Array.isArray(knowledge?.labels) ? knowledge.labels : [];
+  const allowed = new Set();
+  for (const item of list) {
+    const name = typeof item?.name === "string" ? item.name.trim() : "";
+    if (!name) continue;
+
+    const a = item.applicable;
+    const ok =
+      a === undefined ||
+      a === null ||
+      a === true ||
+      (typeof a === "object" && a !== null && a.ok === true);
+    if (ok) allowed.add(name);
+  }
+  return allowed;
+}
+
+function filterLabelsByAdaptAllowed(labelsToFilter, allowedSet, labelSource) {
+  const input = Array.isArray(labelsToFilter) ? labelsToFilter : [];
+  const valid = [];
+  const invalid = [];
+
+  for (const raw of input) {
+    const label = String(raw || "").trim();
+    if (!label) continue;
+    if (allowedSet.has(label)) valid.push(label);
+    else invalid.push(label);
+  }
+
+  if (invalid.length > 0) {
+    console.error(
+      `\n❌ 以下 ${labelSource} 的 labels 未在 adapt.json 標示為可用，已過濾：\n`,
+    );
+    invalid.forEach((l) => console.error(`   - ${l}`));
+    console.error(
+      "\n💡 若要使用上述 labels，請先更新 adapt.json 的 labels/applicable.ok（再重新執行 update-mr）\n",
+    );
+  }
+
+  return { valid, invalid };
 }
 
 function hasGlab() {
@@ -228,6 +302,29 @@ function getProjectInfo() {
   throw new Error("無法解析 remote URL");
 }
 
+async function findUserId(token, host, username) {
+  try {
+    const cleanUsername = String(username || "").replace(/^@/, "");
+    if (!cleanUsername) return null;
+
+    const response = await fetch(
+      `${host}/api/v4/users?username=${encodeURIComponent(cleanUsername)}`,
+      {
+        headers: { "PRIVATE-TOKEN": token },
+      },
+    );
+    if (!response.ok) return null;
+
+    const users = await response.json();
+    if (Array.isArray(users) && users.length > 0) {
+      return users[0]?.id ?? null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function findExistingMRWithGlab(sourceBranch) {
   try {
     const result = exec(
@@ -285,10 +382,19 @@ async function updateMRDescription(
   host,
   projectPath,
   mrIid,
-  description
+  description,
+  addLabels = [],
+  reviewerId = null
 ) {
   const url = `${host}/api/v4/projects/${projectPath}/merge_requests/${mrIid}`;
   const body = { description };
+  if (Array.isArray(addLabels) && addLabels.length > 0) {
+    // 只帶入 add_labels，避免覆寫現有 labels
+    body.add_labels = addLabels.join(",");
+  }
+  if (reviewerId) {
+    body.reviewer_ids = [reviewerId];
+  }
   const response = await fetch(url, {
     method: "PUT",
     headers: {
@@ -326,53 +432,6 @@ function normalizeExternalMarkdownArg(input) {
   return content;
 }
 
-function hasMarkdownTable(content, expectedHeaderLine) {
-  if (!content) return false;
-  const headerIdx = content.indexOf(expectedHeaderLine);
-  if (headerIdx === -1) return false;
-  const afterHeader = content.slice(headerIdx);
-  return afterHeader.includes("\n|---|") && /(\n\|.+\|)/.test(afterHeader);
-}
-
-function validateMrDescriptionFormat(description, startTaskInfo) {
-  const desc = typeof description === "string" ? description : "";
-  const missing = [];
-
-  if (
-    !desc.includes("## 📋 關聯單資訊") ||
-    !hasMarkdownTable(desc, "| 項目 | 值 |")
-  ) {
-    missing.push("## 📋 關聯單資訊（含表格）");
-  }
-  if (!desc.includes("## 📝 變更摘要")) {
-    missing.push("## 📝 變更摘要");
-  }
-  if (
-    !desc.includes("### 變更內容") ||
-    !hasMarkdownTable(desc, "| 檔案 | 狀態 | 說明 |")
-  ) {
-    missing.push("### 變更內容（含檔案表格：| 檔案 | 狀態 | 說明 |）");
-  }
-  if (
-    !desc.includes("## ⚠️ 風險評估") ||
-    !hasMarkdownTable(desc, "| 檔案 | 風險等級 | 評估說明 |")
-  ) {
-    missing.push("## ⚠️ 風險評估（含表格：| 檔案 | 風險等級 | 評估說明 |）");
-  }
-
-  const issueType = startTaskInfo?.issueType;
-  const isBug =
-    typeof issueType === "string" && issueType.toLowerCase().includes("bug");
-  if (isBug) {
-    if (!desc.includes("## 影響範圍"))
-      missing.push("## 影響範圍（Bug 類型必須）");
-    if (!desc.includes("## 根本原因"))
-      missing.push("## 根本原因（Bug 類型必須）");
-  }
-
-  return { ok: missing.length === 0, missing, isBug };
-}
-
 const REPORT_START = "<!-- PANTHEON_DEVELOPMENT_REPORT_START -->";
 const REPORT_END = "<!-- PANTHEON_DEVELOPMENT_REPORT_END -->";
 
@@ -407,7 +466,7 @@ async function upsertAiReviewMarkerNote(
   headSha
 ) {
   const notes = await listMrNotes(token, host, projectPath, mrIid, 100);
-  const body = buildAiReviewMarkerBody(headSha);
+  const body = appendAgentSignature(buildAiReviewMarkerBody(headSha));
   const existing = notes.find(
     (n) =>
       typeof n.body === "string" && n.body.includes(AI_REVIEW_MARKER_PREFIX)
@@ -506,6 +565,22 @@ async function main() {
   }
 
   const skipReview = args.includes("--no-review");
+  const reviewerArg = args.find((a) => a.startsWith("--reviewer="));
+  const requestedReviewer = reviewerArg
+    ? reviewerArg.split("=").slice(1).join("=").trim()
+    : null;
+  const labelsArg =
+    args.find((a) => a.startsWith("--add-labels=")) ||
+    args.find((a) => a.startsWith("--labels="));
+  const requestedLabels = labelsArg
+    ? labelsArg
+        .split("=")
+        .slice(1)
+        .join("=")
+        .split(",")
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0)
+    : [];
 
   const uncommitted = getGitStatus();
   if (uncommitted.length > 0) {
@@ -569,26 +644,15 @@ async function main() {
   // merge description（避免重複）
   const existingDescription =
     typeof mrDetails.description === "string" ? mrDetails.description : "";
-  const mergedDescription = upsertDevelopmentReport(
+  const reportForDescription = stripTrailingAgentSignature(externalReport);
+  let mergedDescription = upsertDevelopmentReport(
     existingDescription,
-    externalReport
+    reportForDescription
   );
-
-  // 格式驗證（回歸檢查）
-  const startTaskInfo = readStartTaskInfo();
-  const validation = validateMrDescriptionFormat(
-    mergedDescription,
-    startTaskInfo
+  // FE-8004: 署名必須為 MR description 的最後一行（可見內容）
+  mergedDescription = appendAgentSignature(
+    stripTrailingAgentSignature(mergedDescription)
   );
-  if (!validation.ok) {
-    console.error(
-      "\n❌ MR description 開發報告格式不符合規範，已中止更新 MR\n"
-    );
-    console.error("📋 缺少以下必要區塊：");
-    validation.missing.forEach((m) => console.error(`- ${m}`));
-    console.error("");
-    process.exit(1);
-  }
 
   // 更新 MR（使用 API token；若沒有 token，嘗試引導 glab token login）
   if (!token) {
@@ -620,12 +684,43 @@ async function main() {
     }
   }
 
+  // reviewer：只在用戶明確指定 --reviewer 時才更新（避免覆寫既有 reviewer）
+  let reviewerId = null;
+  if (requestedReviewer) {
+    reviewerId = await findUserId(token, projectInfo.host, requestedReviewer);
+    if (!reviewerId) {
+      console.error(`\n❌ 找不到 reviewer: ${requestedReviewer}\n`);
+      process.exit(1);
+    }
+    console.log(`\n👤 將更新 reviewer: ${requestedReviewer}\n`);
+  }
+
+  // 🚨 CRITICAL: update-mr 若要新增 labels，必須先通過 adapt.json 可用性白名單
+  let labelsToAdd = [];
+  if (requestedLabels.length > 0) {
+    const adaptAllowedLabelSet = getAdaptAllowedLabelSet();
+    const adaptCheck = filterLabelsByAdaptAllowed(
+      requestedLabels,
+      adaptAllowedLabelSet,
+      "外部傳入（準備新增）",
+    );
+    labelsToAdd = adaptCheck.valid;
+
+    if (labelsToAdd.length > 0) {
+      console.log(`\n🏷️  將新增 labels: ${labelsToAdd.join(", ")}\n`);
+    } else {
+      console.log("\n🏷️  未提供任何可用 labels（或已全數被過濾），將略過 labels 更新\n");
+    }
+  }
+
   const updated = await updateMRDescription(
     token,
     projectInfo.host,
     projectInfo.projectPath,
     mrIid,
-    mergedDescription
+    mergedDescription,
+    labelsToAdd,
+    reviewerId
   );
 
   console.log("\n✅ MR 更新成功！\n");
