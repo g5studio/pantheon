@@ -1,0 +1,31 @@
+---
+alwaysApply: true
+---
+
+# Pantheon Script Mount-Safe 守門規則
+
+當任務需要執行 Pantheon 提供的腳本時，AI 必須先用 mount-safe 方式判斷執行入口，避免把 host 專案缺少 script 或 `.cursor/scripts/...` 不存在，誤判成 Pantheon 腳本不存在。
+
+## 強制流程
+
+1. 先檢查 host 專案 `package.json` 是否有對應 script
+2. 若有：使用 `pnpm run <script> -- <args>`
+3. 若無：使用 `node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs <script-path> <args>`
+4. 只有在 Pantheon 專案本身，才使用 `node .cursor/scripts/utilities/run-pantheon-script.mjs <script-path> <args>`
+
+## 禁止事項
+
+- 不要直接以 `node .cursor/scripts/<...>.mjs` 當成掛載專案的預設入口
+- 不要用搜尋結果為空，判定 Pantheon 腳本不存在
+- 不要在 host 專案 `.cursor/scripts/...` 缺檔後，直接回報腳本不存在
+
+## 適用訊號
+
+- `Missing script`
+- `MODULE_NOT_FOUND`
+- `command not found`
+- 使用者提到 `.pantheon`、Pantheon、Prometheus 指令
+
+## 最小處理原則
+
+一旦出現上述訊號，優先回到 mount-safe 流程，不要先做檔名搜尋推論。

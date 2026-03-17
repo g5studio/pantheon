@@ -15,26 +15,53 @@ description: 生成/更新 repo 知識庫 JSON（labels / coding-standard / git-
 當用戶輸入 `adapt` 時，AI 執行：
 
 ```bash
-node .cursor/scripts/utilities/adapt.mjs
+# 優先使用 host 專案 script
+pnpm run adapt
+
+# 若 host 專案沒有對應 script，改用 Pantheon runner（掛載專案）
+node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs
+
+# 若目前就在 Pantheon 專案本身，才使用本地路徑
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs
 ```
+
+### 執行規則（CRITICAL）
+
+為避免在掛載專案中誤判「腳本不存在」，AI 執行 `adapt` 時 **必須** 遵循以下順序：
+
+1. 先檢查 host 專案 `package.json` 是否有 `adapt` script
+2. 有的話使用 `pnpm run adapt -- <args>`
+3. 沒有的話使用 `node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs <args>`
+4. 只有在 Pantheon 專案本身，才使用 `node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs <args>`
+5. **不要**用搜尋結果或 host 專案 `.cursor/scripts/utilities/adapt.mjs` 是否存在，來判定 Pantheon `adapt` 是否存在
 
 常用參數：
 
 ```bash
 # 指定輸出 JSON 位置（預設：adapt.json）
-node .cursor/scripts/utilities/adapt.mjs --file="adapt.json"
+pnpm run adapt -- --file="adapt.json"
+# 或
+node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs --file="adapt.json"
 
 # 限制抽樣 MR 數量（預設：50）
-node .cursor/scripts/utilities/adapt.mjs --max-mrs=50
+pnpm run adapt -- --max-mrs=50
+# 或
+node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs --max-mrs=50
 
 # 指定 GitLab 主機（預設：從 remote.origin.url 解析）
-node .cursor/scripts/utilities/adapt.mjs --gitlab-host="https://gitlab.service-hub.tech"
+pnpm run adapt -- --gitlab-host="https://gitlab.service-hub.tech"
+# 或
+node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs --gitlab-host="https://gitlab.service-hub.tech"
 
 # 指定 LLM provider/model（若不指定，model 預設為 gpt-5.2）
-node .cursor/scripts/utilities/adapt.mjs --llm-provider="openai" --llm-model="gpt-5.2"
+pnpm run adapt -- --llm-provider="openai" --llm-model="gpt-5.2"
+# 或
+node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs --llm-provider="openai" --llm-model="gpt-5.2"
 
 # 僅收集資料，不呼叫 LLM（仍會把 sources/meta 寫回 JSON）
-node .cursor/scripts/utilities/adapt.mjs --no-llm
+pnpm run adapt -- --no-llm
+# 或
+node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs --no-llm
 ```
 
 ### 依賴的環境變數（擇一即可）
@@ -64,31 +91,33 @@ node .cursor/scripts/utilities/adapt.mjs --no-llm
 此工具針對同一份 repo 知識庫 JSON 做 CRUD（支援 section 級別操作）。
 
 ```bash
-node .cursor/scripts/utilities/repo-knowledge.mjs --help
+pnpm run repo-knowledge -- --help
+# 或
+node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs utilities/repo-knowledge.mjs --help
 ```
 
 常用範例：
 
 ```bash
 # Create（初始化/建檔）
-node .cursor/scripts/utilities/repo-knowledge.mjs init
+pnpm run repo-knowledge -- init
 
 # Read（整份）
-node .cursor/scripts/utilities/repo-knowledge.mjs read
+pnpm run repo-knowledge -- read
 
 # Read（指定 section）
-node .cursor/scripts/utilities/repo-knowledge.mjs read --section=labels
-node .cursor/scripts/utilities/repo-knowledge.mjs read --section=git-flow
+pnpm run repo-knowledge -- read --section=labels
+pnpm run repo-knowledge -- read --section=git-flow
 
 # Update（指定 section，從 JSON 檔案讀入）
-node .cursor/scripts/utilities/repo-knowledge.mjs update --section=labels --input-file="./labels.json"
+pnpm run repo-knowledge -- update --section=labels --input-file="./labels.json"
 
 # Clear（清除指定 section）
-node .cursor/scripts/utilities/repo-knowledge.mjs clear --section=coding-standard
-node .cursor/scripts/utilities/repo-knowledge.mjs clear --section=git-flow
+pnpm run repo-knowledge -- clear --section=coding-standard
+pnpm run repo-knowledge -- clear --section=git-flow
 
 # Delete（刪除整份 JSON）
-node .cursor/scripts/utilities/repo-knowledge.mjs delete
+pnpm run repo-knowledge -- delete
 ```
 
 ---
