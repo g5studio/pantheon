@@ -7,27 +7,22 @@ alwaysApply: false
 
 # Start-Task 行為模式
 
-此規則定義了 `start-task` 流程中可選擇的行為模式，讓用戶可以根據不同的開發場景選擇最適合的工作風格。
+此規則只保留模式差異與**既有顯示格式**，避免重複主流程。
 
-## 適用場景
+## 掛載專案命中規則
 
-此規則適用於 `start-task` 指令執行的起始階段，當詢問用戶 Jira 單號**之前**，必須先詢問用戶選擇行為模式。
+**CRITICAL**：在 fluid-two 這類 Pantheon 掛載情境下，先檢查 host 專案 `package.json`：
 
-**CRITICAL（掛載專案命中）**：在 fluid-two 這類 Pantheon 掛載情境下，先檢查 host 專案 `package.json`：
 - 有對應 script：使用 `pnpm run <script> -- <args>`
 - 無對應 script：使用 `node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs <script-path> <args>`
 
 避免使用硬編碼 Pantheon 腳本路徑（例如 `node .cursor/scripts/<pantheon-script>.mjs`），以確保 Cursor 可以準確命中實際腳本位置。
 
----
+## 模式選擇時機
 
-## 模式選擇流程
+**CRITICAL**：在詢問 Jira 單號之前，必須先詢問用戶選擇行為模式，且顯示格式固定為：
 
-### 詢問格式
-
-**CRITICAL**: 在詢問 Jira 單號之前，必須先詢問用戶選擇行為模式：
-
-```
+```text
 🚀 開始新任務
 
 請選擇行為模式：
@@ -47,7 +42,9 @@ alwaysApply: false
 請輸入數字 (1-4) 或模式名稱，直接 Enter 使用預設模式：
 ```
 
-### 模式識別
+顯示後必須**暫停並等待用戶選擇**，不可自行代替用戶決定。
+
+## 模式識別
 
 | 用戶輸入 | 識別為模式 |
 |---|---|
@@ -112,7 +109,7 @@ alwaysApply: false
 
 ### 顯示格式
 
-```
+```text
 🔒 謹慎模式已啟用
 
 ⚠️ 此模式下將採取最小風險改動策略：
@@ -155,7 +152,7 @@ alwaysApply: false
 
 #### 1. 初始化流程
 
-```
+```text
 讀取主需求單
   ↓
 自動識別所有 Sub-task
@@ -169,7 +166,7 @@ alwaysApply: false
 
 #### 2. Sub-task 偵測
 
-**CRITICAL**: 輸入的單號後，必須檢查是否有子任務：
+**CRITICAL**：輸入的單號後，必須檢查是否有子任務：
 
 ```bash
 # 使用 Jira API 獲取子任務列表
@@ -177,7 +174,7 @@ alwaysApply: false
 ```
 
 **顯示格式**：
-```
+```text
 📋 需求單分析完成
 
 🎯 主需求: {PARENT_TICKET}
@@ -208,7 +205,7 @@ alwaysApply: false
 
 每個階段的執行流程：
 
-```
+```text
 階段 N 開始
   ↓
 顯示當前階段信息
@@ -231,7 +228,7 @@ alwaysApply: false
 
 全部階段完成後：
 
-```
+```text
 📋 所有階段已完成！
 
 ✅ 完成的子任務：
@@ -283,7 +280,7 @@ alwaysApply: false
 
 ### 顯示格式
 
-```
+```text
 🔄 多工模式已啟用
 
 📋 此模式下將：
@@ -319,7 +316,7 @@ alwaysApply: false
 
 ### 顯示格式
 
-```
+```text
 ⚡ 快速模式已啟用
 
 📋 此模式特點：
@@ -354,7 +351,7 @@ alwaysApply: false
 
 ### 顯示格式
 
-```
+```text
 📋 預設模式已啟用
 
 此模式為標準流程：
@@ -370,7 +367,7 @@ alwaysApply: false
 
 ### Git Notes 擴展
 
-**CRITICAL**: 選擇的模式必須記錄到 Git notes 中，供後續流程識別：
+**CRITICAL**：選擇的模式必須記錄到 Git notes 中，供後續流程識別：
 
 ```json
 {
@@ -463,7 +460,7 @@ alwaysApply: false
 
 ### 模式切換禁止
 
-**CRITICAL**: 一旦選擇模式並開始執行，**禁止**中途切換模式。如需切換，必須：
+**CRITICAL**：一旦選擇模式並開始執行，**禁止**中途切換模式。如需切換，必須：
 
 1. 完成或取消當前任務
 2. 重新執行 `start-task`
