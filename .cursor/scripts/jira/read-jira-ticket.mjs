@@ -7,6 +7,34 @@
 
 import { getJiraConfig } from "../utilities/env-loader.mjs";
 
+/** Matches Jira custom field keys e.g. customfield_12190 */
+const CUSTOM_FIELD_KEY = /^customfield_\d+$/;
+
+/**
+ * Recursively removes `customfield_<id>` keys whose value is `null` from Jira API JSON.
+ * Mutates the given value in place; does not alter non-null custom fields or other keys.
+ * @param {unknown} value
+ */
+export function stripNullCustomFieldsFromJiraPayload(value) {
+  if (value === null || typeof value !== "object") {
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      stripNullCustomFieldsFromJiraPayload(item);
+    }
+    return;
+  }
+  for (const key of Object.keys(value)) {
+    const v = value[key];
+    if (CUSTOM_FIELD_KEY.test(key) && v === null) {
+      delete value[key];
+      continue;
+    }
+    stripNullCustomFieldsFromJiraPayload(v);
+  }
+}
+
 // 從 Jira URL 解析 ticket ID
 function parseJiraUrl(url) {
   // 格式: https://innotech.atlassian.net/browse/{ticket} 或直接是 ticket ID
@@ -65,8 +93,9 @@ async function readJiraTicket(ticketOrUrl) {
     throw new Error(`無效的 Jira ticket 格式: ${ticketOrUrl}`);
   }
 
-  // 使用 Jira REST API 獲取 ticket 信息
-  const apiUrl = `${baseUrl}/rest/api/3/issue/${ticket}?expand=renderedFields,comments`;
+  // 使用 Jira REST API 獲取 ticket 信息（不 expand renderedFields：工作流程只使用 fields 內的 ADF
+  // 與 comment；renderedFields 為 HTML，體積大且未被讀取）
+  const apiUrl = `${baseUrl}/rest/api/3/issue/${ticket}`;
 
   try {
     const response = await fetch(apiUrl, {
@@ -89,6 +118,7 @@ async function readJiraTicket(ticketOrUrl) {
     }
 
     const data = await response.json();
+    stripNullCustomFieldsFromJiraPayload(data);
     const fields = data.fields || {};
 
     // 提取基本信息
@@ -151,9 +181,9 @@ async function main() {
 
   try {
     const result = await readJiraTicket(ticketOrUrl);
-    console.log(JSON.stringify(result, null, 2));
+    console.log(JSON.stringify(result));
   } catch (error) {
-    console.error(JSON.stringify({ error: error.message }, null, 2));
+    console.error(JSON.stringify({ error: error.message }));
     process.exit(1);
   }
 }

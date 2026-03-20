@@ -65,7 +65,8 @@ if (!ticket) {
 const jiraConfig = getJiraConfig();
 const auth = Buffer.from(`${jiraConfig.email}:${jiraConfig.apiToken}`).toString('base64');
 const baseUrl = jiraConfig.baseUrl.endsWith('/') ? jiraConfig.baseUrl.slice(0, -1) : jiraConfig.baseUrl;
-const url = `${baseUrl}/rest/api/3/issue/${ticket}?expand=renderedFields,comments`;
+// 不 expand renderedFields：僅使用 fields 內 description / comment（ADF）；renderedFields 未使用
+const url = `${baseUrl}/rest/api/3/issue/${ticket}`;
 
 try {
   const response = await fetch(url, {
