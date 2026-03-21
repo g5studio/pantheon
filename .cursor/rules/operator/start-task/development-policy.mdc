@@ -145,7 +145,7 @@ alwaysApply: false
     "skippedTasks": [],
     "autoProgress": true,
     "mrPerTask": true,
-    "branchNameStrategy": "ticket-only",
+    "branchNameStrategy": "feature-ticket",
     "notifyAfterAll": true
   }
 }

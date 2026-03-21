@@ -421,7 +421,7 @@ alwaysApply: false
     "currentIndex": 0,
     "totalTasks": 3,
     "autoProgress": true,
-    "branchNameStrategy": "ticket-only",
+    "branchNameStrategy": "feature-ticket",
     "notifyAfterAll": true
   }
 }

@@ -58,16 +58,16 @@ alwaysApply: false
 - 掛載到其他專案：`.pantheon/.cursor/scripts/jira/read-jira-ticket.mjs`
 - Pantheon 專案本身：`.cursor/scripts/jira/read-jira-ticket.mjs`
 
-### 3) 分支策略：每張單獨立 feature branch（branch name 直接使用單號）
+### 3) 分支策略：每張單獨立 feature branch（follow 其他模式的 hardcode pattern）
 
 **CRITICAL**：快速模式下，每張單開發都必須使用**不同的 feature branch**，且：
 
 1. **每完成一張單後**：必須切回 `main`
 2. **下一張單開始前**：必須從 `main` 重新 branch out
-3. **分支命名**：branch name **直接使用單號**（例如：`FE-1234`）
+3. **分支命名**：比照其他模式，使用硬編碼 pattern `feature/{分支單號}`（例如：`feature/FE-1234`）
 
 **⚠️ 特別聲明（Sub-task 分支策略）**：
-快速模式下，即使 Jira ticket 為 `Sub-task`，**仍一律使用「輸入單號」作為 branch name**（此點為快速模式的明確規範，與其他模式不同）。
+快速模式下，若 Jira ticket 為 `Sub-task`，**分支 pattern 也必須比照其他模式維持 `feature/...`**；禁止使用裸單號作為 branch name。
 
 **停止點**：
 - 若分支已存在且無法安全判斷是否可直接沿用 → **停止並詢問用戶**
@@ -115,7 +115,7 @@ alwaysApply: false
 - [ ] 已輸出排程清單表格，並詢問是否需要追加/調整
 - [ ] 用戶已確認排程清單（快速模式授權點）
 - [ ] 每張單開始前已讀取 Jira 指示（Description + Comments）
-- [ ] 每張單使用獨立分支，且 branch name 直接使用單號
+- [ ] 每張單使用獨立分支，且 branch name 使用 `feature/{分支單號}` pattern
 - [ ] 每完成一張單後已切回 `main`，下一張單從 `main` 重新 branch out
 - [ ] 若遇停止點已停止並等待用戶（而非繼續硬推）
 - [ ] 全部排程完成後已輸出一次性總結回報並發送系統通知
