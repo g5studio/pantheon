@@ -8,33 +8,60 @@ description: 生成/更新 repo 知識庫 JSON（labels / coding-standard / git-
 
 **知識庫區塊**：`labels`（GitLab 標籤情境）、`coding-standard`（編碼規範）、`git-flow`（Git 分支流程推導）。
 
+**Bootstrap 落地內容**：`adapt` 指令流程會做兩件事：
+
+1. 透過 `adapt.mjs` 生成 / 更新 `adapt.json`
+2. 透過 `generate-pantheon-guideline.mjs` 在目標專案內真實建立 Pantheon bootstrap skill
+
+落地的 skill 為：
+
+- `.cursor/skills/pantheon-mounted-workflow/SKILL.md`
+
+此 skill 用於讓 AI 在 mounted `.pantheon/` 或 symlink 內容偶爾不可見時，仍能從目標專案本地理解 Pantheon 的正確運作方式。
+
 ---
 
-## 1) adapt 主流程（收集 + 分析 + 寫回）
+## 1) adapt 指令主流程
 
-當用戶輸入 `adapt` 時，AI 執行：
+當用戶輸入 `adapt` 時，AI 應執行整個 adapt 流程，而不是只跑單一腳本：
 
 ```bash
-node .cursor/scripts/utilities/adapt.mjs
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs && node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/generate-pantheon-guideline.mjs
 ```
 
-常用參數：
+若在 Pantheon repo 本身，也可使用：
+
+```bash
+pnpm run adapt
+```
+
+### 腳本層分工
+
+```bash
+# 1. 生成 / 更新 adapt.json
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs
+
+# 2. 將 Pantheon bootstrap skill 真實落地到目標專案
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/generate-pantheon-guideline.mjs
+```
+
+常用參數（傳給 `adapt.mjs`）：
 
 ```bash
 # 指定輸出 JSON 位置（預設：adapt.json）
-node .cursor/scripts/utilities/adapt.mjs --file="adapt.json"
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs -- --file="adapt.json"
 
 # 限制抽樣 MR 數量（預設：50）
-node .cursor/scripts/utilities/adapt.mjs --max-mrs=50
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs -- --max-mrs=50
 
 # 指定 GitLab 主機（預設：從 remote.origin.url 解析）
-node .cursor/scripts/utilities/adapt.mjs --gitlab-host="https://gitlab.service-hub.tech"
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs -- --gitlab-host="https://gitlab.service-hub.tech"
 
 # 指定 LLM provider/model（若不指定，model 預設為 gpt-5.2）
-node .cursor/scripts/utilities/adapt.mjs --llm-provider="openai" --llm-model="gpt-5.2"
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs -- --llm-provider="openai" --llm-model="gpt-5.2"
 
 # 僅收集資料，不呼叫 LLM（仍會把 sources/meta 寫回 JSON）
-node .cursor/scripts/utilities/adapt.mjs --no-llm
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs -- --no-llm
 ```
 
 ### 依賴的環境變數（擇一即可）
