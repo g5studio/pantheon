@@ -2,197 +2,197 @@
 alwaysApply: true
 ---
 
-# 障礙排除指南
+# Troubleshooting Guide
 
-此規則定義了 AI 在執行任務時遇到常見問題的處理方式。當 AI 遇到問題時，應優先查詢此指南是否有對應的用例可參考。
+This rule defines how the AI handles common issues encountered during task execution. When the AI encounters a problem, it should first consult this guide to see if a matching use case is available.
 
-## 適用場景
+## Applicable Scenarios
 
-此規則適用於**所有** AI 執行任務時遇到問題的情境。AI 在遇到錯誤或異常時，應優先查詢此指南是否有對應的解決方案。
+This rule applies to **all** situations where the AI encounters issues during task execution. When an error or anomaly occurs, the AI should first check this guide for a corresponding solution.
 
-## 核心原則
+## Core Principles
 
-**CRITICAL**: 當 AI 遇到問題時，**必須**：
+**CRITICAL**: When the AI encounters a problem, it **MUST**:
 
-1. **優先查詢此指南**：檢查是否有對應的用例和解決方案
-2. **按照指南執行**：如果找到對應的用例，按照指南中的方式處理，**無需詢問用戶**
-3. **記錄處理方式**：在 chat 中簡要說明採用的處理方式（可選，但建議記錄）
+1. **Consult this guide first**: Check whether there is a matching use case and solution
+2. **Follow the guide**: If a matching use case is found, handle it according to the guide — **no need to ask the user**
+3. **Record the handling method**: Briefly note the approach used in chat (optional, but recommended)
 
-## 障礙排除用例
+## Troubleshooting Use Cases
 
-### 用例 1：Sandbox 權限不足導致執行失敗
+### Use Case 1: Execution Failure Due to Insufficient Sandbox Permissions
 
-**問題描述**：
-- 執行腳本或命令時，因為 Cursor 的 sandbox 環境限制而導致執行失敗
-- 常見錯誤訊息：權限被拒絕、無法執行系統調用、osascript 無法執行等
-- 常見場景：執行系統通知腳本、執行需要系統權限的命令等
+**Problem description**:
+- Executing a script or command fails due to restrictions in Cursor's sandbox environment
+- Common error messages: permission denied, system call blocked, osascript cannot execute, etc.
+- Common scenarios: executing system notification scripts, executing commands that require system permissions, etc.
 
-**判斷標準**：
-- 錯誤訊息包含權限相關關鍵字（permission、sandbox、access denied 等）
-- 腳本或命令本身沒有問題，但因為環境限制而失敗
-- 涉及系統調用（如 macOS 的 `osascript`、檔案系統操作等）
+**Diagnosis criteria**:
+- Error message contains permission-related keywords (permission, sandbox, access denied, etc.)
+- The script or command itself has no issues, but fails due to environment restrictions
+- Involves system calls (e.g., macOS `osascript`, file system operations, etc.)
 
-**處理方式**：
-- **立即採用**：使用 `required_permissions: ["all"]` 重新執行相同的命令
-- **無需詢問**：此處理方式已在此指南中明確定義，AI 可以直接執行
-- **重新執行**：使用相同的命令，但加上 `required_permissions: ["all"]` 參數
+**Handling method**:
+- **Immediately adopt**: Re-execute the same command with `required_permissions: ["all"]`
+- **No need to ask**: This handling method is explicitly defined in this guide; the AI can execute directly
+- **Re-execute**: Use the same command, but with the `required_permissions: ["all"]` parameter
 
-**執行範例**：
+**Execution example**:
 
-**錯誤情況**：
+**Error situation**:
 ```bash
-node .cursor/scripts/notification/notify-cursor-rules-failed.mjs "pantheon" "推送完成"
-# 錯誤：權限被拒絕或 osascript 無法執行
+node .cursor/scripts/notification/notify-cursor-rules-failed.mjs "pantheon" "push complete"
+# Error: permission denied or osascript cannot execute
 ```
 
-**正確處理**：
+**Correct handling**:
 ```bash
-# 使用 required_permissions: ["all"] 重新執行
+# Re-execute with required_permissions: ["all"]
 run_terminal_cmd(
-  command: "node .cursor/scripts/notification/notify-cursor-rules-failed.mjs \"pantheon\" \"推送完成\"",
+  command: "node .cursor/scripts/notification/notify-cursor-rules-failed.mjs \"pantheon\" \"push complete\"",
   required_permissions: ["all"]
 )
 ```
 
-**常見適用場景**：
-- 執行系統通知腳本（`notify-cursor-rules-failed.mjs`）
-- 執行需要檔案系統權限的操作
-- 執行需要系統調用的腳本
-- 其他因 sandbox 限制而失敗的操作
+**Common applicable scenarios**:
+- Executing system notification scripts (`notify-cursor-rules-failed.mjs`)
+- Executing operations that require file system permissions
+- Executing scripts that require system calls
+- Other operations that fail due to sandbox restrictions
 
-**注意事項**：
-- 此處理方式僅適用於「權限不足」導致的失敗，不適用於其他類型的錯誤（如語法錯誤、參數錯誤等）
-- 如果使用 `required_permissions: ["all"]` 後仍然失敗，應停止並報告錯誤，等待用戶處理
-- 此處理方式不需要在 chat 中特別說明，但可以在執行後簡要記錄（可選）
+**Notes**:
+- This handling method only applies to failures caused by "insufficient permissions" — it does not apply to other types of errors (e.g., syntax errors, parameter errors)
+- If it still fails after using `required_permissions: ["all"]`, stop and report the error and wait for the user to handle
+- This handling method does not need to be specifically noted in chat, but can be briefly recorded after execution (optional)
 
-### 用例 2：Node 記憶體不足導致 eslint --fix（format-and-lint）階段中斷（JS heap out of memory）
+### Use Case 2: Node Memory Exhaustion During eslint --fix (format-and-lint) Phase (JS heap out of memory)
 
-**問題描述**：
-- 在執行 `agent-commit` 流程時，lint 階段會跑 `pnpm run format-and-lint`
-- 於 `eslint --fix ...` 過程中，Node v18 因預設 heap 限制/機器可用記憶體不足而爆掉
-- 常見錯誤訊息：`FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory`
-- **這不是程式碼錯誤**：流程中斷，因此**沒有產生 commit**；你的檔案變更仍停在 working tree
+**Problem description**:
+- During the `agent-commit` flow, the lint phase runs `pnpm run format-and-lint`
+- During the `eslint --fix ...` process, Node v18 crashes due to the default heap limit / insufficient available machine memory
+- Common error messages: `FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory`
+- **This is not a code error**: The flow was interrupted, so **no commit was created**; your file changes are still in the working tree
 
-**判斷標準**：
-- 失敗發生在 lint / format 階段（`pnpm run format-and-lint`）
-- 錯誤訊息包含 `heap out of memory` / `Reached heap limit` / `Allocation failed`
-- `git status` 仍顯示大量檔案變更（表示未 commit）
+**Diagnosis criteria**:
+- Failure occurs during the lint / format phase (`pnpm run format-and-lint`)
+- Error message contains `heap out of memory` / `Reached heap limit` / `Allocation failed`
+- `git status` still shows many file changes (indicating no commit was made)
 
-**處理方式**：
-- **立即採用**：用加大 Node heap 的方式重跑 lint，讓 `agent-commit` 能走完並產生 commit
-- 建議使用：
+**Handling method**:
+- **Immediately adopt**: Re-run lint with an increased Node heap size, so `agent-commit` can complete and produce a commit
+- Recommended command:
   - `NODE_OPTIONS=--max-old-space-size=8192 pnpm run format-and-lint`
-- lint 成功後，再重新執行原本的 `agent-commit`
+- After lint succeeds, re-run the original `agent-commit`
 
-**執行範例**：
+**Execution example**:
 
-**錯誤情況**（示意）：
+**Error situation** (illustrative):
 ```bash
 pnpm run agent-commit --type=feat --ticket=FE-1234 --message="..."
 # ... eslint --fix ...
 # FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory
-# -> 流程中斷，未產生 commit
+# -> Flow interrupted, no commit created
 ```
 
-**正確處理**：
+**Correct handling**:
 ```bash
-# 1) 確認變更仍在 working tree（避免誤以為變更遺失）
+# 1) Verify changes are still in the working tree (to avoid thinking changes were lost)
 git status
 
-# 2) 加大 heap 重跑 lint（讓 eslint --fix 跑完）
+# 2) Increase heap and re-run lint (let eslint --fix complete)
 NODE_OPTIONS=--max-old-space-size=8192 pnpm run format-and-lint
 
-# 3) 回到原流程重跑 agent-commit
+# 3) Return to original flow and re-run agent-commit
 pnpm run agent-commit --type=feat --ticket=FE-1234 --message="..."
 ```
 
-**注意事項**：
-- 如果 `8192` 仍不足，可視機器資源調整（例如 12288 / 16384），但請避免超過可用記憶體造成系統換頁（swap）反而更慢或卡死
-- 若只在 CI / 特定機器發生，優先視為該環境資源限制問題，而非程式碼或 ESLint 規則錯誤
+**Notes**:
+- If `8192` is still insufficient, the value can be adjusted based on machine resources (e.g., 12288 / 16384), but avoid exceeding available memory as this can cause system swap and make things even slower or hang
+- If this only happens in CI / specific machines, treat it first as an environment resource limitation issue, not a code or ESLint rule error
 
-### 用例 3：查無可用腳本時的掛載專案路徑處理（Pantheon mount-safe）
+### Use Case 3: No Available Script Found — Handling Mounted Project Paths (Pantheon mount-safe)
 
-**問題描述**：
-- 執行指令時發現 host 專案 `package.json` 沒有對應 script
-- 直接執行 `.cursor/scripts/...` 路徑失敗（常見於 Pantheon 掛載到其他專案）
-- 錯誤訊息常見為找不到腳本或 command not found
+**Problem description**:
+- During command execution, the host project's `package.json` does not have the corresponding script
+- Directly running the `.cursor/scripts/...` path fails (common when Pantheon is mounted to another project)
+- Common error messages: script not found or command not found
 
-**判斷標準**：
-- 已先檢查 host 專案 `package.json`，確認無對應 script
-- 目前情境屬於 Pantheon 掛載專案（可使用 `.pantheon` 路徑）
-- 原本腳本路徑在 host 專案中不存在或不可用
+**Diagnosis criteria**:
+- Already checked the host project's `package.json` and confirmed there is no corresponding script
+- Current context is a Pantheon mounted project (can use the `.pantheon` path)
+- The original script path does not exist or is unavailable in the host project
 
-**處理方式**：
-- **優先採用**：先檢查 host 專案 `package.json` 是否有對應 script
-  - 有對應 script：使用 `pnpm run <script> -- <args>`
-  - 無對應 script：使用 `node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs <script-path> <args>`
-- **避免硬編碼**：避免直接使用 `node .cursor/scripts/<pantheon-script>.mjs`（在掛載情境容易失效）
+**Handling method**:
+- **Preferred approach**: First check if the host project's `package.json` has the corresponding script
+  - If the script exists: use `pnpm run <script> -- <args>`
+  - If no script exists: use `node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs <script-path> <args>`
+- **Avoid hardcoding**: Avoid directly using `node .cursor/scripts/<pantheon-script>.mjs` (prone to failure in mounted scenarios)
 
-**執行範例**：
+**Execution example**:
 
-**錯誤情況**：
+**Error situation**:
 ```bash
 pnpm run read-jira-ticket -- --ticket=FE-1234
-# 錯誤：Missing script: read-jira-ticket
+# Error: Missing script: read-jira-ticket
 ```
 
-**正確處理**：
+**Correct handling**:
 ```bash
-# 1) 先檢查 host 專案 package.json 是否有對應 script
-# 2) 若無，改用 Pantheon runner（掛載路徑）
+# 1) First check if the host project's package.json has the corresponding script
+# 2) If not, use the Pantheon runner (mounted path)
 node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs jira/read-jira-ticket.mjs --ticket=FE-1234
 ```
 
-**常見適用場景**：
-- `cr single-ticket` / `cr multiple-ticket` 流程中的 Jira 讀取
-- `start-task` / `reverse-engineering` 等 operator 指令流程
-- 任何在 host 專案找不到 script、但可由 Pantheon 提供腳本能力的情境
+**Common applicable scenarios**:
+- Reading Jira in `cr single-ticket` / `cr multiple-ticket` flows
+- Operator command flows like `start-task` / `reverse-engineering`
+- Any situation where the script cannot be found in the host project but Pantheon can provide the script capability
 
-**注意事項**：
-- 若 `.pantheon` 路徑也不可用，才回報錯誤並依一般錯誤流程處理
-- 此用例的重點是「先檢查 host script，再 fallback `.pantheon` runner」
+**Notes**:
+- Only report an error and follow the general error flow if the `.pantheon` path is also unavailable
+- The key point of this use case is "check host script first, then fall back to `.pantheon` runner"
 
-## 使用流程
+## Usage Flow
 
-當 AI 遇到問題時，應遵循以下流程：
+When the AI encounters a problem, it should follow this flow:
 
 ```
-遇到錯誤或異常
+Encounter error or anomaly
     ↓
-查詢此障礙排除指南
+Consult this troubleshooting guide
     ↓
-是否有對應的用例？
-    ├─ 是 → 按照指南中的處理方式執行（無需詢問）
-    └─ 否 → 按照一般錯誤處理流程（報告錯誤、詢問用戶等）
+Is there a matching use case?
+    ├─ Yes → Execute the handling method from the guide (no need to ask)
+    └─ No  → Follow the general error handling flow (report error, ask user, etc.)
 ```
 
-## 新增用例
+## Adding New Use Cases
 
-**CRITICAL**: 此指南應持續擴充，當發現新的常見問題和解決方案時，應新增對應的用例。
+**CRITICAL**: This guide should be continuously expanded. When new common problems and solutions are discovered, a corresponding use case should be added.
 
-**新增用例的格式**：
-- **問題描述**：清楚說明問題的表現和常見場景
-- **判斷標準**：如何判斷是否屬於此問題
-- **處理方式**：具體的解決步驟
-- **執行範例**：提供錯誤情況和正確處理的範例
-- **常見適用場景**：列出適用此處理方式的場景
-- **注意事項**：說明限制條件和例外情況
+**Format for new use cases**:
+- **Problem description**: Clearly describe the problem's symptoms and common scenarios
+- **Diagnosis criteria**: How to determine whether this is the problem
+- **Handling method**: Concrete resolution steps
+- **Execution example**: Provide examples of the error situation and correct handling
+- **Common applicable scenarios**: List scenarios where this handling method applies
+- **Notes**: Describe limitations and exceptions
 
-## 與其他規則的整合
+## Integration with Other Rules
 
-此指南與以下規則緊密相關：
+This guide is closely related to the following rules:
 
-1. **ai-decision-making-priorities.mdc**：定義了「先詢問再修改」的原則，但此指南中的用例已明確授權 AI 可以直接處理，無需詢問
-2. **chat-report-guideline.mdc**：定義了通知腳本需要使用 `required_permissions: ["all"]`，此指南將其擴展為通用的障礙排除用例
+1. **ai-decision-making-priorities.mdc**: Defines the "ask before modifying" principle, but the use cases in this guide explicitly authorize the AI to handle them directly without asking
+2. **chat-report-guideline.mdc**: Defines that notification scripts need to use `required_permissions: ["all"]`; this guide extends that into a general troubleshooting use case
 
-**重要**：此指南中的用例優先級高於一般規則中的「詢問原則」。當遇到指南中定義的問題時，AI 應直接按照指南處理，無需額外詢問用戶。
+**Important**: The use cases in this guide have higher priority than the "ask principle" in general rules. When encountering a problem defined in the guide, the AI should handle it directly per the guide without additional user confirmation.
 
-## 檢查清單
+## Checklist
 
-當 AI 遇到問題時，應確認：
+When the AI encounters a problem, it should confirm:
 
-- [ ] 是否已查詢此障礙排除指南？
-- [ ] 是否有對應的用例？
-- [ ] 是否按照指南中的方式處理？
-- [ ] 處理後是否成功解決問題？
-- [ ] 如果仍未解決，是否已報告錯誤並等待用戶處理？
+- [ ] Was this troubleshooting guide consulted?
+- [ ] Is there a matching use case?
+- [ ] Was the handling method from the guide followed?
+- [ ] Was the problem resolved after handling?
+- [ ] If still unresolved, was the error reported and user notified to handle it?

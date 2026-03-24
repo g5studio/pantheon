@@ -1,391 +1,391 @@
 ---
-description: 定義 start-task 流程中的行為模式，包含謹慎模式、多工模式、快速模式和預設模式
+description: Defines the operation modes in the start-task flow, including Cautious, Multi-Task, Fast, and Default modes
 alwaysApply: false
 ---
 
 <!-- cSpell:disable -->
 
-# Start-Task 行為模式
+# Start-Task Operation Modes
 
-此規則定義了 `start-task` 流程中可選擇的行為模式，讓用戶可以根據不同的開發場景選擇最適合的工作風格。
+This rule defines the operation modes available in the `start-task` flow, allowing users to choose the most appropriate work style for different development scenarios.
 
-## 適用場景
+## Applicable Scenarios
 
-此規則適用於 `start-task` 指令執行的起始階段，當詢問用戶 Jira 單號**之前**，必須先詢問用戶選擇行為模式。
+This rule applies to the start phase of the `start-task` command execution. Before asking the user for the Jira ticket number, the user must first be asked to choose an operation mode.
 
-**CRITICAL（掛載專案命中）**：在 fluid-two 這類 Pantheon 掛載情境下，先檢查 host 專案 `package.json`：
-- 有對應 script：使用 `pnpm run <script> -- <args>`
-- 無對應 script：使用 `node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs <script-path> <args>`
+**CRITICAL (Mounted project applies)**: In a Pantheon-mounted context like fluid-two, first check the host project's `package.json`:
+- If there is a matching script: use `pnpm run <script> -- <args>`
+- If there is no matching script: use `node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs <script-path> <args>`
 
-避免使用硬編碼 Pantheon 腳本路徑（例如 `node .cursor/scripts/<pantheon-script>.mjs`），以確保 Cursor 可以準確命中實際腳本位置。
-
----
-
-## 模式選擇流程
-
-### 詢問格式
-
-**CRITICAL**: 在詢問 Jira 單號之前，必須先詢問用戶選擇行為模式：
-
-```
-🚀 開始新任務
-
-請選擇行為模式：
-
-1️⃣ **謹慎模式** (Cautious)
-   採最小風險改動，每步確認，適合 Hotfix
-
-2️⃣ **多工模式** (Multi-Task)
-   自動讀取所有 Sub-task，分階段開發，最後統一發 MR，適合大項目
-
-3️⃣ **快速模式** (Fast)
-   批次排程，目標導向自動推進，適合大量獨立小項目
-
-4️⃣ **預設模式** (Default)
-   標準流程，每階段確認
-
-請輸入數字 (1-4) 或模式名稱，直接 Enter 使用預設模式：
-```
-
-### 模式識別
-
-| 用戶輸入 | 識別為模式 |
-|---|---|
-| `1`、`謹慎`、`cautious`、`hotfix` | 謹慎模式 |
-| `2`、`多工`、`multi`、`multi-task` | 多工模式 |
-| `3`、`快速`、`fast`、`quick` | 快速模式 |
-| `4`、`預設`、`default`、直接 Enter | 預設模式 |
+Avoid hardcoding Pantheon script paths (e.g., `node .cursor/scripts/<pantheon-script>.mjs`) to ensure Cursor can accurately locate the actual script.
 
 ---
 
-## 模式一：謹慎模式 (Cautious Mode)
+## Mode Selection Flow
 
-### 適用場景
-- Hotfix 緊急修復
-- 高風險變更
-- 生產環境問題修復
-- 需要最小化改動範圍的情況
+### Prompt Format
 
-### 核心原則
+**CRITICAL**: Before asking for the Jira ticket number, the user must first be asked to choose an operation mode:
 
-| 原則 | 說明 |
+```
+🚀 Starting new task
+
+Please select an operation mode:
+
+1️⃣ **Cautious Mode** (Cautious)
+   Minimum risk changes, confirm each step. Suitable for Hotfix.
+
+2️⃣ **Multi-Task Mode** (Multi-Task)
+   Automatically reads all Sub-tasks, develops in phases, sends a unified MR at the end. Suitable for large projects.
+
+3️⃣ **Fast Mode** (Fast)
+   Batch scheduling, goal-oriented automatic advancement. Suitable for large numbers of independent small tasks.
+
+4️⃣ **Default Mode** (Default)
+   Standard flow, confirm each phase.
+
+Enter a number (1-4) or mode name; press Enter directly to use Default mode:
+```
+
+### Mode Recognition
+
+| User input | Recognized mode |
 |---|---|
-| **最小風險改動** | 只修改必要的代碼，不進行任何額外的重構或優化 |
-| **目的性為主** | 專注於解決問題，不擴展範圍 |
-| **逐步確認** | 每個改動步驟都需要用戶確認 |
-| **影響評估** | 每次改動前必須評估影響範圍 |
+| `1`, `cautious`, `hotfix` | Cautious mode |
+| `2`, `multi`, `multi-task` | Multi-task mode |
+| `3`, `fast`, `quick` | Fast mode |
+| `4`, `default`, press Enter directly | Default mode |
 
-### 行為規範
+---
 
-#### 1. 開發計劃制定
-- 計劃必須**精簡明確**，只包含解決問題的必要步驟
-- **禁止**包含「順便優化」、「額外改進」等項目
-- 必須列出每個步驟的**影響範圍**
+## Mode 1: Cautious Mode
 
-#### 2. 代碼修改
-- **最小改動原則**：只修改導致問題的代碼
-- **禁止**重構周邊代碼
-- **禁止**更新非必要的依賴
-- **禁止**修改代碼風格（除非是問題根源）
+### Applicable Scenarios
+- Hotfix emergency fixes
+- High-risk changes
+- Production environment problem fixes
+- Situations requiring minimized change scope
 
-#### 3. 確認流程
+### Core Principles
+
+| Principle | Description |
+|---|---|
+| **Minimum risk changes** | Only modify necessary code; do not perform any additional refactoring or optimization |
+| **Goal-oriented** | Focus on solving the problem; do not expand scope |
+| **Step-by-step confirmation** | Each change step requires user confirmation |
+| **Impact assessment** | Impact scope must be assessed before each change |
+
+### Behavioral Rules
+
+#### 1. Development Plan Formulation
+- Plan must be **concise and clear**, only including steps necessary to solve the problem
+- **Prohibited** to include "while-we're-at-it optimizations", "extra improvements", etc.
+- Must list the **impact scope** of each step
+
+#### 2. Code Modification
+- **Minimum change principle**: Only modify code that causes the problem
+- **Prohibited** to refactor surrounding code
+- **Prohibited** to update unnecessary dependencies
+- **Prohibited** to modify code style (unless it is the root cause)
+
+#### 3. Confirmation Flow
 ```
-每個改動步驟：
+Each change step:
   ↓
-顯示即將修改的內容和影響範圍
+Show content to be modified and impact scope
   ↓
-等待用戶確認：「確定要執行此修改嗎？」
+Wait for user confirmation: "Confirm this modification?"
   ↓
-用戶確認後才執行
+Execute only after user confirms
   ↓
-執行後再次確認：「此步驟已完成，是否繼續？」
+Confirm again after execution: "This step is complete. Continue?"
 ```
 
-#### 4. MR 建立
-- MR 標題必須包含 `[HOTFIX]` 前綴（如適用）
-- MR Description 必須包含：
-  - 問題描述
-  - 根本原因
-  - 修復方案
-  - 影響範圍評估
-  - 回滾方案
+#### 4. MR Creation
+- MR title must include `[HOTFIX]` prefix (if applicable)
+- MR Description must include:
+  - Problem description
+  - Root cause
+  - Fix approach
+  - Impact scope assessment
+  - Rollback plan
 
-### 顯示格式
+### Display Format
 
 ```
-🔒 謹慎模式已啟用
+🔒 Cautious mode enabled
 
-⚠️ 此模式下將採取最小風險改動策略：
-- 只修改必要的代碼
-- 每步驟需要確認
-- 不進行額外優化
+⚠️ In this mode, minimum risk change strategy will be adopted:
+- Only modify necessary code
+- Each step requires confirmation
+- No additional optimizations
 
-📋 請提供 Jira 單號：
+📋 Please provide Jira ticket number:
 ```
 
 ---
 
-## 模式二：多工模式 (Multi-Task Mode)
+## Mode 2: Multi-Task Mode
 
-### 適用場景
-- 大型需求開發
-- 包含多個 Sub-task 的需求單
-- 需要分階段完成的項目
-- 需要獨立追蹤每個子任務進度的情況
+### Applicable Scenarios
+- Large-scale feature development
+- Requirement tickets containing multiple Sub-tasks
+- Projects that need to be completed in phases
+- Situations requiring independent tracking of each sub-task progress
 
-### 核心原則
+### Core Principles
 
-| 原則 | 說明 |
+| Principle | Description |
 |---|---|
-| **自動偵測 Sub-task** | 讀取需求單後自動識別所有子任務 |
-| **分階段開發** | 按子任務順序分階段完成 |
-| **獨立 Commit** | 每個子任務完成後獨立 commit |
-| **統一 MR** | 全部完成後才發送一個 MR，關聯所有單號 |
+| **Auto-detect Sub-tasks** | Auto-identify all sub-tasks after reading the requirement ticket |
+| **Phase-based development** | Complete in phases according to sub-task order |
+| **Independent commits** | Independent commit after each sub-task completes |
+| **Unified MR** | Send a single MR only after all are complete, linking all ticket numbers |
 
-### 🚨 多工模式 SOP（新增，必遵守）
+### 🚨 Multi-Task Mode SOP (New, Must Follow)
 
-**CRITICAL**：多工模式下，除本檔案的流程外，還必須遵守「確保」SOP（包含：子任務全量閱讀與排程、Requirement 分支、Sub-task commit、工時/狀態流轉、RD 通知、以及排程自動推進）。
+**CRITICAL**: In Multi-Task mode, in addition to the flows in this file, the "Ensure" SOP must also be followed (including: full sub-task reading and scheduling, Requirement branch, Sub-task commit, time/status transitions, RD notification, and auto scheduling advancement).
 
-**CRITICAL**：多工模式下，每次運作的「盤點/排程」僅針對 **狀態為 To Do** 且 **單內包含 AI 指示** 的子任務。
+**CRITICAL**: In Multi-Task mode, the "inventory/scheduling" for each run targets only Sub-tasks that are **in To Do status** and **contain AI instructions**.
 
-請參考：
+See:
 - [multi-task-mode-sop.mdc](mdc:.cursor/rules/operator/start-task/multi-task-mode-sop.mdc)
 
-### 行為規範
+### Behavioral Rules
 
-#### 1. 初始化流程
+#### 1. Initialization Flow
 
 ```
-讀取主需求單
+Read main requirement ticket
   ↓
-自動識別所有 Sub-task
+Auto-identify all Sub-tasks
   ↓
-生成開發排程計畫
+Generate development schedule plan
   ↓
-顯示計畫並等待用戶確認
+Show plan and wait for user confirmation
   ↓
-確認後開始分階段執行
+Start phase-based execution after confirmation
 ```
 
-#### 2. Sub-task 偵測
+#### 2. Sub-task Detection
 
-**CRITICAL**: 輸入的單號後，必須檢查是否有子任務：
+**CRITICAL**: After entering a ticket number, must check whether there are sub-tasks:
 
 ```bash
-# 使用 Jira API 獲取子任務列表
-# 檢查 fields.subtasks 陣列
+# Use Jira API to get sub-task list
+# Check fields.subtasks array
 ```
 
-**顯示格式**：
+**Display format**:
 ```
-📋 需求單分析完成
+📋 Requirement ticket analysis complete
 
-🎯 主需求: {PARENT_TICKET}
-   標題: {PARENT_SUMMARY}
+🎯 Main requirement: {PARENT_TICKET}
+   Title: {PARENT_SUMMARY}
 
-📌 已偵測到 {N} 個子任務：
+📌 Detected {N} sub-tasks:
 
-| 序號 | 單號 | 標題 | 狀態 |
+| # | Ticket | Title | Status |
 |---|---|---|---|
 | 1 | {SUB_1} | {SUMMARY_1} | {STATUS_1} |
 | 2 | {SUB_2} | {SUMMARY_2} | {STATUS_2} |
 | ... | ... | ... | ... |
 
-🗓️ 建議開發排程：
+🗓️ Suggested development schedule:
 
-階段 1: {SUB_1} - {SUMMARY_1}
-  開發計劃: [步驟列表]
+Phase 1: {SUB_1} - {SUMMARY_1}
+  Development plan: [step list]
 
-階段 2: {SUB_2} - {SUMMARY_2}
-  開發計劃: [步驟列表]
+Phase 2: {SUB_2} - {SUMMARY_2}
+  Development plan: [step list]
 
 ...
 
-❓ 此開發排程是否正確？請回覆「confirm」或提供調整建議。
+❓ Is this development schedule correct? Reply "confirm" or provide adjustment suggestions.
 ```
 
-#### 3. 分階段執行
+#### 3. Phase-based Execution
 
-每個階段的執行流程：
-
-```
-階段 N 開始
-  ↓
-顯示當前階段信息
-  ↓
-執行開發步驟
-  ↓
-完成後獨立 commit（使用子任務單號作為 scope）
-  ↓
-顯示階段完成摘要
-  ↓
-自動進入下一階段（無需用戶確認）
-```
-
-**Commit 規則**：
-- Scope 使用當前子任務單號
-- 格式：`{type}({SUB_TICKET}): {message}`
-- 範例：`feat(FE-1234-1): implement user profile component`
-
-#### 4. 統一 MR 建立
-
-全部階段完成後：
+Execution flow for each phase:
 
 ```
-📋 所有階段已完成！
+Phase N begins
+  ↓
+Show current phase info
+  ↓
+Execute development steps
+  ↓
+Independent commit after completion (use sub-task ticket as scope)
+  ↓
+Show phase completion summary
+  ↓
+Automatically advance to next phase (no user confirmation needed)
+```
 
-✅ 完成的子任務：
-| 單號 | 標題 | Commit Hash |
+**Commit rules**:
+- Scope uses current sub-task ticket number
+- Format: `{type}({SUB_TICKET}): {message}`
+- Example: `feat(FE-1234-1): implement user profile component`
+
+#### 4. Unified MR Creation
+
+After all phases complete:
+
+```
+📋 All phases complete!
+
+✅ Completed sub-tasks:
+| Ticket | Title | Commit Hash |
 |---|---|---|
 | {SUB_1} | {SUMMARY_1} | {HASH_1} |
 | {SUB_2} | {SUMMARY_2} | {HASH_2} |
 | ... | ... | ... |
 
-🔗 即將建立 MR，關聯以下單號：
-- 主需求: {PARENT_TICKET}
-- 子任務: {SUB_1}, {SUB_2}, ...
+🔗 About to create MR, linking the following tickets:
+- Main requirement: {PARENT_TICKET}
+- Sub-tasks: {SUB_1}, {SUB_2}, ...
 
-❓ 確認建立 MR？
+❓ Confirm create MR?
 ```
 
-**MR Description 格式**：
+**MR Description format**:
 ```markdown
-## 📋 關聯單資訊
+## 📋 Related Ticket Info
 
-### 主需求
-| 項目 | 值 |
+### Main Requirement
+| Item | Value |
 |---|---|
-| **單號** | [{PARENT}](URL) |
-| **標題** | {SUMMARY} |
-| **類型** | {TYPE} |
+| **Ticket** | [{PARENT}](URL) |
+| **Title** | {SUMMARY} |
+| **Type** | {TYPE} |
 
-### 子任務
+### Sub-tasks
 
-| 單號 | 標題 | Commit |
+| Ticket | Title | Commit |
 |---|---|---|
 | [{SUB_1}](URL) | {SUMMARY_1} | {HASH_1} |
 | [{SUB_2}](URL) | {SUMMARY_2} | {HASH_2} |
 
 ---
 
-## 🎯 開發計劃
+## 🎯 Development Plan
 
-### 階段 1: {SUB_1}
-- [步驟 1]
-- [步驟 2]
+### Phase 1: {SUB_1}
+- [Step 1]
+- [Step 2]
 
-### 階段 2: {SUB_2}
-- [步驟 1]
-- [步驟 2]
+### Phase 2: {SUB_2}
+- [Step 1]
+- [Step 2]
 
 ...
 ```
 
-### 顯示格式
+### Display Format
 
 ```
-🔄 多工模式已啟用
+🔄 Multi-task mode enabled
 
-📋 此模式下將：
-- 自動讀取所有 Sub-task
-- 分階段開發，每階段獨立 commit
-- 全部完成後統一發送 MR
+📋 In this mode:
+- Auto-reads all Sub-tasks
+- Phase-based development, independent commit per phase
+- Unified MR sent after all complete
 
-📋 請提供主需求 Jira 單號：
+📋 Please provide main requirement Jira ticket number:
 ```
 
 ---
 
-## 模式三：快速模式 (Fast Mode)
+## Mode 3: Fast Mode
 
-### 適用場景
-- 大量獨立小項目批次處理
-- 需要「排程確認後」目標導向自動推進的情況
-- 希望全部完成後一次性回報給用戶確認
+### Applicable Scenarios
+- Batch processing of many independent small tasks
+- Situations requiring "goal-oriented auto-advancement after schedule confirmation"
+- Wanting to report to user all at once after everything is complete
 
-### 核心原則
+### Core Principles
 
-| 原則 | 說明 |
+| Principle | Description |
 |---|---|
-| **排程確認** | 開始前先與用戶確認排程清單是否完整，是否要追加 |
-| **目標導向推進** | 排程確認後自動推進，不做逐步確認 |
-| **獨立分支** | 每張單使用獨立分支，完成一張後切回 main 再開下一張 |
-| **最終通知** | 全部完成後才通知用戶回來確認總結 |
+| **Schedule confirmation** | Confirm schedule list with user before starting; ask if there are items to add |
+| **Goal-oriented advancement** | Auto-advance after schedule confirmation; no step-by-step confirmation |
+| **Independent branch** | Each ticket uses an independent branch; after completing one, switch back to main then start the next |
+| **Final notification** | Notify user to come back and confirm summary only after all are complete |
 
-### 行為規範
+### Behavioral Rules
 
-快速模式的完整 SOP 請參考：
+Full SOP for Fast mode, see:
 - [fast-mode.mdc](mdc:.cursor/rules/operator/start-task/fast-mode.mdc)
 
-### 顯示格式
+### Display Format
 
 ```
-⚡ 快速模式已啟用
+⚡ Fast mode enabled
 
-📋 此模式特點：
-- ✅ 先確認排程清單（可追加）
-- ✅ 排程確認後目標導向自動推進
-- ✅ 每張單獨立分支（完成後切回 main 再開下一張）
-- ✅ 全部完成後統一通知
+📋 Mode features:
+- ✅ Confirm schedule list first (can add more)
+- ✅ Goal-oriented auto-advance after schedule confirmation
+- ✅ Independent branch per ticket (switch back to main after completing each)
+- ✅ Unified notification after all complete
 
-📋 請提供 Jira 單號（支援多個，用逗號或空格分隔）：
+📋 Please provide Jira ticket numbers (multiple supported, separated by commas or spaces):
 ```
 
 ---
 
-## 模式四：預設模式 (Default Mode)
+## Mode 4: Default Mode
 
-### 適用場景
-- 一般開發任務
-- 需要逐步確認的情況
-- 初次使用 start-task 的用戶
+### Applicable Scenarios
+- General development tasks
+- Situations requiring step-by-step confirmation
+- First-time users of start-task
 
-### 行為規範
+### Behavioral Rules
 
-預設模式遵循現有的 `start-task` 流程，包含：
+Default mode follows the existing `start-task` flow, including:
 
-1. **開發計劃確認**：顯示計劃並等待用戶確認
-2. **開發完成確認**：顯示修改摘要並等待確認
-3. **MR 建立確認**：確認後才建立 MR
+1. **Development plan confirmation**: Show plan and wait for user confirmation
+2. **Development completion confirmation**: Show modification summary and wait for confirmation
+3. **MR creation confirmation**: Create MR only after confirmation
 
-詳細流程請參考：
+For detailed flow, see:
 - [start-task.md](mdc:.cursor/commands/operator/start-task.md)
 - [development-policy.mdc](mdc:.cursor/rules/operator/start-task/development-policy.mdc)
 
-### 顯示格式
+### Display Format
 
 ```
-📋 預設模式已啟用
+📋 Default mode enabled
 
-此模式為標準流程：
-- 每階段需要確認
-- 逐步推進
+This mode is the standard flow:
+- Confirm each phase
+- Step-by-step advancement
 
-📋 請提供 Jira 單號：
+📋 Please provide Jira ticket number:
 ```
 
 ---
 
-## 模式狀態記錄
+## Mode Status Recording
 
-### Git Notes 擴展
+### Git Notes Extension
 
-**CRITICAL**: 選擇的模式必須記錄到 Git notes 中，供後續流程識別：
+**CRITICAL**: The selected mode must be recorded in Git notes for subsequent flow identification:
 
 ```json
 {
   "ticket": "FE-1234",
   "operationMode": "cautious|multi-task|fast|default",
   "modeConfig": {
-    // 模式特定配置
+    // mode-specific config
   },
-  // ... 其他欄位
+  // ... other fields
 }
 ```
 
-### 模式特定配置
+### Mode-specific Config
 
-#### 謹慎模式
+#### Cautious mode
 ```json
 {
   "operationMode": "cautious",
@@ -397,7 +397,7 @@ alwaysApply: false
 }
 ```
 
-#### 多工模式
+#### Multi-task mode
 ```json
 {
   "operationMode": "multi-task",
@@ -412,7 +412,7 @@ alwaysApply: false
 }
 ```
 
-#### 快速模式
+#### Fast mode
 ```json
 {
   "operationMode": "fast",
@@ -427,7 +427,7 @@ alwaysApply: false
 }
 ```
 
-#### 預設模式
+#### Default mode
 ```json
 {
   "operationMode": "default",
@@ -437,45 +437,45 @@ alwaysApply: false
 
 ---
 
-## 模式對照表
+## Mode Comparison Table
 
-| 特性 | 謹慎模式 | 多工模式 | 快速模式 | 預設模式 |
+| Feature | Cautious | Multi-Task | Fast | Default |
 |---|---|---|---|---|
-| **適用場景** | Hotfix | 大項目 | 獨立小項目排程 | 一般開發 |
-| **輸入方式** | 單一單號 | 單一主單號 | 多個單號 | 單一單號 |
-| **確認頻率** | 每步確認 | 計劃確認 | 僅排程確認 | 階段確認 |
-| **Commit 策略** | 單一 Commit | 每階段 Commit | 每任務 Commit | 單一 Commit |
-| **MR 策略** | 單一 MR | 統一 MR | 每任務 MR | 單一 MR |
-| **通知時機** | 每步驟 | 全部完成 | 全部完成 | 每階段 |
-| **風險等級** | 🟢 最低 | 🟡 中等 | 🟡 中等 | 🟢 低 |
+| **Applicable scenario** | Hotfix | Large project | Independent small task scheduling | General development |
+| **Input method** | Single ticket | Single main ticket | Multiple tickets | Single ticket |
+| **Confirmation frequency** | Each step | Plan confirmation | Only schedule confirmation | Phase confirmation |
+| **Commit strategy** | Single commit | Per-phase commit | Per-task commit | Single commit |
+| **MR strategy** | Single MR | Unified MR | Per-task MR | Single MR |
+| **Notification timing** | Each step | After all complete | After all complete | Each phase |
+| **Risk level** | 🟢 Lowest | 🟡 Medium | 🟡 Medium | 🟢 Low |
 
 ---
 
-## 檢查清單
+## Checklist
 
-### AI 執行 start-task 時的模式檢查
+### Mode check when AI executes start-task
 
-- [ ] 是否在詢問 Jira 單號**之前**詢問了模式選擇？
-- [ ] 是否正確識別用戶選擇的模式？
-- [ ] 是否將模式記錄到 Git notes 中？
-- [ ] 是否根據模式調整了確認流程？
-- [ ] 是否根據模式調整了 Commit/MR 策略？
+- [ ] Was mode selection asked **before** asking for the Jira ticket number?
+- [ ] Was the user's chosen mode correctly identified?
+- [ ] Was the mode recorded in Git notes?
+- [ ] Was the confirmation flow adjusted based on mode?
+- [ ] Was the Commit/MR strategy adjusted based on mode?
 
-### 模式切換禁止
+### Mode switching prohibited
 
-**CRITICAL**: 一旦選擇模式並開始執行，**禁止**中途切換模式。如需切換，必須：
+**CRITICAL**: Once a mode is selected and execution begins, **switching modes mid-way is prohibited**. If switching is needed, the user must:
 
-1. 完成或取消當前任務
-2. 重新執行 `start-task`
-3. 選擇新模式
+1. Complete or cancel the current task
+2. Re-execute `start-task`
+3. Select the new mode
 
 ---
 
-## 注意事項
+## Notes
 
-1. **模式選擇時機**：必須在詢問 Jira 單號之前完成
-2. **模式識別靈活性**：支援數字、中文、英文等多種輸入方式
-3. **預設值**：直接按 Enter 預設選擇「預設模式」
-4. **模式記錄**：選擇的模式必須記錄到 Git notes 中
-5. **錯誤處理**：各模式都必須有完善的錯誤處理機制
-6. **通知規則**：遵循 `chat-report-guideline.mdc` 中的系統通知規則
+1. **Mode selection timing**: Must be completed before asking for the Jira ticket number
+2. **Mode recognition flexibility**: Supports multiple input methods including numbers, and English
+3. **Default value**: Pressing Enter directly defaults to "Default mode"
+4. **Mode recording**: The selected mode must be recorded in Git notes
+5. **Error handling**: Each mode must have comprehensive error handling mechanisms
+6. **Notification rules**: Follow the system notification rules in `chat-report-guideline.mdc`

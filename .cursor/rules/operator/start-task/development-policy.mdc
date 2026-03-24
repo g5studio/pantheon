@@ -1,93 +1,93 @@
 ---
-description: 定義 operator 在 start-task 程序時需遵守的開發原則，包含開發流程、報告生成和 MR 處理
+description: Defines development principles that the operator must follow during the start-task process, including the development flow, report generation, and MR handling
 alwaysApply: false
 ---
-# Start-Task 開發原則
+# Start-Task Development Principles
 
-此規則定義了在執行 `start-task` 指令進行開發時，必須遵守的開發原則和流程規範。
+This rule defines the development principles and process specifications that must be followed when executing development under the `start-task` command.
 
-## 相關規則
+## Related Rules
 
-- **行為模式規則**：[operation-modes.mdc](mdc:.cursor/rules/operator/start-task/operation-modes.mdc) - 定義四種行為模式（謹慎、多工、快速、預設）
-- **Jira 檢查規則**：[start-task-jira-check.mdc](mdc:.cursor/rules/operator/start-task/start-task-jira-check.mdc) - 定義 Jira ticket 檢查原則
+- **Operation mode rule**: [operation-modes.mdc](mdc:.cursor/rules/operator/start-task/operation-modes.mdc) - Defines four operation modes (Cautious, Multi-Task, Fast, Default)
+- **Jira check rule**: [start-task-jira-check.mdc](mdc:.cursor/rules/operator/start-task/start-task-jira-check.mdc) - Defines Jira ticket check principles
 
-## 適用場景
+## Applicable Scenarios
 
-此規則適用於 `start-task` 指令執行過程中的所有開發階段，包括：
-- **行為模式選擇**（新增）
-- 開發計劃確認和執行
-- 代碼修改和實現
-- 開發完成後的報告生成
-- Commit 前的確認流程
-- MR 建立和報告檢附
+This rule applies to all development phases during `start-task` command execution, including:
+- **Operation mode selection** (new)
+- Development plan confirmation and execution
+- Code modification and implementation
+- Report generation after development is complete
+- Confirmation flow before commit
+- MR creation and report attachment
 
 ---
 
-## 🚨 行為模式對開發原則的影響
+## 🚨 Impact of Operation Mode on Development Principles
 
-**CRITICAL**: 不同的行為模式會影響開發原則的執行方式，必須根據選擇的模式調整行為。
+**CRITICAL**: Different operation modes affect how development principles are executed. Behavior must be adjusted according to the chosen mode.
 
-### 模式對照表
+### Mode Comparison Table
 
-| 原則 | 謹慎模式 | 多工模式 | 快速模式 | 預設模式 |
+| Principle | Cautious mode | Multi-task mode | Fast mode | Default mode |
 |---|---|---|---|---|
-| **確認流程** | 每步確認 | 僅計劃確認 | 僅排程確認 | 每階段確認 |
-| **開發報告** | 詳細 + 回滾方案 | 每階段摘要 | 簡化（批次總結） | 標準 |
-| **Commit 時機** | 單次 | 每階段 | 每任務 | 單次 |
-| **MR 策略** | 單一 + 詳細描述 | 統一 + 關聯所有單號 | 每任務獨立 | 單一 |
-| **中斷處理** | 立即停止 | 暫停當前階段 | 停止並讓用戶選擇（跳過/暫停/取消） | 等待確認 |
+| **Confirmation flow** | Confirm each step | Only plan confirmation | Only schedule confirmation | Confirm each phase |
+| **Development report** | Detailed + rollback plan | Summary per phase | Simplified (batch summary) | Standard |
+| **Commit timing** | Single commit | Per phase | Per task | Single commit |
+| **MR strategy** | Single + detailed description | Unified + link all ticket numbers | Independent per task | Single |
+| **Interruption handling** | Stop immediately | Pause current phase | Stop and let user choose (skip/pause/cancel) | Wait for confirmation |
 
-### 模式特定原則
+### Mode-specific Principles
 
-#### 謹慎模式額外要求
-- 每個代碼修改前必須顯示影響範圍
-- MR Description 必須包含回滾方案
-- 禁止進行任何「順便優化」
+#### Cautious mode additional requirements
+- Must show impact scope before each code modification
+- MR Description must include rollback plan
+- Prohibit any "while-we're-at-it optimizations"
 
-#### 多工模式額外要求
-- Git notes 必須記錄當前階段進度
-- 每階段完成後自動 commit（不等待確認）
-- MR Description 必須關聯所有子任務單號
-- **必須遵守多工模式 SOP**：包含子任務全量閱讀與排程（僅排程有給 AI 指示的子任務）、Requirement 單號作為 feature branch、Sub-task 單號作為 commit scope、開始前檢查/補填 Original Estimate 並切到「開發中」、完成後切到 Development Review 並留言階段性報告通知 RD、完成一個子任務後自動推進下一個、以及全部排程完成後回到 start-task MR 規範流程。
-- **排程範圍限制（新增）**：多工模式下，每次運作只盤點/排程 **狀態為 To Do** 且 **單內包含 AI 指示** 的子任務；其餘子任務不納入本次自動排程。
+#### Multi-task mode additional requirements
+- Git notes must record current phase progress
+- Auto-commit after each phase completes (no waiting for confirmation)
+- MR Description must link all sub-task ticket numbers
+- **Must follow Multi-Task Mode SOP**: Includes full sub-task reading and scheduling (only schedule sub-tasks with AI instructions), Requirement ticket as feature branch, Sub-task ticket as commit scope, check/fill Original Estimate and switch to "In Progress" before starting, switch to Development Review and leave a phase report to notify RD after completion, auto-advance to next sub-task after completing one, and follow the start-task MR specification flow after all scheduled tasks complete.
+- **Scheduling scope restriction (new)**: In Multi-Task mode, each run only inventories/schedules Sub-tasks that are **in To Do status** and **contain AI instructions**; other sub-tasks are not included in this automatic scheduling.
 
-請參考：
+See:
 - [multi-task-mode-sop.mdc](mdc:.cursor/rules/operator/start-task/multi-task-mode-sop.mdc)
 
-#### 快速模式額外要求
-- 開始前先與用戶確認「排程清單」（授權點）
-- 開發計劃不顯示給用戶（內部執行）
-- 錯誤發生時提供跳過/暫停/取消選項
-- 全部完成後才發送系統通知
+#### Fast mode additional requirements
+- Confirm the "schedule list" with the user before starting (authorization point)
+- Development plan not shown to user (executed internally)
+- Provide skip/pause/cancel options when errors occur
+- Send system notification only after all tasks complete
 
-詳細規範請參考：[operation-modes.mdc](mdc:.cursor/rules/operator/start-task/operation-modes.mdc)
+For detailed specifications, see: [operation-modes.mdc](mdc:.cursor/rules/operator/start-task/operation-modes.mdc)
 
 ---
 
-## 🚨 強制執行：保存開發計劃到 Git Notes
+## 🚨 Forced Execution: Save Development Plan to Git Notes
 
-**CRITICAL**: 當用戶確認開發計劃後，AI **必須立即**執行以下步驟，**絕對不可遺漏**。
+**CRITICAL**: After the user confirms the development plan, the AI **MUST immediately** execute the following steps — **absolutely cannot be omitted**.
 
-### 保存時機
+### When to Save
 
-| 時機 | 動作 | 強制性 |
+| Timing | Action | Mandatory |
 |-----|------|-------|
-| 用戶確認開發計劃後 | **立即保存** Git notes | 🚨 必須 |
-| 開發過程中調整計劃時 | 更新 Git notes | 建議 |
-| 開發完成準備 commit 前 | 檢查 Git notes 存在 | 🚨 必須 |
-| 執行 cr 指令前 | 驗證 Git notes 存在 | 🚨 必須 |
+| After user confirms development plan | **Save immediately** to Git notes | 🚨 Required |
+| When plan is adjusted during development | Update Git notes | Recommended |
+| Before preparing to commit after development | Check Git notes exist | 🚨 Required |
+| Before executing cr command | Verify Git notes exist | 🚨 Required |
 
-### startTaskInfo JSON 格式
+### startTaskInfo JSON Format
 
 ```json
 {
   "ticket": "IN-107113",
-  "summary": "[Jira 標題]",
+  "summary": "[Jira title]",
   "issueType": "Bug",
   "status": "To Do",
   "assignee": "FE-William",
   "priority": "Medium",
-  "suggestedSteps": ["步驟1", "步驟2", "步驟3"],
+  "suggestedSteps": ["step 1", "step 2", "step 3"],
   "sourceBranch": "main",
   "featureBranch": "feature/IN-107113",
   "startedAt": "2025-12-10T14:30:00+08:00",
@@ -98,14 +98,14 @@ alwaysApply: false
 }
 ```
 
-### 行為模式欄位說明
+### Operation Mode Field Descriptions
 
-| 欄位 | 說明 | 可選值 |
+| Field | Description | Possible values |
 |---|---|---|
-| `operationMode` | 選擇的行為模式 | `cautious`, `multi-task`, `fast`, `default` |
-| `modeConfig` | 模式特定配置 | 見下方各模式配置 |
+| `operationMode` | Selected operation mode | `cautious`, `multi-task`, `fast`, `default` |
+| `modeConfig` | Mode-specific configuration | See each mode config below |
 
-**謹慎模式 (cautious) 配置**：
+**Cautious mode (cautious) config**:
 ```json
 {
   "operationMode": "cautious",
@@ -117,7 +117,7 @@ alwaysApply: false
 }
 ```
 
-**多工模式 (multi-task) 配置**：
+**Multi-task mode (multi-task) config**:
 ```json
 {
   "operationMode": "multi-task",
@@ -133,7 +133,7 @@ alwaysApply: false
 }
 ```
 
-**快速模式 (fast) 配置**：
+**Fast mode (fast) config**:
 ```json
 {
   "operationMode": "fast",
@@ -151,7 +151,7 @@ alwaysApply: false
 }
 ```
 
-**預設模式 (default) 配置**：
+**Default mode (default) config**:
 ```json
 {
   "operationMode": "default",
@@ -159,26 +159,26 @@ alwaysApply: false
 }
 ```
 
-### 保存命令
+### Save Command
 
-使用 `.cursor/scripts/operator/save-start-task-info.mjs` 腳本保存：
+Use the `.cursor/scripts/operator/save-start-task-info.mjs` script to save:
 
 ```bash
-# 方式 1：使用獨立參數（包含行為模式）
+# Method 1: Use individual parameters (with operation mode)
 node .cursor/scripts/operator/save-start-task-info.mjs \
   --ticket=IN-107113 \
-  --summary="[標題]" \
+  --summary="[title]" \
   --type=Bug \
   --status="To Do" \
   --assignee="FE-William" \
   --priority="Medium" \
-  --steps='["步驟1", "步驟2", "步驟3"]' \
+  --steps='["step 1", "step 2", "step 3"]' \
   --source-branch=main \
   --ai-completed=true \
   --operation-mode=default \
   --mode-config='{}'
 
-# 方式 2：使用完整 JSON（包含行為模式）
+# Method 2: Use full JSON (with operation mode)
 node .cursor/scripts/operator/save-start-task-info.mjs --json='{
   "ticket": "IN-107113",
   "operationMode": "multi-task",
@@ -188,667 +188,667 @@ node .cursor/scripts/operator/save-start-task-info.mjs --json='{
   }
 }'
 
-# 驗證保存成功
+# Verify save succeeded
 node .cursor/scripts/operator/save-start-task-info.mjs --verify
 
-# 讀取現有 notes
+# Read existing notes
 node .cursor/scripts/operator/save-start-task-info.mjs --read
 
-# 更新現有 notes（合併模式）
-node .cursor/scripts/operator/save-start-task-info.mjs --update --steps='["新步驟"]'
+# Update existing notes (merge mode)
+node .cursor/scripts/operator/save-start-task-info.mjs --update --steps='["new step"]'
 
-# 更新多工模式的階段進度
+# Update phase progress in multi-task mode
 node .cursor/scripts/operator/save-start-task-info.mjs --update \
   --mode-config='{"currentPhase": 2, "phaseCommits": ["hash1", "hash2"]}'
 ```
 
-### 強制檢查點
+### Mandatory Checkpoints
 
-AI 在以下時機，**必須**確認 Git notes 已保存：
+At the following times, the AI **MUST** confirm Git notes have been saved:
 
-- [ ] **用戶確認開發計劃後（快速模式：用戶確認排程清單後）** → 立即執行 `save-start-task-info.mjs`
-- [ ] **執行 `--verify` 驗證** → 確認保存成功
-- [ ] **開發完成準備 commit 前** → 檢查 notes 存在
-- [ ] **執行 `cr` 指令前** → 再次驗證 notes 存在
+- [ ] **After user confirms development plan (Fast mode: after user confirms schedule list)** → Immediately execute `save-start-task-info.mjs`
+- [ ] **Execute `--verify` validation** → Confirm save succeeded
+- [ ] **Before preparing to commit after development** → Check notes exist
+- [ ] **Before executing `cr` command** → Verify notes exist again
 
-### 遺漏處理
+### Handling Missing Notes
 
-如果在 commit 或建立 MR 時發現沒有 Git notes：
+If Git notes are found missing when committing or creating an MR:
 
-1. **立即停止**流程
-2. **詢問用戶**是否要補充開發計劃
-3. 使用腳本保存：
+1. **Stop immediately** the flow
+2. **Ask the user** whether to supplement the development plan
+3. Use script to save:
    ```bash
    node .cursor/scripts/operator/save-start-task-info.mjs \
-     --ticket={從分支名提取} \
-     --summary="[補充標題]" \
-     --type={推斷類型} \
-     --steps='["已完成的步驟"]' \
+     --ticket={extracted from branch name} \
+     --summary="[supplemental title]" \
+     --type={inferred type} \
+     --steps='["completed steps"]' \
      --ai-completed=true
    ```
-4. **驗證保存成功後**才繼續流程
+4. **Continue flow only after verifying save succeeded**
 
-### 流程檢查清單
+### Process Checklist
 
 ```
-## 階段 0：模式選擇（新增）
-- [ ] 🚨 顯示行為模式選項給用戶
-- [ ] 識別用戶選擇的模式
-- [ ] 記錄模式到後續流程
+## Phase 0: Mode Selection (new)
+- [ ] 🚨 Display operation mode options to user
+- [ ] Identify user's chosen mode
+- [ ] Record mode for subsequent flow
 
-## 階段 1：初始化
-- [ ] 讀取 Jira ticket 資訊
-- [ ] 檢查 RD 建議（for AI 標記）
-- [ ] 分析需求並制定開發計劃
-- [ ] 🚨 根據模式決定是否顯示計劃
+## Phase 1: Initialization
+- [ ] Read Jira ticket info
+- [ ] Check RD suggestions (for AI markers)
+- [ ] Analyze requirements and formulate development plan
+- [ ] 🚨 Decide whether to show plan based on mode
 
-## 階段 2：確認計劃
-- [ ] 顯示開發計劃給用戶（快速模式跳過）
-- [ ] 等待用戶確認（快速模式跳過）
-- [ ] 🚨 保存開發計劃到 Git notes（包含 operationMode）← 容易遺漏
-- [ ] 🚨 驗證保存成功
+## Phase 2: Confirm Plan
+- [ ] Show development plan to user (Fast mode: skip)
+- [ ] Wait for user confirmation (Fast mode: skip)
+- [ ] 🚨 Save development plan to Git notes (including operationMode) ← easy to omit
+- [ ] 🚨 Verify save succeeded
 
-## 階段 3：開發執行
-- [ ] 執行開發步驟
-- [ ] 完成代碼修改
-- [ ] 🚨 謹慎模式：每步確認
-- [ ] 🚨 多工模式：每階段獨立 commit
+## Phase 3: Development Execution
+- [ ] Execute development steps
+- [ ] Complete code modifications
+- [ ] 🚨 Cautious mode: confirm each step
+- [ ] 🚨 Multi-task mode: independent commit per phase
 
-## 階段 4：完成報告
-- [ ] 生成開發報告（根據 Jira 類型）
-- [ ] 顯示報告給用戶確認（快速模式跳過）
-- [ ] 更新 Git notes（如有報告）
+## Phase 4: Completion Report
+- [ ] Generate development report (based on Jira type)
+- [ ] Show report to user for confirmation (Fast mode: skip)
+- [ ] Update Git notes (if report exists)
 
-## 階段 5：提交 MR
-- [ ] 🚨 檢查 Git notes 存在
-- [ ] 執行 commit（多工模式已完成）
-- [ ] 建立 MR（自動讀取 notes 生成 description）
-- [ ] 🚨 多工模式：MR 關聯所有子任務單號
-- [ ] 🚨 快速模式：每任務獨立 MR
+## Phase 5: Submit MR
+- [ ] 🚨 Check Git notes exist
+- [ ] Execute commit (Multi-task mode: already done)
+- [ ] Create MR (auto-reads notes to generate description)
+- [ ] 🚨 Multi-task mode: MR links all sub-task ticket numbers
+- [ ] 🚨 Fast mode: independent MR per task
 
-## 階段 6：通知（新增）
-- [ ] 🚨 快速模式：全部完成後發送系統通知
-- [ ] 多工模式：全部完成後發送系統通知
+## Phase 6: Notification (new)
+- [ ] 🚨 Fast mode: send system notification after all tasks complete
+- [ ] Multi-task mode: send system notification after all tasks complete
 ```
 
 ---
 
-## AI 獨立完成項目的標記和 MR 處理
+## Marking AI Independently Completed Items and MR Handling
 
-### 標記 AI 獨立完成的項目
+### Marking AI Independently Completed Items
 
-**CRITICAL**: 當 AI 使用 `start-task` 獨立完成一個項目時（即從開始到完成都由 AI 執行，用戶僅確認計劃），必須在保存開發計劃時標記為 AI 獨立完成。
+**CRITICAL**: When the AI independently completes a project using `start-task` (i.e., from start to finish executed by the AI, with the user only confirming the plan), it must be marked as AI independently completed when saving the development plan.
 
-**標記方式**：
-- 在 `startTaskInfo` 對象中添加 `aiCompleted: true` 標記
-- 此標記用於後續 MR 時自動添加 AI label 和開發方案
+**How to mark**:
+- Add `aiCompleted: true` marker to the `startTaskInfo` object
+- This marker is used to automatically add the AI label and development plan when creating MR later
 
-**判斷標準**：
-- 項目從 `start-task` 開始
-- 開發計劃由 AI 制定並經用戶確認
-- 開發過程主要由 AI 執行（用戶可能提供反饋或調整，但核心開發由 AI 完成）
-- 最終由 AI 執行 `cr single-ticket` 或 `cr multiple-ticket` 建立 MR
+**Criteria**:
+- Project started with `start-task`
+- Development plan formulated by AI and confirmed by user
+- Development process mainly executed by AI (user may provide feedback or adjustments, but core development is by AI)
+- AI ultimately executes `cr single-ticket` or `cr multiple-ticket` to create MR
 
-### MR 時自動處理（cr 系列指令）
+### Automatic Handling at MR Time (cr commands)
 
-當執行 `cr single-ticket` 或 `cr multiple-ticket` 指令建立 MR 時，如果檢測到是由 AI 使用 `start-task` 獨立完成的項目，必須自動執行以下操作：
+When executing `cr single-ticket` or `cr multiple-ticket` to create an MR, if it is detected that the project was independently completed by AI using `start-task`, the following must be automatically executed:
 
-#### 1. 自動添加 AI Label
+#### 1. Auto-add AI Label
 
-**實施位置**：`.cursor/scripts/cr/create-mr.mjs` 的 `determineLabels()` 函數
+**Implementation location**: `determineLabels()` function in `.cursor/scripts/cr/create-mr.mjs`
 
-**邏輯**：
-- 檢查是否存在 `start-task` 的 Git notes（透過 `readStartTaskInfo()`）
-- 如果存在，自動添加 `AI` label
-- 此邏輯已實現在 `create-mr.mjs` 第 1177-1181 行
+**Logic**:
+- Check whether `start-task` Git notes exist (via `readStartTaskInfo()`)
+- If they exist, automatically add `AI` label
+- This logic is implemented in `create-mr.mjs` lines 1177-1181
 
-**🚨 AI 執行規則（CRITICAL）**：
+**🚨 AI Execution Rule (CRITICAL)**:
 
-當 AI 透過 `start-task` 流程觸發 MR 建立時，**必須**在調用 `create-mr.mjs` 的 `--labels` 參數中**明確包含 `AI` label**，不可依賴腳本自動偵測。
+When AI triggers MR creation through the `start-task` flow, it **MUST** explicitly include the `AI` label in the `--labels` parameter when calling `create-mr.mjs` — cannot rely on script auto-detection.
 
-| 項目 | 說明 |
+| Item | Description |
 |---|---|
-| **格式** | `--labels="<其他labels>,AI"` |
-| **AI label** | **必須**包含在 labels 列表中 |
+| **Format** | `--labels="<other labels>,AI"` |
+| **AI label** | **Must** be included in the labels list |
 
-**範例**：
+**Example**:
 ```bash
-# 基本用法
+# Basic usage
 node .cursor/scripts/cr/create-mr.mjs --labels="AI" ...
 
-# 與其他專案特定 labels 組合
-node .cursor/scripts/cr/create-mr.mjs --labels="<專案labels>,AI" ...
+# Combined with other project-specific labels
+node .cursor/scripts/cr/create-mr.mjs --labels="<project labels>,AI" ...
 ```
 
-**禁止行為**：
-- ❌ 依賴腳本自動偵測添加 AI label
-- ❌ 在 `--labels` 參數中遺漏 `AI`
+**Prohibited actions**:
+- ❌ Relying on script auto-detection to add AI label
+- ❌ Omitting `AI` from the `--labels` parameter
 
-#### 2. 自動檢附開發方案到 MR 留言
+#### 2. Auto-attach Development Plan to MR Comment
 
-**實施位置**：`.cursor/scripts/cr/create-mr.mjs` 的 `main()` 函數
+**Implementation location**: `main()` function in `.cursor/scripts/cr/create-mr.mjs`
 
-**邏輯**：
-- 檢查是否存在 `start-task` 的 Git notes
-- 如果存在且包含 `suggestedSteps`，將開發方案添加到 MR description
-- **重要**：開發方案必須以**最終版本**為主，即從 Git notes 讀取最新的計劃信息
-- 避免使用開發過程中可能被調整過的臨時計劃
+**Logic**:
+- Check whether `start-task` Git notes exist
+- If they exist and contain `suggestedSteps`, add the development plan to the MR description
+- **Important**: The development plan must be based on the **final version**, i.e., reading the latest plan info from Git notes
+- Avoid using temporary plans that may have been adjusted during development
 
-**開發方案格式**：
+**Development plan format**:
 ```markdown
-## 🎯 開發計劃
+## 🎯 Development Plan
 
-本 MR 由 `start-task` 命令啟動，以下是初步制定的開發計劃：
+This MR was initiated by the `start-task` command. Below is the initial development plan:
 
-- [步驟 1]
-- [步驟 2]
-- [步驟 3]
+- [Step 1]
+- [Step 2]
+- [Step 3]
 ...
 
-## 📋 關聯單資訊
+## 📋 Related Ticket Info
 
-| 項目 | 值 |
+| Item | Value |
 |---|---|
-| **單號** | [TICKET](URL) |
-| **標題** | [SUMMARY] |
-| **類型** | [ISSUE_TYPE] |
+| **Ticket** | [TICKET](URL) |
+| **Title** | [SUMMARY] |
+| **Type** | [ISSUE_TYPE] |
 ```
 
-**說明**：
-- 開發計劃區塊：只包含開發步驟，不含關聯單資訊
-- 關聯單資訊區塊：獨立區塊，僅包含單號（含超連結）、標題、類型三項
+**Notes**:
+- Development plan section: only includes development steps, no related ticket info
+- Related ticket info section: independent section, only includes ticket number (with hyperlink), title, and type
 
-**實施細節**：
-- 開發計劃由 `generateDevelopmentPlanSection()` 函數生成
-- 關聯單資訊由 `generateRelatedTicketsSection()` 函數生成
-- 開發方案以 `.cursor/tmp/{ticket}/merge-request-description-info.json` 為唯一資料來源，確保是最終版本
-- 如果開發過程中用戶調整過計劃方向，應更新該 JSON（plan 區塊）並在建立 MR 前再次確認
+**Implementation details**:
+- Development plan is generated by the `generateDevelopmentPlanSection()` function
+- Related ticket info is generated by the `generateRelatedTicketsSection()` function
+- The development plan uses `.cursor/tmp/{ticket}/merge-request-description-info.json` as the sole data source to ensure it is the final version
+- If the user adjusted the plan direction during development, update that JSON (plan section) and confirm again before creating MR
 
-#### 3. 確保開發方案為最終版本
+#### 3. Ensure Development Plan is the Final Version
 
-**CRITICAL**: 開發方案必須反映最終確認的版本，而非開發過程中的臨時版本。
+**CRITICAL**: The development plan must reflect the final confirmed version, not temporary versions from during development.
 
-**實施要求**：
-1. **在 start-task 確認時保存**：當用戶確認開發計劃時，將最終版本保存到 `.cursor/tmp/{ticket}/merge-request-description-info.json`
-2. **在開發過程中更新**：如果用戶在開發過程中調整了計劃方向，應該更新該 JSON 中的 `plan`
-3. **在 MR 時讀取最新版本**：建立 MR 前，必須以該 JSON 作為開發計劃來源，確保獲取的是最新版本
+**Implementation requirements**:
+1. **Save when start-task confirms**: When the user confirms the development plan, save the final version to `.cursor/tmp/{ticket}/merge-request-description-info.json`
+2. **Update during development**: If the user adjusts the plan direction during development, the `plan` in that JSON should be updated
+3. **Read latest version at MR time**: Before creating MR, that JSON must be used as the development plan source to ensure the latest version is retrieved
 
-**更新開發計劃 JSON 的時機**：
-- 用戶確認初始計劃時（`start-task` 確認階段）
-- 用戶明確要求調整計劃時
-- 開發完成準備建立 MR 前（可選，用於最終確認）
-- 建立 MR 前：確認 `.cursor/tmp/{ticket}/merge-request-description-info.json` 已更新且內容為最終版本
+**When to update the development plan JSON**:
+- When user confirms the initial plan (start-task confirmation phase)
+- When user explicitly requests a plan adjustment
+- Before creating MR (optional, for final confirmation)
+- Before creating MR: confirm `.cursor/tmp/{ticket}/merge-request-description-info.json` has been updated and content is the final version
 
-**注意事項**：
-- 本流程不再使用 `git notes`（start-task ref）儲存 start-task 資訊；相關舊指令與示例已淘汰
-- 確保在建立 MR 前，JSON 中的 plan 是最終確認的版本
+**Notes**:
+- This flow no longer uses `git notes` (start-task ref) to store start-task info; related old commands and examples are deprecated
+- Ensure the plan in the JSON is the final confirmed version before creating MR
 
 ---
 
-## 開發完成後的報告生成
+## Report Generation After Development Complete
 
-**CRITICAL**: 開發完成後，必須生成開發報告。報告內容除了原始的開發計畫外，必須根據 Jira card 的類型包含額外資訊。
+**CRITICAL**: After development is complete, a development report must be generated. In addition to the original development plan, the report content must include additional information based on the type of Jira card.
 
-### 報告基礎結構
+### Report Base Structure
 
-所有類型的開發報告都必須包含：
+All types of development reports must include:
 
-1. **基本信息**
-   - Jira Ticket 編號和標題
-   - 開發分支名稱
-   - 開發計劃摘要
+1. **Basic info**
+   - Jira Ticket number and title
+   - Development branch name
+   - Development plan summary
 
-2. **變更摘要**
-   - 新增的檔案列表
-   - 修改的檔案列表
-   - 刪除的檔案列表
+2. **Change summary**
+   - List of added files
+   - List of modified files
+   - List of deleted files
 
-3. **開發步驟完成狀態**
-   - 列出所有開發步驟
-   - 標記每個步驟的完成狀態
+3. **Development step completion status**
+   - List all development steps
+   - Mark the completion status of each step
 
-### Bug 類型報告要求
+### Bug Type Report Requirements
 
-當 Jira card 類型為 **Bug** 時，報告必須包含以下額外資訊：
+When the Jira card type is **Bug**, the report must include the following additional info:
 
-#### 1. 影響範圍（Affect Range）
+#### 1. Affect Range
 
-**必須說明**：
-- 受影響的功能模組
-- 受影響的頁面或組件
-- 受影響的用戶群體或使用場景
-- 是否影響其他相關功能
+**Must state**:
+- Affected feature modules
+- Affected pages or components
+- Affected user groups or usage scenarios
+- Whether other related features are affected
 
-**格式範例**：
+**Format example**:
 ```
-### 影響範圍（Affect Range）
+### Affect Range
 
-- **受影響模組**: 用戶管理模組 > 用戶資料頁面
-- **受影響組件**: `UserProfile`, `UserAvatar`
-- **受影響場景**: 用戶在編輯個人資料時，頭像上傳功能異常
-- **關聯影響**: 無其他關聯功能受影響
-```
-
-#### 2. 根本原因（Root Cause）
-
-**必須說明**：
-- 問題發生的技術原因
-- 導致問題的代碼邏輯
-- 為什麼之前沒有發現此問題
-
-**格式範例**：
-```
-### 根本原因（Root Cause）
-
-此 Bug 的根本原因是在 `uploadAvatar` 函數中，未正確處理圖片格式驗證：
-- 原代碼僅檢查了 `image/*` MIME type，但未驗證實際檔案內容
-- 當用戶上傳被偽裝的非圖片檔案時，後端處理失敗但前端未顯示錯誤
-- 此問題在之前版本中未被發現，因為測試用例未覆蓋此邊界情況
+- **Affected module**: User management module > User profile page
+- **Affected components**: `UserProfile`, `UserAvatar`
+- **Affected scenario**: Avatar upload feature fails when user edits profile
+- **Related impact**: No other related features affected
 ```
 
-#### 3. 造成問題的單號
+#### 2. Root Cause
 
-**必須說明**：
-- 導致此 Bug 的原始 commit 或 MR
-- 相關的 Jira ticket（如果有）
-- 引入問題的版本號
+**Must state**:
+- Technical reason why the problem occurred
+- Code logic causing the problem
+- Why this problem was not discovered before
 
-**格式範例**：
+**Format example**:
 ```
-### 造成問題的單號
+### Root Cause
 
-- **引入問題的 MR**: [MR !2845](https://gitlab.service-hub.tech/frontend/fluid-two/-/merge_requests/2845)
-- **相關 Jira Ticket**: [FE-7234](https://innotech.atlassian.net/browse/FE-7234)
-- **引入版本**: v5.34.0
-- **說明**: 該 MR 在重構圖片上傳邏輯時，誤刪了格式驗證的代碼
+The root cause of this bug is that the `uploadAvatar` function does not correctly handle image format validation:
+- The original code only checked the `image/*` MIME type, but did not validate actual file content
+- When a user uploads a non-image file disguised as an image, the backend fails but the frontend shows no error
+- This problem was not discovered before because test cases did not cover this edge case
 ```
 
-#### 4. 改動前後邏輯差異
+#### 3. Causing Ticket
 
-**必須說明**：
-- 修改前的代碼邏輯（簡要描述）
-- 修改後的代碼邏輯（簡要描述）
-- 關鍵差異點
-- 為什麼這個修改能解決問題
+**Must state**:
+- Original commit or MR that introduced this bug
+- Related Jira ticket (if any)
+- Version that introduced the issue
 
-**格式範例**：
+**Format example**:
 ```
-### 改動前後邏輯差異
+### Causing Ticket
 
-#### 修改前邏輯
-- `uploadAvatar` 函數直接將檔案傳送到後端，無前端驗證
-- 錯誤處理僅捕獲網路錯誤，忽略後端返回的格式錯誤
+- **MR that introduced the issue**: [MR !2845](https://gitlab.service-hub.tech/frontend/fluid-two/-/merge_requests/2845)
+- **Related Jira Ticket**: [FE-7234](https://innotech.atlassian.net/browse/FE-7234)
+- **Version introduced**: v5.34.0
+- **Notes**: That MR accidentally deleted the format validation code when refactoring the image upload logic
+```
 
-#### 修改後邏輯
-- 新增 `validateImageFile` 函數，在上傳前驗證檔案格式和大小
-- 增強錯誤處理，捕獲並顯示後端返回的所有錯誤類型
-- 添加用戶友好的錯誤提示訊息
+#### 4. Logic Diff Before/After
 
-#### 關鍵差異
-| 項目 | 修改前 | 修改後 |
+**Must state**:
+- Code logic before modification (brief description)
+- Code logic after modification (brief description)
+- Key differences
+- Why this fix resolves the problem
+
+**Format example**:
+```
+### Logic Diff Before/After
+
+#### Logic Before
+- `uploadAvatar` function sends file directly to backend without frontend validation
+- Error handling only catches network errors, ignores backend-returned format errors
+
+#### Logic After
+- Added `validateImageFile` function to validate file format and size before upload
+- Enhanced error handling to catch and display all error types returned by backend
+- Added user-friendly error prompt messages
+
+#### Key Differences
+| Item | Before | After |
 |-----|------|------|
-| 前端驗證 | 無 | 檢查 MIME type 和檔案頭 |
-| 錯誤處理 | 僅網路錯誤 | 所有錯誤類型 |
-| 用戶提示 | 無 | 明確的錯誤訊息 |
+| Frontend validation | None | Checks MIME type and file header |
+| Error handling | Network errors only | All error types |
+| User prompt | None | Clear error message |
 
-#### 解決原因
-此修改通過在前端添加驗證層，防止無效檔案被上傳，並提供清晰的錯誤反饋給用戶。
+#### Why This Fix Works
+This fix prevents invalid files from being uploaded by adding a validation layer on the frontend, and provides clear error feedback to users.
 ```
 
-### Request 類型報告要求
+### Request Type Report Requirements
 
-當 Jira card 類型為 **Story**、**Task**、**Feature** 或其他需求類型時，報告必須包含以下額外資訊：
+When the Jira card type is **Story**, **Task**, **Feature**, or other requirement types, the report must include the following additional info:
 
-#### 1. 預期效果
+#### 1. Expected Effect
 
-**必須說明**：
-- 功能實現後的預期行為
-- 用戶體驗的改變
-- 與需求文件的對應關係
+**Must state**:
+- Expected behavior after feature is implemented
+- Changes to user experience
+- Correspondence with requirements document
 
-**格式範例**：
+**Format example**:
 ```
-### 預期效果
+### Expected Effect
 
-#### 功能行為
-- 用戶可以在設定頁面切換深色/淺色主題
-- 主題選擇會即時生效，無需重新載入頁面
-- 用戶的主題偏好會被保存到 localStorage
+#### Feature Behavior
+- User can toggle dark/light theme on the settings page
+- Theme selection takes effect immediately without reloading the page
+- User's theme preference is saved to localStorage
 
-#### 用戶體驗改變
-- 新增主題切換開關，位於設定頁面右上角
-- 切換時有平滑的過渡動畫效果
-- 支援系統主題偏好自動偵測
+#### User Experience Changes
+- New theme toggle switch, located in the top right of the settings page
+- Smooth transition animation when switching
+- Supports auto-detection of system theme preference
 
-#### 需求對應
-- ✅ 需求 1.1: 提供主題切換功能 → 已實現
-- ✅ 需求 1.2: 保存用戶偏好 → 已實現
-- ✅ 需求 1.3: 支援系統偏好 → 已實現
+#### Requirements Correspondence
+- ✅ Requirement 1.1: Provide theme toggle feature → Implemented
+- ✅ Requirement 1.2: Save user preference → Implemented
+- ✅ Requirement 1.3: Support system preference → Implemented
 ```
 
-#### 2. 需求覆蓋率
+#### 2. Requirements Coverage
 
-**必須說明**：
-- 需求文件中的所有要求
-- 每個要求的實現狀態
-- 未實現項目的原因（如有）
+**Must state**:
+- All requirements from the requirements document
+- Implementation status of each requirement
+- Reasons for unimplemented items (if any)
 
-**格式範例**：
+**Format example**:
 ```
-### 需求覆蓋率
+### Requirements Coverage
 
-| 需求項目 | 狀態 | 說明 |
+| Requirement item | Status | Notes |
 |--------|-----|-----|
-| 主題切換開關 | ✅ 已實現 | 位於設定頁面 |
-| 即時生效 | ✅ 已實現 | 使用 CSS 變數實現 |
-| 持久化存儲 | ✅ 已實現 | localStorage |
-| 系統偏好偵測 | ✅ 已實現 | prefers-color-scheme |
-| 動畫效果 | ✅ 已實現 | 300ms 過渡 |
-| 多主題支援 | ⏸️ 延後 | 此版本僅支援深淺兩種，多主題將在下一版本實現 |
+| Theme toggle switch | ✅ Implemented | On settings page |
+| Immediate effect | ✅ Implemented | Using CSS variables |
+| Persistent storage | ✅ Implemented | localStorage |
+| System preference detection | ✅ Implemented | prefers-color-scheme |
+| Animation effect | ✅ Implemented | 300ms transition |
+| Multiple theme support | ⏸️ Deferred | This version only supports light/dark; multi-theme in next version |
 
-**覆蓋率**: 5/6 (83.3%)
+**Coverage**: 5/6 (83.3%)
 
-**說明**: 多主題支援因設計稿尚未確定，暫時延後至下一版本。
+**Notes**: Multi-theme support is deferred to the next version because the design hasn't been finalized.
 ```
 
-#### 3. 潛在影響風險報告
+#### 3. Potential Impact Risk Report
 
-**必須說明**：
-- 對現有功能的影響
-- 可能的副作用
-- 需要注意的邊界情況
-- 建議的測試重點
+**Must state**:
+- Impact on existing features
+- Possible side effects
+- Edge cases to watch for
+- Recommended test focus areas
 
-**格式範例**：
+**Format example**:
 ```
-### 潛在影響風險報告
+### Potential Impact Risk Report
 
-#### 對現有功能的影響
+#### Impact on Existing Features
 
-| 功能 | 影響程度 | 說明 |
+| Feature | Impact level | Notes |
 |-----|--------|-----|
-| 整體樣式 | 🟡 中度 | 所有使用 CSS 變數的組件會受主題影響 |
-| 圖表顏色 | 🟢 低度 | 圖表組件已適配主題變數 |
-| 第三方組件 | 🟡 中度 | 部分第三方組件可能需要額外適配 |
+| Overall styles | 🟡 Medium | All components using CSS variables are affected by the theme |
+| Chart colors | 🟢 Low | Chart components already adapted to theme variables |
+| Third-party components | 🟡 Medium | Some third-party components may need additional adaptation |
 
-#### 可能的副作用
+#### Possible Side Effects
 
-1. **樣式不一致風險**
-   - 某些硬編碼顏色的組件可能在深色主題下顯示異常
-   - 建議: 全面檢查所有頁面在深色主題下的顯示效果
+1. **Style inconsistency risk**
+   - Some hardcoded color components may display incorrectly in dark theme
+   - Suggestion: Thoroughly check all pages for display correctness in dark theme
 
-2. **性能影響**
-   - 主題切換會觸發大量 CSS 重新計算
-   - 影響: 在低端設備上可能有短暫卡頓
-   - 建議: 已添加 will-change 優化，影響可忽略
+2. **Performance impact**
+   - Theme switching triggers large amounts of CSS recalculation
+   - Impact: May cause brief lag on low-end devices
+   - Suggestion: will-change optimization has been added; impact is negligible
 
-3. **localStorage 衝突**
-   - 使用 `theme-preference` 作為存儲 key
-   - 風險: 如果其他功能使用相同 key 會造成衝突
-   - 建議: 已確認無衝突
+3. **localStorage conflict**
+   - Using `theme-preference` as storage key
+   - Risk: If other features use the same key, conflict will occur
+   - Suggestion: Confirmed no conflict
 
-#### 邊界情況
+#### Edge Cases
 
-- 用戶在 A 標籤頁切換主題，B 標籤頁不會即時同步（需重新載入）
-- 若 localStorage 被禁用，主題選擇不會被保存
-- 系統主題變更時，已手動設定的偏好會被保留
+- If user switches theme in tab A, tab B will not sync immediately (needs reload)
+- If localStorage is disabled, theme selection will not be saved
+- When system theme changes, manually set preferences will be preserved
 
-#### 建議測試重點
+#### Recommended Test Focus Areas
 
-1. 所有頁面在深色主題下的樣式檢查
-2. 主題切換的性能表現
-3. 跨標籤頁的主題同步行為
-4. localStorage 禁用情況下的降級處理
+1. Style check for all pages in dark theme
+2. Performance of theme switching
+3. Cross-tab theme sync behavior
+4. Graceful degradation when localStorage is disabled
 ```
 
 ---
 
-## 完成修改後的確認與自動提交流程
+## Confirmation and Auto-Submit Flow After Modification Complete
 
-**CRITICAL**: 當 AI 使用 `start-task` 完成代碼修改後，必須在 chat 中與用戶確認修改計畫和開發報告，確認無誤後才能執行 `cr single-ticket` 命令提交 MR。
+**CRITICAL**: After the AI completes code modifications using `start-task`, it must confirm the modification plan and development report with the user in chat. Only after confirmation can the `cr single-ticket` command be executed to submit the MR.
 
-### 流程步驟
+### Flow Steps
 
-1. **讀取開發計劃**：
-   - 讀取 `.cursor/tmp/{ticket}/merge-request-description-info.json` 的 `plan`
-   - 若檔案不存在或格式不完整，必須先補齊/更新後再繼續
+1. **Read development plan**:
+   - Read the `plan` from `.cursor/tmp/{ticket}/merge-request-description-info.json`
+   - If the file doesn't exist or format is incomplete, it must be supplemented/updated before continuing
 
-2. **生成開發報告**：
-   - 根據 Jira card 類型生成對應的報告內容
-   - Bug 類型: 包含影響範圍、根本原因、造成問題單號、改動前後邏輯差異
-   - Request 類型: 包含預期效果、需求覆蓋率、潛在影響風險
+2. **Generate development report**:
+   - Generate the corresponding report content based on the Jira card type
+   - Bug type: includes affect range, root cause, causing ticket, logic diff before/after
+   - Request type: includes expected effect, requirements coverage, potential impact risk
 
-3. **顯示完整報告**：
-   - 在 chat 中顯示當前任務信息（分支、ticket、標題）
-   - 顯示已完成的開發步驟
-   - 顯示本次修改的摘要
-   - 顯示根據 Jira card 類型生成的額外報告內容
+3. **Show complete report**:
+   - Show current task info in chat (branch, ticket, title)
+   - Show completed development steps
+   - Show summary of this modification
+   - Show additional report content generated based on Jira card type
 
-4. **等待用戶確認**：
-   - **CRITICAL**: 必須明確詢問用戶確認報告內容
-   - 等待用戶回應「是」、「確認」、「可以」等肯定回答
-   - **禁止**在用戶確認前執行 commit 或 MR 操作
+4. **Wait for user confirmation**:
+   - **CRITICAL**: Must explicitly ask user to confirm report content
+   - Wait for user response of "yes", "confirmed", "ok", etc.
+   - **Prohibited** to execute commit or MR operations before user confirms
 
-5. **執行 cr single-ticket 命令**：
-   - 只有在用戶明確確認後，才執行 `cr single-ticket` 命令
-   - 將用戶確認的報告內容檢附到 MR description
+5. **Execute cr single-ticket command**:
+   - Only execute the `cr single-ticket` command after user explicitly confirms
+   - Attach the confirmed report content to the MR description
 
-### 顯示格式範例
+### Display Format Examples
 
-#### Bug 類型報告
+#### Bug Type Report
 
 ```
-✅ 開發完成！以下是開發報告，請確認：
+✅ Development complete! Below is the development report, please confirm:
 
-📋 當前任務信息
+📋 Current Task Info
 ============================================================
-分支: feature/FE-7846
+Branch: feature/FE-7846
 Ticket: [FE-7846](https://innotech.atlassian.net/browse/FE-7846)
-標題: 修復用戶頭像上傳失敗問題
-類型: Bug
+Title: Fix user avatar upload failure
+Type: Bug
 
-✅ 已完成的開發步驟：
-- 1. 分析問題原因 ✓
-- 2. 定位問題代碼 ✓
-- 3. 實現修復方案 ✓
-- 4. 驗證修復效果 ✓
+✅ Completed development steps:
+- 1. Analyze problem cause ✓
+- 2. Locate problem code ✓
+- 3. Implement fix ✓
+- 4. Verify fix effect ✓
 
-📝 變更摘要：
-- 修改檔案: src/modules/user/utils/uploadAvatar.ts
-- 新增檔案: src/modules/user/utils/validateImageFile.ts
-- 主要改動: 添加圖片格式驗證邏輯
+📝 Change summary:
+- Modified file: src/modules/user/utils/uploadAvatar.ts
+- Added file: src/modules/user/utils/validateImageFile.ts
+- Main change: Added image format validation logic
 
 ============================================================
-📊 Bug 修復報告
+📊 Bug Fix Report
 ============================================================
 
-### 影響範圍（Affect Range）
-- **受影響模組**: 用戶管理模組 > 用戶資料頁面
-- **受影響組件**: `UserProfile`, `UserAvatar`
-- **受影響場景**: 用戶在編輯個人資料時，頭像上傳功能異常
+### Affect Range
+- **Affected module**: User management module > User profile page
+- **Affected components**: `UserProfile`, `UserAvatar`
+- **Affected scenario**: Avatar upload feature fails when user edits profile
 
-### 根本原因（Root Cause）
-此 Bug 的根本原因是在 `uploadAvatar` 函數中，未正確處理圖片格式驗證...
+### Root Cause
+The root cause of this bug is that the `uploadAvatar` function does not correctly handle image format validation...
 
-### 造成問題的單號
-- **引入問題的 MR**: [MR !2845](URL)
-- **相關 Jira Ticket**: [FE-7234](URL)
-- **引入版本**: v5.34.0
+### Causing Ticket
+- **MR that introduced the issue**: [MR !2845](URL)
+- **Related Jira Ticket**: [FE-7234](URL)
+- **Version introduced**: v5.34.0
 
-### 改動前後邏輯差異
-| 項目 | 修改前 | 修改後 |
+### Logic Diff Before/After
+| Item | Before | After |
 |-----|------|------|
-| 前端驗證 | 無 | 檢查 MIME type 和檔案頭 |
-| 錯誤處理 | 僅網路錯誤 | 所有錯誤類型 |
+| Frontend validation | None | Checks MIME type and file header |
+| Error handling | Network errors only | All error types |
 
 ============================================================
 
-❓ 以上開發報告是否正確無誤？確認後我將執行 `cr single-ticket` 命令提交 MR，並將此報告檢附到 MR 中。
+❓ Is the above development report correct? After confirmation I will execute the `cr single-ticket` command to submit the MR and attach this report to the MR.
 ```
 
-#### Request 類型報告
+#### Request Type Report
 
 ```
-✅ 開發完成！以下是開發報告，請確認：
+✅ Development complete! Below is the development report, please confirm:
 
-📋 當前任務信息
+📋 Current Task Info
 ============================================================
-分支: feature/FE-7850
+Branch: feature/FE-7850
 Ticket: [FE-7850](https://innotech.atlassian.net/browse/FE-7850)
-標題: 新增深色主題切換功能
-類型: Story
+Title: Add dark theme toggle feature
+Type: Story
 
-✅ 已完成的開發步驟：
-- 1. 分析需求並確認技術方案 ✓
-- 2. 創建主題切換組件 ✓
-- 3. 實現 CSS 變數系統 ✓
-- 4. 添加持久化存儲 ✓
+✅ Completed development steps:
+- 1. Analyze requirements and confirm technical approach ✓
+- 2. Create theme toggle component ✓
+- 3. Implement CSS variable system ✓
+- 4. Add persistent storage ✓
 
-📝 變更摘要：
-- 新增檔案: src/components/ThemeSwitch/index.tsx
-- 修改檔案: src/styles/variables.css
-- 修改檔案: src/context/ThemeProvider.tsx
+📝 Change summary:
+- Added file: src/components/ThemeSwitch/index.tsx
+- Modified file: src/styles/variables.css
+- Modified file: src/context/ThemeProvider.tsx
 
 ============================================================
-📊 需求實現報告
+📊 Requirements Implementation Report
 ============================================================
 
-### 預期效果
-- 用戶可以在設定頁面切換深色/淺色主題
-- 主題選擇會即時生效，無需重新載入頁面
-- 用戶的主題偏好會被保存到 localStorage
+### Expected Effect
+- User can toggle dark/light theme on the settings page
+- Theme selection takes effect immediately without reloading the page
+- User's theme preference is saved to localStorage
 
-### 需求覆蓋率
-| 需求項目 | 狀態 | 說明 |
+### Requirements Coverage
+| Requirement item | Status | Notes |
 |--------|-----|-----|
-| 主題切換開關 | ✅ 已實現 | 位於設定頁面 |
-| 即時生效 | ✅ 已實現 | 使用 CSS 變數實現 |
-| 持久化存儲 | ✅ 已實現 | localStorage |
+| Theme toggle switch | ✅ Implemented | On settings page |
+| Immediate effect | ✅ Implemented | Using CSS variables |
+| Persistent storage | ✅ Implemented | localStorage |
 
-**覆蓋率**: 3/3 (100%)
+**Coverage**: 3/3 (100%)
 
-### 潛在影響風險報告
+### Potential Impact Risk Report
 
-#### 對現有功能的影響
-| 功能 | 影響程度 | 說明 |
+#### Impact on Existing Features
+| Feature | Impact level | Notes |
 |-----|--------|-----|
-| 整體樣式 | 🟡 中度 | 所有使用 CSS 變數的組件會受主題影響 |
+| Overall styles | 🟡 Medium | All components using CSS variables are affected by the theme |
 
-#### 建議測試重點
-1. 所有頁面在深色主題下的樣式檢查
-2. 主題切換的性能表現
+#### Recommended Test Focus Areas
+1. Style check for all pages in dark theme
+2. Performance of theme switching
 
 ============================================================
 
-❓ 以上開發報告是否正確無誤？確認後我將執行 `cr single-ticket` 命令提交 MR，並將此報告檢附到 MR 中。
+❓ Is the above development report correct? After confirmation I will execute the `cr single-ticket` command to submit the MR and attach this report to the MR.
 ```
 
 ---
 
-## MR 報告檢附規則
+## MR Report Attachment Rules
 
-**CRITICAL**: 當用戶確認開發報告後，必須將報告內容檢附到 MR description 中。
+**CRITICAL**: After the user confirms the development report, the report content must be attached to the MR description.
 
-### 檢附格式
+### Attachment Format
 
-報告應該以 Markdown 格式添加到 MR description，結構如下：
+The report should be added to the MR description in Markdown format, structured as follows:
 
 ```markdown
-## 🎯 開發計劃
+## 🎯 Development Plan
 
-本 MR 由 `start-task` 命令啟動，以下是開發計劃：
+This MR was initiated by the `start-task` command. Below is the development plan:
 
-- [步驟 1]
-- [步驟 2]
+- [Step 1]
+- [Step 2]
 ...
 
-## 📋 關聯單資訊
+## 📋 Related Ticket Info
 
-| 項目 | 值 |
+| Item | Value |
 |---|---|
-| **單號** | [TICKET](URL) |
-| **標題** | [SUMMARY] |
-| **類型** | [ISSUE_TYPE] |
+| **Ticket** | [TICKET](URL) |
+| **Title** | [SUMMARY] |
+| **Type** | [ISSUE_TYPE] |
 
 ---
 
-## 📊 開發報告
+## 📊 Development Report
 
-[根據 Jira card 類型的報告內容]
+[Report content based on Jira card type]
 ```
 
-**說明**：
-- 開發計劃與關聯單資訊為獨立區塊
-- 關聯單資訊僅包含單號（含超連結）、標題、類型三項
-- 開發報告為可選區塊，根據 Jira card 類型生成
+**Notes**:
+- Development plan and related ticket info are independent sections
+- Related ticket info only includes ticket number (with hyperlink), title, and type
+- Development report is an optional section, generated based on Jira card type
 
-### 實施位置
+### Implementation Location
 
-開發報告的更新和檢附由 `.cursor/scripts/operator/update-development-report.mjs` 腳本處理：
+Development report updating and attachment is handled by the `.cursor/scripts/operator/update-development-report.mjs` script:
 
-**腳本功能**：
-- 讀取和更新 Git notes 中的 `startTaskInfo`
-- 將開發報告保存到 `developmentReport` 欄位
-- 生成格式化的 MR description（使用表格格式，避免換行問題）
+**Script functions**:
+- Read and update `startTaskInfo` in Git notes
+- Save development report to the `developmentReport` field
+- Generate formatted MR description (using table format to avoid line break issues)
 
-**使用方式**：
+**Usage**:
 
 ```bash
-# 更新開發報告（直接提供內容）
+# Update development report (provide content directly)
 node .cursor/scripts/operator/update-development-report.mjs --report="<report-content>"
 
-# 從檔案讀取報告內容
+# Read report content from file
 node .cursor/scripts/operator/update-development-report.mjs --report-file="<path-to-report-file>"
 
-# 讀取當前的 startTaskInfo（JSON 格式）
+# Read current startTaskInfo (JSON format)
 node .cursor/scripts/operator/update-development-report.mjs --read
 
-# 輸出格式化的 MR description（Markdown 格式）
+# Output formatted MR description (Markdown format)
 node .cursor/scripts/operator/update-development-report.mjs --format
 ```
 
-**AI 流程中的使用**：
+**AI flow usage**:
 
-1. AI 生成開發報告後，使用 `--report` 參數將報告內容保存到 Git notes
-2. 執行 `cr single-ticket` 時，可以使用 `--format` 獲取格式化的 MR description
-3. 將格式化的 description 傳遞給 MR 建立流程
-
----
-
-## 實施檢查清單
-
-在 `start-task.mjs` 中：
-- [x] 保存開發計劃時，包含完整欄位（ticket, summary, issueType, status, assignee, priority, suggestedSteps, startedAt, developmentReport）
-- [ ] 標記是否為 AI 獨立完成（`aiCompleted: true`）
-
-在 `agent-commit.mjs` 中：
-- [x] 在 commit 之後，檢查並複製 start-task Git notes 到新 commit
-- [x] 如果父 commit 或 base commit 有 Git notes，自動複製到當前 commit
-
-在 `create-mr.mjs` 中：
-- [x] 檢查 `startTaskInfo` 並自動添加 `AI` label
-- [x] 檢查 `startTaskInfo` 並添加開發方案到 MR description
-- [x] `readStartTaskInfo()` 函數可從父 commit 或 base commit 讀取
-
-在 `update-development-report.mjs` 中：
-- [x] 讀取 Git notes 中的 `startTaskInfo`
-- [x] 更新 `developmentReport` 欄位
-- [x] 生成格式化的 MR description（表格格式）
-
-在 AI Chat 流程中：
-- [ ] 完成修改後，根據 Jira card 類型生成開發報告
-- [ ] 顯示開發報告並詢問用戶確認
-- [ ] **必須等待用戶確認後**，使用 `update-development-report.mjs` 保存報告
-- [ ] 執行 `cr single-ticket` 命令建立 MR
+1. After the AI generates the development report, use `--report` parameter to save report content to Git notes
+2. When executing `cr single-ticket`, use `--format` to get the formatted MR description
+3. Pass the formatted description to the MR creation flow
 
 ---
 
-## 注意事項
+## Implementation Checklist
 
-1. **用戶確認優先**：Commit 和 MR 操作必須在用戶確認報告後才能執行
-2. **報告類型對應**：必須根據 Jira card 類型生成對應的報告內容
-3. **最終版本原則**：開發方案和報告必須以最終確認的版本為主
-4. **自動化處理**：AI 獨立完成的項目在建立 MR 時必須自動添加 AI label 和報告
-5. **完整性要求**：Bug 報告必須包含所有四項額外資訊，Request 報告必須包含所有三項額外資訊
-6. **影響分析**：潛在影響風險報告必須客觀評估，不可遺漏重要風險
-7. **溯源要求**：Bug 報告中的「造成問題的單號」必須盡可能追溯到具體的 commit 或 MR
+In `start-task.mjs`:
+- [x] When saving development plan, includes complete fields (ticket, summary, issueType, status, assignee, priority, suggestedSteps, startedAt, developmentReport)
+- [ ] Mark whether AI independently completed (`aiCompleted: true`)
+
+In `agent-commit.mjs`:
+- [x] After commit, check and copy start-task Git notes to new commit
+- [x] If parent commit or base commit has Git notes, auto-copy to current commit
+
+In `create-mr.mjs`:
+- [x] Check `startTaskInfo` and auto-add `AI` label
+- [x] Check `startTaskInfo` and add development plan to MR description
+- [x] `readStartTaskInfo()` function can read from parent commit or base commit
+
+In `update-development-report.mjs`:
+- [x] Read `startTaskInfo` from Git notes
+- [x] Update `developmentReport` field
+- [x] Generate formatted MR description (table format)
+
+In AI Chat flow:
+- [ ] After completing modification, generate development report based on Jira card type
+- [ ] Show development report and ask user to confirm
+- [ ] **Must wait for user confirmation** before using `update-development-report.mjs` to save report
+- [ ] Execute `cr single-ticket` command to create MR
+
+---
+
+## Notes
+
+1. **User confirmation first**: Commit and MR operations must be executed only after user confirms the report
+2. **Report type matching**: Must generate corresponding report content based on Jira card type
+3. **Final version principle**: Development plan and report must be based on the final confirmed version
+4. **Automated handling**: AI independently completed projects must auto-add AI label and report when creating MR
+5. **Completeness requirement**: Bug reports must include all four additional items; Request reports must include all three additional items
+6. **Impact analysis**: Potential impact risk report must objectively assess and must not omit important risks
+7. **Traceability requirement**: "Causing Ticket" in Bug reports must trace back to specific commits or MRs as much as possible

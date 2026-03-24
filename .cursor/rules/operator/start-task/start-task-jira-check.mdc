@@ -1,140 +1,140 @@
 ---
-description: 在 start-task 檢查 Jira 單時需要遵守的原則，包含子任務偵測和優先檢查 RD 提供的建議
+description: Principles to follow when checking Jira tickets during start-task, including sub-task detection and prioritizing RD-provided suggestions
 alwaysApply: false
 ---
-# Start-Task Jira Ticket 檢查原則
+# Start-Task Jira Ticket Check Principles
 
-此規則定義了在執行 `start-task` 指令時，檢查和分析 Jira ticket 時需要遵守的原則。
+This rule defines the principles to follow when checking and analyzing Jira tickets during the `start-task` command execution.
 
-## 適用場景
+## Applicable Scenarios
 
-此規則適用於 `start-task` 指令執行過程中，當 AI 需要：
-- 讀取 Jira ticket 信息
-- 分析 ticket 的需求和描述
-- 制定開發計劃
-- 顯示 ticket 信息給用戶
+This rule applies during `start-task` command execution when the AI needs to:
+- Read Jira ticket info
+- Analyze ticket requirements and descriptions
+- Formulate development plans
+- Display ticket info to the user
 
 ---
 
-## 🚨 核心原則：子任務偵測（最高優先級）
+## 🚨 Core Principle: Sub-Task Detection (Highest Priority)
 
-**🚨 CRITICAL**: 讀取 Jira ticket 後，**必須立即**檢測是否為子任務，此步驟**絕對不可遺漏**。這是 start-task 流程中的**第一優先級檢查項目**。
+**🚨 CRITICAL**: After reading a Jira ticket, **must immediately** check whether it is a sub-task — this step **absolutely cannot be omitted**. This is the **first priority check item** in the start-task flow.
 
-### 偵測邏輯
+### Detection Logic
 
-在讀取 Jira ticket 資料後，**必須**執行以下檢查：
+After reading Jira ticket data, the following checks **MUST** be performed:
 
-1. **檢查 issuetype**：確認 `fields.issuetype.name` 是否為 `Sub-task`
-2. **提取父任務**：若為子任務，從 `fields.parent.key` 取得父任務單號
+1. **Check issuetype**: Confirm whether `fields.issuetype.name` is `Sub-task`
+2. **Extract parent task**: If it is a sub-task, get the parent task ticket from `fields.parent.key`
 
-### 處理流程
+### Handling Flow
 
-| 條件 | 分支單號 | Commit 單號 | MR 關聯單號 |
+| Condition | Branch ticket | Commit ticket | MR associated ticket |
 |---|---|---|---|
-| `issuetype.name === "Sub-task"` | **父任務單號**（`parent.key`） | 子任務單號 | 子任務 + 父任務 |
-| `issuetype.name !== "Sub-task"` | 用戶提供的單號 | 用戶提供的單號 | 用戶提供的單號 |
+| `issuetype.name === "Sub-task"` | **Parent task ticket** (`parent.key`) | Sub-task ticket | Sub-task + parent task |
+| `issuetype.name !== "Sub-task"` | User-provided ticket | User-provided ticket | User-provided ticket |
 
-### 強制顯示格式
+### Forced Display Format
 
-**CRITICAL**: 若偵測到 ticket 為子任務，**必須**在 chat 中明確顯示以下資訊：
+**CRITICAL**: If the ticket is detected as a sub-task, the following info **MUST** be displayed in chat:
 
 ```
-🔍 正在檢測 ticket 類型...
-📌 偵測到此為子任務（Sub-task）
-📋 子任務單號: {子任務單號}
-📋 父任務單號: {parent.key}
+🔍 Detecting ticket type...
+📌 Detected as sub-task (Sub-task)
+📋 Sub-task ticket: {sub-task ticket}
+📋 Parent task ticket: {parent.key}
 
-ℹ️ 分支將使用父任務單號: feature/{父任務單號}
-ℹ️ Commit 將使用子任務單號: ({子任務單號})
-ℹ️ MR 將關聯兩個單號: {子任務單號}, {父任務單號}
+ℹ️ Branch will use parent task ticket: feature/{parent task ticket}
+ℹ️ Commit will use sub-task ticket: ({sub-task ticket})
+ℹ️ MR will link two tickets: {sub-task ticket}, {parent task ticket}
 ```
 
-### 記錄單號供後續使用
+### Recording Tickets for Later Use
 
-當偵測到子任務時，AI **必須**記錄以下資訊供後續流程使用：
+When a sub-task is detected, the AI **MUST** record the following info for the subsequent flow:
 
-| 用途 | 使用的單號 | 說明 |
+| Purpose | Ticket to use | Notes |
 |---|---|---|
-| **創建分支** | 父任務單號 | 避免多個子任務各自建立分支 |
-| **Commit scope** | 子任務單號 | 確保追蹤每個子任務的改動 |
-| **MR 關聯** | 子任務 + 父任務 | 方便在 Jira 中追蹤完整需求進度 |
-| **Git notes** | 子任務單號 | 作為主要 ticket 記錄 |
+| **Creating branch** | Parent task ticket | Avoid multiple sub-tasks each creating their own branch |
+| **Commit scope** | Sub-task ticket | Ensure each sub-task's changes are tracked |
+| **MR association** | Sub-task + parent task | For tracking full requirement progress in Jira |
+| **Git notes** | Sub-task ticket | As the primary ticket record |
 
-### 禁止行為
+### Prohibited Actions
 
-**🚨 CRITICAL**: 以下行為**絕對禁止**：
+**🚨 CRITICAL**: The following actions are **absolutely prohibited**:
 
-- ❌ 讀取到 `issuetype: "Sub-task"` 後不執行偵測邏輯
-- ❌ 看到 `parent.key` 資料後不處理
-- ❌ 使用子任務單號建立分支（應使用父任務單號）
-- ❌ 在 MR 中只關聯子任務單號而遺漏父任務單號
-- ❌ 未在 chat 中顯示子任務偵測結果
+- ❌ Reading `issuetype: "Sub-task"` but not executing detection logic
+- ❌ Seeing `parent.key` data but not handling it
+- ❌ Using sub-task ticket to create a branch (should use parent task ticket)
+- ❌ Only linking sub-task ticket in MR and missing parent task ticket
+- ❌ Not displaying sub-task detection result in chat
 
-### 範例場景
+### Example Scenarios
 
-**場景：用戶提供子任務單號 IN-107293**
-
-```
-AI 讀取 Jira ticket IN-107293
-    ↓
-檢測到: issueType = "Sub-task", parent.key = "IN-97676"
-    ↓
-在 chat 中顯示：
-    「📌 偵測到此為子任務，父任務為 IN-97676
-     分支將使用父任務單號: feature/IN-97676」
-    ↓
-創建分支: feature/IN-97676（使用父任務單號）
-    ↓
-後續 commit 使用 scope: (IN-107293)（使用子任務單號）
-    ↓
-MR 關聯: IN-107293, IN-97676（兩個都要）
-```
-
-**錯誤示範**：
+**Scenario: User provides sub-task ticket IN-107293**
 
 ```
-❌ 錯誤流程：
-AI 讀取 Jira ticket IN-107293
+AI reads Jira ticket IN-107293
     ↓
-看到 issueType = "Sub-task"（但未處理）
+Detected: issueType = "Sub-task", parent.key = "IN-97676"
     ↓
-直接創建分支: feature/IN-107293（錯誤！應使用父任務單號）
+Display in chat:
+    "📌 Detected as sub-task, parent task is IN-97676
+     Branch will use parent task ticket: feature/IN-97676"
+    ↓
+Create branch: feature/IN-97676 (using parent task ticket)
+    ↓
+Subsequent commits use scope: (IN-107293) (using sub-task ticket)
+    ↓
+MR links: IN-107293, IN-97676 (both required)
 ```
 
-### 檢查清單
+**Wrong example**:
 
-在讀取 Jira ticket 後，AI **必須**確認以下項目：
+```
+❌ Wrong flow:
+AI reads Jira ticket IN-107293
+    ↓
+Sees issueType = "Sub-task" (but doesn't handle)
+    ↓
+Directly creates branch: feature/IN-107293 (wrong! should use parent task ticket)
+```
 
-- [ ] 是否檢查了 `fields.issuetype.name`？
-- [ ] 若為 `Sub-task`，是否提取了 `fields.parent.key`？
-- [ ] 是否在 chat 中顯示了子任務偵測結果？
-- [ ] 是否使用父任務單號創建分支？
-- [ ] 是否記錄子任務單號供後續 commit 使用？
+### Checklist
+
+After reading a Jira ticket, the AI **MUST** confirm the following items:
+
+- [ ] Was `fields.issuetype.name` checked?
+- [ ] If it is `Sub-task`, was `fields.parent.key` extracted?
+- [ ] Was the sub-task detection result displayed in chat?
+- [ ] Was the parent task ticket used to create the branch?
+- [ ] Was the sub-task ticket recorded for use in subsequent commits?
 
 ---
 
-## 核心原則：優先檢查 RD 建議
+## Core Principle: Prioritize Checking RD Suggestions
 
-**CRITICAL**: 在分析 Jira ticket 時，**必須優先檢查**是否有 RD（開發者）提供的建議或指示，特別是標記給 AI 的內容。
+**CRITICAL**: When analyzing a Jira ticket, **must prioritize checking** whether there are suggestions or instructions from the RD (developer), especially content marked for AI.
 
-### 檢查位置
+### Check Locations
 
-在讀取 Jira ticket 信息後，必須檢查以下位置是否有 RD 建議：
+After reading Jira ticket info, the following locations must be checked for RD suggestions:
 
-1. **Ticket 描述（Description）**
-   - 檢查描述內容中是否包含標記給 AI 的建議
-   - 需要解析 Jira 的結構化描述格式（ADF - Atlassian Document Format）
+1. **Ticket Description**
+   - Check whether the description contains suggestions marked for AI
+   - Need to parse Jira's structured description format (ADF - Atlassian Document Format)
 
-2. **Ticket 評論（Comments）**
-   - 檢查所有評論中是否包含標記給 AI 的建議
-   - 優先檢查最新的評論
+2. **Ticket Comments**
+   - Check all comments for suggestions marked for AI
+   - Prioritize checking the most recent comments
 
-3. **Ticket 標題（Summary）**
-   - 檢查標題中是否包含特殊標記
+3. **Ticket Summary**
+   - Check whether the title contains special markers
 
-### 搜尋格式（不區分大小寫）
+### Search Formats (Case-insensitive)
 
-必須搜尋以下格式的標記：
+Must search for markers in the following formats:
 
 - `for AI`
 - `to AI`
@@ -142,201 +142,201 @@ AI 讀取 Jira ticket IN-107293
 - `AI suggestion:`
 - `for AI:`
 - `to AI:`
-- `@AI`（如果 Jira 支持 @ 提及功能）
+- `@AI` (if Jira supports @ mention functionality)
 
-### 處理流程
+### Handling Flow
 
-**如果找到 RD 建議：**
+**If RD suggestions are found:**
 
-1. **優先顯示**：在顯示 ticket 信息時，必須優先顯示 RD 建議，並明確標記
-2. **納入計劃**：將 RD 建議納入開發計劃的優先考慮事項
-3. **明確標記**：在分析結果中明確標記哪些是 RD 的建議，哪些是 AI 的推斷
-4. **詢問確認**：在詢問用戶確認計劃時，特別詢問 RD 建議是否理解正確
+1. **Prioritize display**: When displaying ticket info, must prioritize showing RD suggestions with clear marking
+2. **Include in plan**: Incorporate RD suggestions as priority considerations in the development plan
+3. **Clear marking**: In the analysis results, clearly mark which are RD suggestions and which are AI inferences
+4. **Ask for confirmation**: When asking user to confirm the plan, specifically ask whether the RD suggestions are understood correctly
 
-**如果未找到 RD 建議：**
+**If no RD suggestions are found:**
 
-- 按照標準流程分析 ticket 並制定計劃
-- 基於 ticket 類型、描述等進行常規分析
+- Follow standard flow to analyze the ticket and formulate a plan
+- Conduct conventional analysis based on ticket type, description, etc.
 
-### 顯示格式範例
+### Display Format Example
 
-當找到 RD 建議時，應該在顯示 ticket 信息時使用以下格式：
+When RD suggestions are found, the following format should be used when displaying ticket info:
 
 ```
-📋 Jira Ticket 信息
+📋 Jira Ticket Info
 ============================================================
-單號: FE-7846
-標題: [Ticket Summary]
-類型: Feature
-狀態: In Progress
-負責人: [Assignee]
-優先級: High
+Ticket: FE-7846
+Title: [Ticket Summary]
+Type: Feature
+Status: In Progress
+Assignee: [Assignee]
+Priority: High
 
-🎯 RD 建議（優先處理）
+🎯 RD Suggestions (Prioritize)
 ============================================================
-[顯示找到的 RD 建議內容，明確標記來源]
+[Display found RD suggestion content, clearly mark source]
 
-📝 描述:
-[顯示完整的 ticket 描述]
+📝 Description:
+[Display full ticket description]
 
-🎯 初步開發計劃
+🎯 Initial Development Plan
 ============================================================
-[基於 RD 建議和 ticket 內容制定的計劃]
+[Plan based on RD suggestions and ticket content]
 ```
 
-### 實施要求
+### Implementation Requirements
 
-在 `start-task.mjs` 腳本中，當執行以下函數時必須遵守此原則：
+In the `start-task.mjs` script, when executing the following functions, this principle must be followed:
 
-1. **`getJiraTicketInfo(ticket)`**：
-   - 獲取 ticket 信息時，同時獲取評論（comments）
-   - 確保返回的數據包含完整的描述和評論
+1. **`getJiraTicketInfo(ticket)`**:
+   - When getting ticket info, also get comments
+   - Ensure returned data contains complete description and comments
 
-2. **`analyzeTicketAndPlan(ticketData)`**：
-   - 在分析 ticket 之前，先檢查是否有 RD 建議
-   - 如果找到建議，優先處理並納入計劃
-   - 在返回的分析結果中明確標記 RD 建議
+2. **`analyzeTicketAndPlan(ticketData)`**:
+   - Before analyzing the ticket, check for RD suggestions first
+   - If suggestions are found, prioritize handling them and include in the plan
+   - In the returned analysis results, clearly mark RD suggestions
 
-3. **顯示分析結果時**：
-   - 優先顯示 RD 建議
-   - 明確區分 RD 建議和 AI 推斷
-   - 在制定計劃時優先考慮 RD 建議
+3. **When displaying analysis results**:
+   - Prioritize displaying RD suggestions
+   - Clearly distinguish RD suggestions from AI inferences
+   - When formulating the plan, prioritize considering RD suggestions
 
-### 範例場景
+### Example Scenarios
 
-**場景 1：描述中包含 RD 建議**
-
-```
-Ticket 描述：
-這是一個新功能開發。
-
-for AI: 請優先考慮使用現有的 UserProfile 組件，不要重新創建。
-需要特別注意響應式設計，確保在移動端正常顯示。
-```
-
-**處理方式**：
-- 在顯示 ticket 信息時，優先顯示 "for AI" 標記的建議
-- 在制定開發計劃時，將「使用現有 UserProfile 組件」作為優先事項
-- 在計劃中明確標記這是 RD 的建議
-
-**場景 2：評論中包含 RD 建議**
+**Scenario 1: Description contains RD suggestion**
 
 ```
-評論（最新）：
-@AI suggestion: 這個功能需要與後端 API /api/v2/users 整合，
-請確保使用 createCustomizeQuery 而不是直接使用 fetch。
+Ticket description:
+This is a new feature development.
+
+for AI: Please prioritize using the existing UserProfile component; do not recreate it.
+Pay special attention to responsive design to ensure it displays correctly on mobile.
 ```
 
-**處理方式**：
-- 檢查評論時發現 "AI suggestion" 標記
-- 在顯示 ticket 信息時，將此評論作為 RD 建議優先顯示
-- 在制定計劃時，明確要求使用 `createCustomizeQuery`
+**Handling**:
+- When displaying ticket info, prioritize displaying the "for AI" marked suggestion
+- When formulating the development plan, make "use existing UserProfile component" a priority
+- In the plan, clearly mark this as an RD suggestion
+
+**Scenario 2: Comment contains RD suggestion**
+
+```
+Comment (latest):
+@AI suggestion: This feature needs to integrate with the backend API /api/v2/users.
+Please ensure to use createCustomizeQuery instead of directly using fetch.
+```
+
+**Handling**:
+- When checking comments, find the "AI suggestion" marker
+- When displaying ticket info, display this comment as RD suggestion with priority
+- When formulating the plan, explicitly require the use of `createCustomizeQuery`
 
 ---
 
-## 🚨 AI 執行 Start-Task 的強制檢查聲明
+## 🚨 Mandatory Check Declaration for AI Executing Start-Task
 
-**CRITICAL**: AI 在執行 start-task 流程時，**必須**在每個階段輸出檢查聲明，避免因任務導向思維而跳過重要步驟。
+**CRITICAL**: When the AI executes the start-task flow, it **MUST** output check declarations at each phase to avoid skipping important steps due to task-oriented thinking.
 
-### 階段 1：讀取 Jira Ticket 後
+### Phase 1: After Reading Jira Ticket
 
-**必須輸出的檢查聲明**：
+**Required check declaration**:
 
 ```
-⚠️ Start-Task 階段 1 檢查：
+⚠️ Start-Task Phase 1 Check:
 
-📋 已讀取 Ticket 信息：
-   單號: {TICKET}
-   標題: {SUMMARY}
-   類型: {ISSUE_TYPE}
+📋 Ticket info has been read:
+   Ticket: {TICKET}
+   Title: {SUMMARY}
+   Type: {ISSUE_TYPE}
 
-🔍 RD 建議檢查結果：
-   [✓] 已檢查 Description 中的 "for AI" / "to AI" 標記
-   [✓] 已檢查 Comments 中的 "AI suggestion" 標記
-   結果: {FOUND / NOT_FOUND}
+🔍 RD suggestion check result:
+   [✓] Checked Description for "for AI" / "to AI" markers
+   [✓] Checked Comments for "AI suggestion" markers
+   Result: {FOUND / NOT_FOUND}
 
-🎯 初步開發計劃：
+🎯 Initial development plan:
    1. {STEP_1}
    2. {STEP_2}
    ...
 
-❓ 請確認此開發計劃是否正確？
+❓ Please confirm whether this development plan is correct?
 ```
 
-**此階段完成條件**：用戶確認開發計劃
+**Phase completion condition**: User confirms the development plan
 
 ---
 
-### 階段 2：開發完成後
+### Phase 2: After Development Complete
 
-**必須輸出的檢查聲明**：
+**Required check declaration**:
 
 ```
-⚠️ Start-Task 階段 2 檢查：
+⚠️ Start-Task Phase 2 Check:
 
-📋 開發完成檢查：
-   [✓] 已完成所有開發步驟
-   [✓] 已保存開發計劃到 Git notes
-   [✓] 變更檔案: {FILES_CHANGED}
+📋 Development completion check:
+   [✓] All development steps completed
+   [✓] Development plan saved to Git notes
+   [✓] Changed files: {FILES_CHANGED}
 
-📝 本次修改摘要：
-   - 新增: {NEW_FILES}
-   - 修改: {MODIFIED_FILES}
-   - 刪除: {DELETED_FILES}
+📝 Summary of this modification:
+   - Added: {NEW_FILES}
+   - Modified: {MODIFIED_FILES}
+   - Deleted: {DELETED_FILES}
 
-❓ 請確認修改是否正確？確認後將執行 cr 命令。
+❓ Please confirm whether the modifications are correct? The cr command will be executed after confirmation.
 ```
 
-**此階段完成條件**：用戶確認修改內容
+**Phase completion condition**: User confirms modification content
 
 ---
 
-### 階段 3：建立 MR 後
+### Phase 3: After MR Created
 
-**必須輸出的檢查聲明**：
+**Required check declaration**:
 
 ```
-⚠️ Start-Task 階段 3 檢查：
+⚠️ Start-Task Phase 3 Check:
 
-📋 MR 建立檢查：
-   [✓] MR Description 包含開發計劃
-   [✓] MR Description 包含問題分析（如為 Bug）
-   [✓] 已添加 AI label
-   [✓] Git notes 已保存
+📋 MR creation check:
+   [✓] MR Description contains development plan
+   [✓] MR Description contains problem analysis (if Bug)
+   [✓] AI label added
+   [✓] Git notes saved
 
-✅ MR 建立成功：{MR_LINK}
+✅ MR created successfully: {MR_LINK}
 ```
 
-**此階段完成條件**：MR 成功建立
+**Phase completion condition**: MR successfully created
 
 ---
 
-### 強制執行規則
+### Strict Enforcement Rules
 
-**CRITICAL**: 如果 AI 未輸出上述檢查聲明就進行下一步，視為**嚴重違規**。
+**CRITICAL**: If the AI proceeds to the next step without outputting the above check declarations, it is a **serious violation**.
 
-| 階段 | 檢查項目 | 違規後果 |
+| Phase | Check item | Violation consequence |
 |---|---|---|
-| 階段 1 | 未顯示開發計劃就開始開發 | 立即停止，重新顯示計劃 |
-| 階段 2 | 未顯示修改摘要就執行 cr | 立即停止，重新顯示摘要 |
-| 階段 3 | MR 缺少開發計劃或 AI label | 更新 MR 補充缺失內容 |
+| Phase 1 | Starting development without showing development plan | Stop immediately, re-show plan |
+| Phase 2 | Executing cr without showing modification summary | Stop immediately, re-show summary |
+| Phase 3 | MR missing development plan or AI label | Update MR to add missing content |
 
 ---
 
-## 開發流程相關規則
+## Development Flow Related Rules
 
-關於開發過程中的原則，包括：
-- AI 獨立完成項目的標記和 MR 處理
-- 開發完成後的報告生成
-- 完成修改後的確認與自動提交流程
-- MR 報告檢附規則
+Regarding principles during development, including:
+- Marking AI independently completed items and MR handling
+- Report generation after development complete
+- Confirmation and auto-submit flow after modifications
+- MR report attachment rules
 
-請參考：[development-policy.mdc](mdc:.cursor/rules/operator/start-task/development-policy.mdc)
+See: [development-policy.mdc](mdc:.cursor/rules/operator/start-task/development-policy.mdc)
 
-## 注意事項
+## Notes
 
-1. **格式靈活性**：搜尋時不區分大小寫，但必須完整匹配關鍵字（如 "for AI" 必須是完整詞組）
-2. **優先級**：RD 建議的優先級高於 AI 的常規推斷
-3. **明確標記**：必須明確區分哪些是 RD 建議，哪些是 AI 推斷，避免混淆
-4. **完整性**：如果 ticket 有多個 RD 建議，必須全部顯示，不能遺漏
-5. **上下文理解**：理解 RD 建議的上下文，確保建議被正確納入開發計劃
+1. **Format flexibility**: Search is case-insensitive, but must fully match keywords (e.g., "for AI" must be a complete phrase)
+2. **Priority**: RD suggestions have higher priority than AI's conventional inferences
+3. **Clear marking**: Must clearly distinguish which are RD suggestions and which are AI inferences, to avoid confusion
+4. **Completeness**: If there are multiple RD suggestions in a ticket, all must be displayed — none can be omitted
+5. **Context understanding**: Understand the context of RD suggestions to ensure suggestions are correctly incorporated into the development plan
