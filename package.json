@@ -9,6 +9,7 @@
     "create-mr": "node .cursor/scripts/utilities/run-pantheon-script.mjs cr/create-mr.mjs",
     "update-mr": "node .cursor/scripts/utilities/run-pantheon-script.mjs cr/update-mr.mjs",
     "label-analyzer": "node .cursor/scripts/utilities/run-pantheon-script.mjs cr/label-analyzer.mjs",
+    "create-jira-ticket": "node .cursor/scripts/utilities/run-pantheon-script.mjs jira/create-jira-ticket.mjs",
     "read-jira-ticket": "node .cursor/scripts/utilities/run-pantheon-script.mjs jira/read-jira-ticket.mjs",
     "read-confluence-page": "node .cursor/scripts/utilities/run-pantheon-script.mjs jira/read-confluence-page.mjs",
     "update-jira": "node .cursor/scripts/utilities/run-pantheon-script.mjs jira/update-jira.mjs",

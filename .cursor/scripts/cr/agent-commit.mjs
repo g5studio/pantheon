@@ -6,6 +6,8 @@
  */
 
 import { execSync, spawnSync } from "child_process";
+import { readFileSync } from "fs";
+import { join } from "path";
 import { getProjectRoot } from "../utilities/env-loader.mjs";
 
 // 使用 env-loader 提供的 projectRoot
@@ -24,6 +26,16 @@ function exec(command, options = {}) {
       console.error(`錯誤: ${error.message}`);
     }
     throw error;
+  }
+}
+
+function hasPackageScript(scriptName) {
+  try {
+    const packageJsonPath = join(projectRoot, "package.json");
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
+    return Boolean(packageJson.scripts?.[scriptName]);
+  } catch (error) {
+    return false;
   }
 }
 
@@ -72,13 +84,19 @@ console.log(`\n📝 Commit message: ${commitMessage}\n`);
 
 // 運行 lint（如果未跳過）
 if (!skipLint) {
-  console.log("🔍 運行 lint 檢查...");
-  try {
-    exec("pnpm run format-and-lint");
-    console.log("✅ Lint 檢查通過\n");
-  } catch (error) {
-    console.error("❌ Lint 檢查失敗");
-    process.exit(1);
+  if (!hasPackageScript("format-and-lint")) {
+    console.log(
+      "⚠️  查無 format-and-lint script，略過 lint 檢查並繼續流程\n"
+    );
+  } else {
+    console.log("🔍 運行 lint 檢查...");
+    try {
+      exec("pnpm run format-and-lint");
+      console.log("✅ Lint 檢查通過\n");
+    } catch (error) {
+      console.error("❌ Lint 檢查失敗");
+      process.exit(1);
+    }
   }
 }
 
