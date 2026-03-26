@@ -77,7 +77,7 @@ alwaysApply: false
 | 開發完成準備 commit 前 | 檢查 Git notes 存在 | 🚨 必須 |
 | 執行 cr 指令前 | 驗證 Git notes 存在 | 🚨 必須 |
 
-### startTaskInfo JSON 格式
+### startTaskInfo 欄位結構
 
 ```json
 {
@@ -164,7 +164,7 @@ alwaysApply: false
 使用 `.cursor/scripts/operator/save-start-task-info.mjs` 腳本保存：
 
 ```bash
-# 方式 1：使用獨立參數（包含行為模式）
+# 使用獨立參數保存開發計劃
 node .cursor/scripts/operator/save-start-task-info.mjs \
   --ticket=IN-107113 \
   --summary="[標題]" \
@@ -174,19 +174,7 @@ node .cursor/scripts/operator/save-start-task-info.mjs \
   --priority="Medium" \
   --steps='["步驟1", "步驟2", "步驟3"]' \
   --source-branch=main \
-  --ai-completed=true \
-  --operation-mode=default \
-  --mode-config='{}'
-
-# 方式 2：使用完整 JSON（包含行為模式）
-node .cursor/scripts/operator/save-start-task-info.mjs --json='{
-  "ticket": "IN-107113",
-  "operationMode": "multi-task",
-  "modeConfig": {
-    "parentTicket": "IN-107113",
-    "subTasks": ["IN-107113-1", "IN-107113-2"]
-  }
-}'
+  --ai-completed=true
 
 # 驗證保存成功
 node .cursor/scripts/operator/save-start-task-info.mjs --verify
@@ -196,10 +184,6 @@ node .cursor/scripts/operator/save-start-task-info.mjs --read
 
 # 更新現有 notes（合併模式）
 node .cursor/scripts/operator/save-start-task-info.mjs --update --steps='["新步驟"]'
-
-# 更新多工模式的階段進度
-node .cursor/scripts/operator/save-start-task-info.mjs --update \
-  --mode-config='{"currentPhase": 2, "phaseCommits": ["hash1", "hash2"]}'
 ```
 
 ### 強制檢查點
@@ -800,7 +784,7 @@ node .cursor/scripts/operator/update-development-report.mjs --report="<report-co
 # 從檔案讀取報告內容
 node .cursor/scripts/operator/update-development-report.mjs --report-file="<path-to-report-file>"
 
-# 讀取當前的 startTaskInfo（JSON 格式）
+# 讀取當前的 startTaskInfo
 node .cursor/scripts/operator/update-development-report.mjs --read
 
 # 輸出格式化的 MR description（Markdown 格式）

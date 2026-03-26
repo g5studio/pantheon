@@ -628,7 +628,7 @@ async function main() {
 參數說明：
   --report="..."      直接提供報告內容
   --report-file="..." 從檔案讀取報告內容
-  --read              讀取當前的 startTaskInfo（JSON 格式）
+  --read              讀取當前的 startTaskInfo
   --format            輸出格式化的 MR description（Markdown 格式）
 `);
 }
