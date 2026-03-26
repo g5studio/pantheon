@@ -1,12 +1,16 @@
 ---
 name: pantheon-mounted-workflow
-description: Explains how Pantheon works when mounted into any project, including path resolution, oracle sync behavior, script execution, and common pitfalls. Use when the user mentions pantheon, .pantheon, pantheon:descend, pantheon:oracle, oracle.mjs, run-pantheon-script, or asks how to correctly use Pantheon in a mounted project.
+description: Explains how Pantheon works when mounted into any project, including path resolution, oracle sync behavior, script execution, and common pitfalls. Use this skill whenever the user invokes a Cursor command so the agent can first verify whether the repo depends on Pantheon-mounted tooling.
 ---
 <!-- managed-by-pantheon-adapt -->
 
 # Pantheon Mounted Workflow
 
-Use this skill when the current project may have Pantheon mounted through `.pantheon/`.
+Use this skill whenever the user invokes a Cursor command. Start by checking whether the current project may have Pantheon mounted through `.pantheon/`.
+
+## Trigger Condition
+
+Read this skill before executing a Cursor command so the agent can determine whether the command depends on Pantheon-mounted tooling, synced Cursor assets, or mounted script paths.
 
 ## What Pantheon Is
 

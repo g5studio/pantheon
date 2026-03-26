@@ -2,68 +2,68 @@
 alwaysApply: true
 ---
 
-# Pantheon 路徑規則
+# Pantheon Path Guidelines
 
-此規則說明 Pantheon 專案掛載到其他專案時的路徑處理方式。
+This rule explains the path handling when the Pantheon project is mounted into another project.
 
-## 背景說明
+## Background
 
-Pantheon 專案設計為可以透過 **git clone** 掛載到其他專案中，並透過 **symbolic link** 進行同步。這種架構會導致所有 Pantheon 內的檔案路徑在目標專案中會有不同的實際位置。
+The Pantheon project is designed to be mounted into other projects via **git clone** and synchronized via **symbolic links**. This architecture means that all file paths inside Pantheon will have different actual locations in the target project.
 
-## 路徑對應規則
+## Path Mapping Rules
 
-### 掛載後的路徑結構
+### Path Structure After Mounting
 
-當 Pantheon 掛載到其他專案時，所有檔案會位於 `.pantheon/` 資料夾下：
+When Pantheon is mounted into another project, all files are located under the `.pantheon/` folder:
 
-| Pantheon 內部路徑 | 掛載後實際路徑 |
+| Pantheon internal path | Actual path after mounting |
 |---|---|
 | `.cursor/rules/` | `.pantheon/.cursor/rules/` |
 | `.cursor/scripts/` | `.pantheon/.cursor/scripts/` |
 | `.cursor/commands/` | `.pantheon/.cursor/commands/` |
 | `.cursor/version.json` | `.pantheon/.cursor/version.json` |
 
-### 範例路徑對照
+### Example Path Reference
 
-| 類型 | Pantheon 內部路徑 | 目標專案實際路徑 |
+| Type | Pantheon internal path | Actual path in target project |
 |---|---|---|
-| 通知腳本 | `.cursor/scripts/notification/notify-cursor-rules-failed.mjs` | `.pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs` |
-| Commit 腳本 | `.cursor/scripts/cr/agent-commit.mjs` | `.pantheon/.cursor/scripts/cr/agent-commit.mjs` |
-| MR 腳本 | `.cursor/scripts/cr/create-mr.mjs` | `.pantheon/.cursor/scripts/cr/create-mr.mjs` |
-| Jira 腳本 | `.cursor/scripts/jira/read-jira-ticket.mjs` | `.pantheon/.cursor/scripts/jira/read-jira-ticket.mjs` |
-| 版本更新腳本 | `.cursor/scripts/utilities/bump-version.mjs` | `.pantheon/.cursor/scripts/utilities/bump-version.mjs` |
+| Notification script | `.cursor/scripts/notification/notify-cursor-rules-failed.mjs` | `.pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs` |
+| Commit script | `.cursor/scripts/cr/agent-commit.mjs` | `.pantheon/.cursor/scripts/cr/agent-commit.mjs` |
+| MR script | `.cursor/scripts/cr/create-mr.mjs` | `.pantheon/.cursor/scripts/cr/create-mr.mjs` |
+| Jira script | `.cursor/scripts/jira/read-jira-ticket.mjs` | `.pantheon/.cursor/scripts/jira/read-jira-ticket.mjs` |
+| Version update script | `.cursor/scripts/utilities/bump-version.mjs` | `.pantheon/.cursor/scripts/utilities/bump-version.mjs` |
 
-## 腳本執行規則
+## Script Execution Rules
 
-**CRITICAL**: 當 AI 在目標專案中執行 Pantheon 提供的腳本時，**必須**使用正確的路徑。
+**CRITICAL**: When the AI executes Pantheon-provided scripts in a target project, it **MUST** use the correct path.
 
-## 重要提醒：不要依賴「搜尋結果」判斷腳本是否存在
+## Important: Do Not Rely on "Search Results" to Determine Whether a Script Exists
 
-Pantheon 掛載到其他專案時，常見會搭配 **symbolic link** 做同步；在部分 workspace 中，
-搜尋工具（例如 Glob）可能對 `.pantheon/` 或 symlink 目錄回傳 **空結果**，即使檔案實際存在、`ls` 也看得到。
+When Pantheon is mounted into another project, it is common to also use **symbolic links** for synchronization. In some workspaces, search tools (e.g., Glob) may return **empty results** for `.pantheon/` or symlink directories, even though the files actually exist and can be seen with `ls`.
 
-因此：
-- **不要**用「搜尋腳本檔名」來「發現」/「定位」Pantheon 腳本
-- **要**先用下方的「檔案存在性檢查（`-f`）+ fallback」決定腳本路徑
-- 若仍失敗，使用 `ls -la` 直接列目錄做診斷（見「錯誤排查」）
+Therefore:
+- **Do NOT** use "searching for script filenames" to "discover" / "locate" Pantheon scripts
+- **Do** use the "file existence check (`-f`) + fallback" approach below to determine the script path
+- If it still fails, use `ls -la` to directly list the directory for diagnostics (see "Error Troubleshooting")
 
-### 路徑判斷邏輯
+### Path Determination Logic
 
-執行腳本前，AI **必須**按以下順序檢查路徑：
+Before executing a script, the AI **MUST** check paths in the following order:
 
-1. **優先檢查 `.pantheon/.cursor/scripts/` 路徑（以檔案是否存在為準）**
-   - 若腳本檔案存在：使用 `.pantheon/.cursor/scripts/...`
+1. **Prefer the `.pantheon/.cursor/scripts/` path (based on whether the file exists)**
+   - If the script file exists: use `.pantheon/.cursor/scripts/...`
 
-2. **備用檢查 `.cursor/scripts/` 路徑（Pantheon 專案本身）**
-   - 若腳本檔案存在：使用 `.cursor/scripts/...`
+2. **Fallback to `.cursor/scripts/` path (Pantheon project itself)**
+   - If the script file exists: use `.cursor/scripts/...`
 
-3. **次要備援：`.cursor/scripts/prometheus/` 路徑（部分專案會用 symlink 聚合）**
-   - 若腳本檔案存在：使用 `.cursor/scripts/prometheus/...`
+3. **Secondary fallback: `.cursor/scripts/prometheus/` path (some projects aggregate via symlinks)**
+   - If the script file exists: use `.cursor/scripts/prometheus/...`
 
-### 路徑檢查範例
+### Path Check Example
 
 ```bash
-# 以「檔案是否存在」決定路徑（避免只判斷資料夾存在但內容不齊、或 symlink/搜尋限制造成誤判）
+# Determine path based on whether the file exists
+# (avoids misjudging from a folder existing without full content, or symlink/search limitations)
 if [ -f ".pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs" ]; then
   SCRIPT_PATH=".pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs"
 elif [ -f ".cursor/scripts/notification/notify-cursor-rules-failed.mjs" ]; then
@@ -71,93 +71,93 @@ elif [ -f ".cursor/scripts/notification/notify-cursor-rules-failed.mjs" ]; then
 elif [ -f ".cursor/scripts/prometheus/notification/notify-cursor-rules-failed.mjs" ]; then
   SCRIPT_PATH=".cursor/scripts/prometheus/notification/notify-cursor-rules-failed.mjs"
 else
-  echo "❌ 找不到 notify-cursor-rules-failed.mjs，請確認 pantheon 掛載路徑是否正確。" 1>&2
+  echo "❌ Cannot find notify-cursor-rules-failed.mjs. Please verify the Pantheon mount path is correct." 1>&2
   exit 1
 fi
 
 node "$SCRIPT_PATH" "$@"
 ```
 
-## AI 執行腳本的規則
+## AI Script Execution Rules
 
-### 自動路徑偵測
+### Auto Path Detection
 
-**CRITICAL**: 當 AI 需要執行任何 Pantheon 腳本時，**必須**：
+**CRITICAL**: When the AI needs to execute any Pantheon script, it **MUST**:
 
-1. **先檢查 `.pantheon/` 資料夾是否存在**
-2. **根據檢查結果決定使用的路徑**
-3. **使用正確的完整路徑執行腳本**
+1. **First check whether the `.pantheon/` folder exists**
+2. **Determine the path to use based on the check result**
+3. **Execute the script using the correct full path**
 
-### 執行範例
+### Execution Examples
 
-#### 情境 1：在 Pantheon 專案本身
-
-```bash
-# .pantheon 資料夾不存在，使用直接路徑
-node .cursor/scripts/notification/notify-cursor-rules-failed.mjs "pantheon" "推送完成"
-```
-
-#### 情境 2：在掛載了 Pantheon 的目標專案
+#### Scenario 1: Inside the Pantheon Project Itself
 
 ```bash
-# .pantheon 資料夾存在，使用掛載路徑
-node .pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs "fluid-two" "推送完成"
+# .pantheon folder does not exist; use direct path
+node .cursor/scripts/notification/notify-cursor-rules-failed.mjs "pantheon" "push complete"
 ```
 
-## 常見腳本路徑對照表
+#### Scenario 2: Inside a Target Project with Pantheon Mounted
 
-以下是常用腳本的路徑對照，方便快速查閱：
+```bash
+# .pantheon folder exists; use mounted path
+node .pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs "fluid-two" "push complete"
+```
 
-| 腳本用途 | Pantheon 路徑 | 掛載後路徑 |
+## Common Script Path Reference
+
+Here is a quick reference for commonly used script paths:
+
+| Script purpose | Pantheon path | Mounted path |
 |---|---|---|
-| **通知** |
-| 系統通知 | `.cursor/scripts/notification/notify-cursor-rules-failed.mjs` | `.pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs` |
-| **Commit & MR** |
+| **Notification** | | |
+| System notification | `.cursor/scripts/notification/notify-cursor-rules-failed.mjs` | `.pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs` |
+| **Commit & MR** | | |
 | Agent Commit | `.cursor/scripts/cr/agent-commit.mjs` | `.pantheon/.cursor/scripts/cr/agent-commit.mjs` |
-| 建立 MR | `.cursor/scripts/cr/create-mr.mjs` | `.pantheon/.cursor/scripts/cr/create-mr.mjs` |
-| 自動 Commit & MR | `.cursor/scripts/cr/auto-commit-and-mr.mjs` | `.pantheon/.cursor/scripts/cr/auto-commit-and-mr.mjs` |
-| **Jira** |
-| 讀取 Jira Ticket | `.cursor/scripts/jira/read-jira-ticket.mjs` | `.pantheon/.cursor/scripts/jira/read-jira-ticket.mjs` |
-| 讀取 Confluence | `.cursor/scripts/jira/read-confluence-page.mjs` | `.pantheon/.cursor/scripts/jira/read-confluence-page.mjs` |
-| 更新 Confluence | `.cursor/scripts/jira/update-confluence-page.mjs` | `.pantheon/.cursor/scripts/jira/update-confluence-page.mjs` |
-| **工具** |
-| 版本更新 | `.cursor/scripts/utilities/bump-version.mjs` | `.pantheon/.cursor/scripts/utilities/bump-version.mjs` |
-| 參數偵測 | `.cursor/scripts/utilities/parameter-detector.mjs` | `.pantheon/.cursor/scripts/utilities/parameter-detector.mjs` |
+| Create MR | `.cursor/scripts/cr/create-mr.mjs` | `.pantheon/.cursor/scripts/cr/create-mr.mjs` |
+| Auto Commit & MR | `.cursor/scripts/cr/auto-commit-and-mr.mjs` | `.pantheon/.cursor/scripts/cr/auto-commit-and-mr.mjs` |
+| **Jira** | | |
+| Read Jira Ticket | `.cursor/scripts/jira/read-jira-ticket.mjs` | `.pantheon/.cursor/scripts/jira/read-jira-ticket.mjs` |
+| Read Confluence | `.cursor/scripts/jira/read-confluence-page.mjs` | `.pantheon/.cursor/scripts/jira/read-confluence-page.mjs` |
+| Update Confluence | `.cursor/scripts/jira/update-confluence-page.mjs` | `.pantheon/.cursor/scripts/jira/update-confluence-page.mjs` |
+| **Utilities** | | |
+| Version update | `.cursor/scripts/utilities/bump-version.mjs` | `.pantheon/.cursor/scripts/utilities/bump-version.mjs` |
+| Parameter detection | `.cursor/scripts/utilities/parameter-detector.mjs` | `.pantheon/.cursor/scripts/utilities/parameter-detector.mjs` |
 
-## 規則與命令檔案路徑
+## Rule and Command File Paths
 
-規則（`.mdc`）和命令（`.md`）檔案同樣遵循此路徑規則：
+Rule (`.mdc`) and command (`.md`) files follow the same path rules:
 
-| 類型 | Pantheon 路徑 | 掛載後路徑 |
+| Type | Pantheon path | Mounted path |
 |---|---|---|
-| 規則檔案 | `.cursor/rules/*.mdc` | `.pantheon/.cursor/rules/*.mdc` |
-| 命令檔案 | `.cursor/commands/*.md` | `.pantheon/.cursor/commands/*.md` |
+| Rule files | `.cursor/rules/*.mdc` | `.pantheon/.cursor/rules/*.mdc` |
+| Command files | `.cursor/commands/*.md` | `.pantheon/.cursor/commands/*.md` |
 
-## 注意事項
+## Notes
 
-1. **路徑檢查必須在每次執行前進行**：不要假設路徑，每次都要確認
-2. **錯誤處理**：如果兩個路徑都找不到腳本，應該報告錯誤並停止執行
-3. **相對路徑與絕對路徑**：建議使用相對於專案根目錄的路徑
-4. **Symbolic Link**：目標專案可能使用 symbolic link 同步檔案，路徑解析時需注意
+1. **Path check must be performed before each execution**: Do not assume paths; always verify each time
+2. **Error handling**: If neither path has the script, report an error and stop execution
+3. **Relative vs. absolute paths**: Recommend using paths relative to the project root
+4. **Symbolic links**: The target project may use symbolic links for file sync; keep this in mind when resolving paths
 
-## 錯誤排查
+## Error Troubleshooting
 
-如果執行腳本時遇到「找不到檔案」錯誤，請檢查：
+If you encounter a "file not found" error when executing a script, check:
 
-1. 是否使用了正確的路徑前綴（`.pantheon/` 或無前綴）
-2. `.pantheon/` 資料夾是否存在
-3. Symbolic link 是否正確建立
-4. 腳本檔案是否確實存在於預期路徑
+1. Whether the correct path prefix (`.pantheon/` or no prefix) was used
+2. Whether the `.pantheon/` folder exists
+3. Whether the symbolic link was correctly created
+4. Whether the script file actually exists at the expected path
 
-### 建議診斷命令（不依賴搜尋）
+### Recommended Diagnostic Commands (Does Not Rely on Search)
 
 ```bash
-# 直接列出目標資料夾（比搜尋可靠）
+# Directly list the target directory (more reliable than searching)
 ls -la ".pantheon/.cursor/scripts/jira" 2>/dev/null || true
 ls -la ".cursor/scripts/jira" 2>/dev/null || true
 ls -la ".cursor/scripts/prometheus/jira" 2>/dev/null || true
 
-# 直接檢查檔案是否存在（最可靠）
+# Directly check if the file exists (most reliable)
 test -f ".pantheon/.cursor/scripts/jira/read-jira-ticket.mjs" && echo "found: .pantheon" || true
 test -f ".cursor/scripts/jira/read-jira-ticket.mjs" && echo "found: .cursor" || true
 test -f ".cursor/scripts/prometheus/jira/read-jira-ticket.mjs" && echo "found: prometheus symlink" || true

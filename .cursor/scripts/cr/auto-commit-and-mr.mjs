@@ -12,6 +12,8 @@
  */
 
 import { execSync } from "child_process";
+import { readFileSync } from "fs";
+import { join } from "path";
 import readline from "readline";
 import { getProjectRoot } from "../utilities/env-loader.mjs";
 
@@ -58,6 +60,16 @@ function exec(command, options = {}) {
       log(`錯誤: ${error.message}`, "red");
     }
     throw error;
+  }
+}
+
+function hasPackageScript(scriptName) {
+  try {
+    const packageJsonPath = join(projectRoot, "package.json");
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
+    return Boolean(packageJson.scripts?.[scriptName]);
+  } catch (error) {
+    return false;
   }
 }
 
@@ -184,14 +196,18 @@ async function main() {
   // 3. 詢問是否運行 lint
   const runLint = await question("\n🔍 是否運行 lint 檢查? (Y/n): ");
   if (runLint.toLowerCase() !== "n") {
-    log("\n🔍 運行 lint 檢查...", "blue");
-    try {
-      exec("pnpm run format-and-lint");
-      log("✅ Lint 檢查通過", "green");
-    } catch (error) {
-      log("❌ Lint 檢查失敗，請先修復錯誤", "red");
-      rl.close();
-      return;
+    if (!hasPackageScript("format-and-lint")) {
+      log("\n⚠️  查無 format-and-lint script，略過 lint 檢查", "yellow");
+    } else {
+      log("\n🔍 運行 lint 檢查...", "blue");
+      try {
+        exec("pnpm run format-and-lint");
+        log("✅ Lint 檢查通過", "green");
+      } catch (error) {
+        log("❌ Lint 檢查失敗，請先修復錯誤", "red");
+        rl.close();
+        return;
+      }
     }
   }
 

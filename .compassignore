@@ -7,6 +7,9 @@
 # Cursor 規則檔案
 .cursor/rules/
 
+# Cursor Skills 檔案
+.cursor/skills/
+
 # 工具設定檔案 / 範本
 .cursor/.env.example
 .gitignore

@@ -1,475 +1,475 @@
 ---
 alwaysApply: true
 ---
-# Chat 回報規範
+# Chat Response Guidelines
 
-此規則定義了 AI 在 chat 中回應時的格式規範，包括連結格式與資料呈現方式。
+This rule defines the formatting standards for AI responses in chat, including link formats and data presentation.
 
-## 適用場景
+## Applicable Scenarios
 
-此規則適用於**所有** AI 在 chat 中回應的情境，只要提及：
-- **MR（Merge Request）**：任何 GitLab MR 的引用
-- **Jira Ticket**：任何 Jira ticket 編號的引用
+This rule applies to **all** AI responses in chat whenever they mention:
+- **MR (Merge Request)**: Any reference to a GitLab MR
+- **Jira Ticket**: Any reference to a Jira ticket number
 
-**無論是任務執行報告、問題討論、狀態更新或任何其他對話情境，都必須遵循此規則。**
+**Regardless of whether it is a task execution report, problem discussion, status update, or any other conversational context, this rule must be followed.**
 
-## 核心原則
+## Core Principle
 
-**CRITICAL**: 在 chat 回應中提及 MR 或 Jira ticket 時，**必須**使用 Markdown 超連結格式 `[顯示文字](URL)`，確保用戶可以直接點擊跳轉。
+**CRITICAL**: When mentioning MR or Jira tickets in a chat response, **MUST** use Markdown hyperlink format `[display text](URL)`, ensuring the user can click directly to navigate.
 
-**禁止行為**：
-- ❌ 使用純文字顯示 ticket 編號（如 `FE-7846`）
-- ❌ 使用純文字顯示 MR ID（如 `!3177`）
-- ❌ 只顯示 URL 而不使用超連結格式
+**Prohibited actions**:
+- ❌ Displaying ticket numbers as plain text (e.g., `FE-7846`)
+- ❌ Displaying MR IDs as plain text (e.g., `!3177`)
+- ❌ Showing only the URL without using hyperlink format
 
-## 表格呈現規範
+## Table Presentation Standards
 
-**CRITICAL**: 當進行以下類型的工作回報時，**必須**優先採用**表格**形式呈現：
+**CRITICAL**: When performing the following types of work reports, **MUST** prioritize using **table** format:
 
-- **統整報告**：彙整多項資訊或結果時
-- **資料比較**：比較兩個或多個項目的差異時
-- **一致性比對**：檢查或驗證多個項目是否一致時
-- **清單列舉**：列舉具有相同屬性結構的多個項目時
+- **Summary reports**: When aggregating multiple pieces of information or results
+- **Data comparison**: When comparing differences between two or more items
+- **Consistency checks**: When checking or verifying whether multiple items are consistent
+- **List enumeration**: When listing multiple items with the same attribute structure
 
-### 表格使用原則
+### Table Usage Principles
 
-1. **結構化資料優先使用表格**：當資料具有明確的欄位結構時，表格比條列式更清晰
-2. **比較類資訊必須使用表格**：任何涉及對比、差異分析的內容，表格是最佳呈現方式
-3. **欄位設計應簡潔明瞭**：表頭應清楚標示每欄的含義
+1. **Use tables first for structured data**: When data has a clear field structure, tables are clearer than bullet lists
+2. **Must use tables for comparison information**: For any content involving comparison or difference analysis, tables are the best presentation
+3. **Column design should be concise**: Column headers should clearly indicate the meaning of each column
 
-### 範例
+### Examples
 
-#### 1. 統整報告
+#### 1. Summary Report
 ```
-✅ 正確（表格形式）：
-| 檔案 | 狀態 | 說明 |
-|------|------|------|
-| `Button.tsx` | 新增 | 新增按鈕元件 |
-| `utils.ts` | 更新 | 修正日期格式 |
-| `old.css` | 刪除 | 移除未使用樣式 |
+✅ Correct (table format):
+| File | Status | Description |
+|------|--------|-------------|
+| `Button.tsx` | Added | Added button component |
+| `utils.ts` | Updated | Fixed date format |
+| `old.css` | Deleted | Removed unused styles |
 
-❌ 錯誤（條列形式）：
-- Button.tsx：新增，新增按鈕元件
-- utils.ts：更新，修正日期格式
-- old.css：刪除，移除未使用樣式
-```
-
-#### 2. 資料比較
-```
-✅ 正確（表格形式）：
-| 項目 | 修改前 | 修改後 |
-|------|--------|--------|
-| 版本 | 1.0.0 | 1.1.0 |
-| 依賴數 | 15 | 18 |
-| 打包大小 | 250KB | 245KB |
-
-❌ 錯誤（條列形式）：
-- 版本：1.0.0 → 1.1.0
-- 依賴數：15 → 18
-- 打包大小：250KB → 245KB
+❌ Wrong (bullet list format):
+- Button.tsx: Added, added button component
+- utils.ts: Updated, fixed date format
+- old.css: Deleted, removed unused styles
 ```
 
-#### 3. 一致性比對
+#### 2. Data Comparison
 ```
-✅ 正確（表格形式）：
-| 檢查項目 | 預期值 | 實際值 | 結果 |
-|----------|--------|--------|------|
-| API 版本 | v2 | v2 | ✅ 一致 |
-| 環境變數 | production | staging | ❌ 不一致 |
-| 認證方式 | OAuth | OAuth | ✅ 一致 |
+✅ Correct (table format):
+| Item | Before | After |
+|------|--------|-------|
+| Version | 1.0.0 | 1.1.0 |
+| Dependencies | 15 | 18 |
+| Bundle size | 250KB | 245KB |
+
+❌ Wrong (bullet list format):
+- Version: 1.0.0 → 1.1.0
+- Dependencies: 15 → 18
+- Bundle size: 250KB → 245KB
 ```
 
-### 例外情況
+#### 3. Consistency Check
+```
+✅ Correct (table format):
+| Check item | Expected | Actual | Result |
+|------------|----------|--------|--------|
+| API version | v2 | v2 | ✅ Consistent |
+| Environment variable | production | staging | ❌ Inconsistent |
+| Auth method | OAuth | OAuth | ✅ Consistent |
+```
 
-以下情況**可以**不使用表格：
+### Exceptions
 
-1. **單一項目**：只有一個項目時，無需使用表格
-2. **非結構化描述**：內容為敘述性文字，無明確欄位結構時
-3. **巢狀複雜資料**：資料結構過於複雜，表格反而不易閱讀時
+The following situations **may** use non-table format:
 
-## Jira Ticket 連結格式
+1. **Single item**: Only one item; no need for a table
+2. **Non-structured descriptions**: Content is narrative text with no clear field structure
+3. **Complex nested data**: Data structure is too complex and a table would be harder to read
 
-### URL 格式
+## Jira Ticket Link Format
+
+### URL Format
 ```
 https://innotech.atlassian.net/browse/{TICKET}
 ```
 
-其中 `{TICKET}` 為 ticket 編號（如 `FE-7846`、`IN-1234` 等）。
+Where `{TICKET}` is the ticket number (e.g., `FE-7846`, `IN-1234`, etc.).
 
-### 顯示格式
+### Display Format
 
-| 情境 | 正確格式 | 錯誤格式 |
-|------|----------|----------|
-| 單一 ticket | `[FE-7846](https://innotech.atlassian.net/browse/FE-7846)` | `FE-7846` |
-| 多個 ticket | `[FE-7846](https://innotech.atlassian.net/browse/FE-7846), [IN-1234](https://innotech.atlassian.net/browse/IN-1234)` | `FE-7846, IN-1234` |
+| Scenario | Correct format | Wrong format |
+|----------|----------------|--------------|
+| Single ticket | `[FE-7846](https://innotech.atlassian.net/browse/FE-7846)` | `FE-7846` |
+| Multiple tickets | `[FE-7846](https://innotech.atlassian.net/browse/FE-7846), [IN-1234](https://innotech.atlassian.net/browse/IN-1234)` | `FE-7846, IN-1234` |
 
-### 範例
-- ✅ 正確：「請參考 [FE-7846](https://innotech.atlassian.net/browse/FE-7846) 的需求」
-- ❌ 錯誤：「請參考 FE-7846 的需求」
+### Examples
+- ✅ Correct: "Please refer to [FE-7846](https://innotech.atlassian.net/browse/FE-7846) for the requirements"
+- ❌ Wrong: "Please refer to FE-7846 for the requirements"
 
-## MR 連結格式
+## MR Link Format
 
-### URL 格式
+### URL Format
 ```
 https://gitlab.service-hub.tech/frontend/fluid-two/-/merge_requests/{MR_ID}
 ```
 
-其中 `{MR_ID}` 為 MR 的數字 ID（不含 `!` 前綴）。
+Where `{MR_ID}` is the MR's numeric ID (without the `!` prefix).
 
-### 顯示格式
+### Display Format
 
-| 情境 | 正確格式 | 錯誤格式 |
-|------|----------|----------|
-| 單一 MR | `[MR !3177](https://gitlab.service-hub.tech/frontend/fluid-two/-/merge_requests/3177)` | `!3177` 或 `MR !3177` |
-| 多個 MR | `[MR !3177](URL1), [MR !3208](URL2)` | `!3177, !3208` |
+| Scenario | Correct format | Wrong format |
+|----------|----------------|--------------|
+| Single MR | `[MR !3177](https://gitlab.service-hub.tech/frontend/fluid-two/-/merge_requests/3177)` | `!3177` or `MR !3177` |
+| Multiple MRs | `[MR !3177](URL1), [MR !3208](URL2)` | `!3177, !3208` |
 
-### 範例
-- ✅ 正確：「已建立 [MR !3177](https://gitlab.service-hub.tech/frontend/fluid-two/-/merge_requests/3177)」
-- ❌ 錯誤：「已建立 MR !3177」
+### Examples
+- ✅ Correct: "Created [MR !3177](https://gitlab.service-hub.tech/frontend/fluid-two/-/merge_requests/3177)"
+- ❌ Wrong: "Created MR !3177"
 
-## 常見使用情境
+## Common Usage Scenarios
 
-### 1. 任務狀態更新
+### 1. Task Status Update
 ```
-✅ 正確：
-「[FE-7846](https://innotech.atlassian.net/browse/FE-7846) 的開發已完成，
-已建立 [MR !3177](https://gitlab.service-hub.tech/frontend/fluid-two/-/merge_requests/3177)。」
+✅ Correct:
+"Development of [FE-7846](https://innotech.atlassian.net/browse/FE-7846) is complete,
+[MR !3177](https://gitlab.service-hub.tech/frontend/fluid-two/-/merge_requests/3177) has been created."
 
-❌ 錯誤：
-「FE-7846 的開發已完成，已建立 MR !3177。」
-```
-
-### 2. 問題討論
-```
-✅ 正確：
-「根據 [IN-1234](https://innotech.atlassian.net/browse/IN-1234) 的描述，
-需要修改的範圍包含...」
-
-❌ 錯誤：
-「根據 IN-1234 的描述，需要修改的範圍包含...」
+❌ Wrong:
+"FE-7846 development is complete, MR !3177 has been created."
 ```
 
-### 3. 關聯說明
+### 2. Problem Discussion
 ```
-✅ 正確：
-「此變更與 [FE-7846](https://innotech.atlassian.net/browse/FE-7846) 和 
-[FE-7893](https://innotech.atlassian.net/browse/FE-7893) 相關。」
+✅ Correct:
+"According to [IN-1234](https://innotech.atlassian.net/browse/IN-1234)'s description,
+the scope of modifications includes..."
 
-❌ 錯誤：
-「此變更與 FE-7846 和 FE-7893 相關。」
+❌ Wrong:
+"According to IN-1234's description, the scope of modifications includes..."
 ```
 
-## 自動識別與轉換
+### 3. Association Description
+```
+✅ Correct:
+"This change is related to [FE-7846](https://innotech.atlassian.net/browse/FE-7846) and
+[FE-7893](https://innotech.atlassian.net/browse/FE-7893)."
 
-AI 在回應前應自動檢查：
+❌ Wrong:
+"This change is related to FE-7846 and FE-7893."
+```
 
-1. **識別 Jira ticket 格式**：匹配 `[A-Z]+-\d+` 模式（如 `FE-1234`、`IN-5678`）
-2. **識別 MR 格式**：匹配 `!?\d+` 或 `MR !?\d+` 模式
-3. **自動轉換為超連結格式**：將純文字轉換為對應的 Markdown 超連結
+## Auto-Detection and Conversion
 
-## 例外情況
+The AI should automatically check before responding:
 
-以下情況**可以**使用純文字格式：
+1. **Detect Jira ticket format**: Match the `[A-Z]+-\d+` pattern (e.g., `FE-1234`, `IN-5678`)
+2. **Detect MR format**: Match the `!?\d+` or `MR !?\d+` pattern
+3. **Auto-convert to hyperlink format**: Convert plain text to the corresponding Markdown hyperlink
 
-1. **程式碼區塊內**：在 `code block` 或行內程式碼中顯示 ticket 編號時
+## Exceptions
+
+The following situations **may** use plain text format:
+
+1. **Inside code blocks**: When displaying ticket numbers within a `code block` or inline code
    ```
-   例如：commit message 格式為 `feat(FE-7846): add new feature`
+   Example: commit message format is `feat(FE-7846): add new feature`
    ```
 
-2. **引用腳本輸出**：直接引用腳本或命令的原始輸出時
+2. **Quoting script output**: When directly quoting raw output from scripts or commands
 
-3. **格式說明**：說明格式規範本身時（如本文件中的範例）
+3. **Format explanation**: When explaining format conventions themselves (such as examples in this document)
 
-## 問答互動介面規範（Cursor Answer 視窗）
+## Q&A Interaction Interface Standards (Cursor Answer Window)
 
-**CRITICAL**: 當任何指令 / 規範要求 AI 以「問答形式」與用戶交流，且該交流屬於「用戶需要做決策」的情境（確認 / 單選 / 多選），AI **必須**使用 Cursor 的 **Answer（選項表單）視窗**收集回覆，而不是在 chat 文字中要求用戶回覆 `A/B/C` 或 `是/否`。
+**CRITICAL**: When any command/rule requires the AI to communicate with the user in "Q&A form", and the communication is a "user needs to make a decision" scenario (confirm / single-select / multi-select), the AI **MUST** use Cursor's **Answer (option form) window** to collect replies, rather than asking the user to reply with `A/B/C` or `yes/no` in chat text.
 
-### 適用範圍（必須用 Answer 視窗）
+### Applicable Scope (Must Use Answer Window)
 
-以下皆屬「用戶決策」，**必須**使用 Answer 視窗：
-- **確認**：是否繼續、是否執行、是否要我協助修正
-- **單選**：選擇方案 A/B/C、選擇要執行的流程分支
-- **多選**：選擇要處理的檔案/項目清單、選擇要套用的修正項目
+All of the following are "user decisions" and **MUST** use the Answer window:
+- **Confirm**: Whether to continue, whether to execute, whether to have me help fix
+- **Single select**: Choose solution A/B/C, choose which flow branch to execute
+- **Multi-select**: Choose which files/items to process, choose which fixes to apply
 
-### 例外（可用 chat 文字）
+### Exception (Can Use Chat Text)
 
-以下情境需要用戶提供**自由文字**（無法用選項充分表達），可使用 chat 文字請用戶提供內容：
-- 貼上 log / stack trace / command output
-- 提供 URL、分支名稱、commit hash、環境參數等字串
-- 提供一段重現步驟敘述
+The following scenarios require the user to provide **free-form text** (cannot be adequately expressed with options) and may use chat text to ask:
+- Paste log / stack trace / command output
+- Provide URL, branch name, commit hash, environment parameters, etc.
+- Provide a description of reproduction steps
 
-但若同時需要「先選擇再輸入」，應先用 Answer 視窗詢問用戶要提供的類型或下一步方向，再在 chat 中請用戶貼上自由文字內容。
+But if both "select first then input" is needed, use the Answer window first to ask the user's type or next step direction, then ask for free-form text in chat.
 
-### 強制搭配通知（避免漏通知）
+### Mandatory Paired Notification (Avoid Missing Notifications)
 
-**CRITICAL**: 只要進入「等待用戶回覆」狀態（包含使用 Answer 視窗提問），依本文件「任務完成系統通知」規範，該回應結束前**必須**發送系統通知（例如：`待確認` / `待選擇` / `等待回覆`）。
+**CRITICAL**: Whenever entering a "waiting for user reply" state (including using the Answer window to ask a question), per the "Task Completion System Notification" specification in this document, before the response ends a system notification **MUST** be sent (e.g., `Pending confirmation` / `Pending selection` / `Waiting for reply`).
 
-## 任務完成系統通知
+## Task Completion System Notification
 
-**CRITICAL**: 當用戶交付的任務**完成**或**失敗**時，AI **必須**自動透過腳本發送系統通知，提示用戶返回確認。
+**CRITICAL**: When a user-assigned task is **complete** or **failed**, the AI **MUST** automatically send a system notification via script to prompt the user to return and confirm.
 
-### 🚨 ABSOLUTE - 通知觸發的核心定義
+### 🚨 ABSOLUTE — Core Definition of Notification Trigger
 
-**CRITICAL**: 任何情況下，當 AI 的當前回應結束後**無法自動繼續執行下一步操作**時，都視為「終點」，**必須**發送系統通知。
+**CRITICAL**: Under any circumstances, when the AI's current response ends and **the AI cannot automatically continue to the next step**, this is considered an "endpoint" and a system notification **MUST** be sent.
 
-**「無法自動繼續」的判斷標準**：
-- ✅ AI 需要等待用戶的任何輸入（確認、選擇、提供資訊、回答問題等）
-- ✅ AI 遇到任何錯誤或異常無法自行解決
-- ✅ AI 完成了用戶交付的任務
-- ✅ AI 因任何原因需要暫停流程
-- ✅ AI 詢問用戶任何問題
-- ✅ AI 提供選項讓用戶選擇
-- ✅ AI 報告狀態等待用戶下一步指示
+**Criteria for "cannot automatically continue"**:
+- ✅ The AI needs to wait for any user input (confirmation, selection, providing information, answering questions, etc.)
+- ✅ The AI encounters any error or anomaly it cannot resolve on its own
+- ✅ The AI has completed the user-assigned task
+- ✅ The AI needs to pause the flow for any reason
+- ✅ The AI asks the user any question
+- ✅ The AI provides options for the user to choose from
+- ✅ The AI reports status waiting for user's next instruction
 
-**簡化判斷邏輯**：
-> **如果這個回應結束後，AI 不會自己繼續做下一件事，就必須發通知。**
+**Simplified decision logic**:
+> **If after this response ends the AI will not automatically continue doing the next thing, a notification must be sent.**
 
-**核心原則**：
-> 用戶可能離開了 chat 視窗去做其他事情，通知的目的是讓用戶知道「AI 這邊需要你回來看一下」。
+**Core principle**:
+> The user may have left the chat window to do other things. The purpose of the notification is to let the user know "the AI needs you to come back and look at something".
 
-### 🚨 強制性通知判斷（每次回應結束前必須執行）
+### 🚨 Mandatory Notification Judgment (Must Execute Before Each Response Ends)
 
-**CRITICAL**: AI 在**每次回應結束前**，**必須**執行以下判斷邏輯：
+**CRITICAL**: Before **each response ends**, the AI **MUST** execute the following decision logic:
 
-**強制自問**：
-> 「這個回應結束後，我是否會自動繼續執行下一步？」
-> - 如果「是」→ 不需要發送通知
-> - 如果「否」→ **必須**發送通知
+**Mandatory self-question**:
+> "After this response ends, will I automatically continue to the next step?"
+> - If "yes" → No notification needed
+> - If "no" → **MUST** send a notification
 
 ```
-當前回應是否是用戶任務的「終點」？
-├─ 是（任務完成、失敗、或需要等待用戶輸入）→ 必須發送通知
-└─ 否（還有後續自動操作）→ 不需要發送通知
+Is the current response an "endpoint" for the user's task?
+├─ Yes (task complete, failed, or needs to wait for user input) → Must send notification
+└─ No (there are subsequent automatic operations) → No notification needed
 ```
 
-**「終點」的定義**：
-1. **任務完成終點**：所有操作已完成，無需用戶進一步操作
-2. **等待輸入終點**：需要用戶確認、選擇或提供資訊才能繼續
-3. **失敗終點**：任務執行失敗，無法繼續
-4. **流程中斷終點**：因任何原因需要暫停流程
-5. **詢問終點**：向用戶詢問任何問題等待回覆
+**Definition of "endpoint"**:
+1. **Task completion endpoint**: All operations are complete, no further user action needed
+2. **Waiting for input endpoint**: Needs user confirmation, selection, or information before continuing
+3. **Failure endpoint**: Task execution failed, cannot continue
+4. **Flow interruption endpoint**: Flow needs to pause for any reason
+5. **Question endpoint**: Asking the user any question, waiting for reply
 
-**必須發送通知的情境（非窮盡列舉）**：
-| 情境類型 | 範例 | 通知訊息 |
+**Situations where notification must be sent (non-exhaustive)**:
+| Situation type | Example | Notification message |
 |---|---|---|
-| 等待確認 | 詢問用戶是否要執行某操作 | `待確認` |
-| 等待選擇 | 提供多個方案讓用戶選擇 | `待選擇` |
-| 等待輸入 | 需要用戶提供資訊 | `待輸入` |
-| 等待解決 | 發生衝突或錯誤需要用戶處理 | `待處理` |
-| 等待回覆 | 向用戶詢問問題 | `等待回覆` |
-| 任務完成 | 用戶交付的任務已完成 | 對應的完成訊息 |
-| 任務失敗 | 用戶交付的任務執行失敗 | 對應的失敗訊息 |
-| 流程中斷 | 因任何原因需要暫停 | `流程中斷` |
+| Waiting for confirmation | Asking user whether to execute an operation | `Pending confirmation` |
+| Waiting for selection | Providing multiple solutions for user to choose | `Pending selection` |
+| Waiting for input | Need user to provide information | `Pending input` |
+| Waiting for resolution | Conflict or error needs user to handle | `Pending action` |
+| Waiting for reply | Asking user a question | `Waiting for reply` |
+| Task complete | User-assigned task successfully completed | Corresponding completion message |
+| Task failed | User-assigned task encountered error or failure | Corresponding failure message |
+| Flow interrupted | Flow needs to pause for any reason | `Flow interrupted` |
 
-**範例判斷**：
-| 情境 | 是否為終點 | 是否發送通知 |
+**Example decisions**:
+| Scenario | Is it an endpoint? | Send notification? |
 |---|---|---|
-| 完成代碼修改，詢問「是否 commit-and-push？」 | ✅ 是（等待輸入） | ✅ 發送 |
-| 用戶說「是」，開始執行 commit-and-push | ❌ 否（執行中） | ❌ 不發送 |
-| commit-and-push 執行完成 | ✅ 是（任務完成） | ✅ 發送 |
-| 檢測到問題，詢問「是否修復？」 | ✅ 是（等待輸入） | ✅ 發送 |
-| 執行修復中 | ❌ 否（執行中） | ❌ 不發送 |
-| 修復完成，回報結果 | ✅ 是（任務完成） | ✅ 發送 |
-| 詢問用戶「你想要 A 還是 B？」 | ✅ 是（等待回覆） | ✅ 發送 |
-| 報告錯誤，等待用戶指示 | ✅ 是（等待輸入） | ✅ 發送 |
-| 說明分析結果，等待用戶下一步指示 | ✅ 是（等待輸入） | ✅ 發送 |
+| Code modification complete, asking "commit and push?" | ✅ Yes (waiting for input) | ✅ Send |
+| User says "yes", starts executing commit-and-push | ❌ No (executing) | ❌ Don't send |
+| commit-and-push execution complete | ✅ Yes (task complete) | ✅ Send |
+| Problem detected, asking "fix it?" | ✅ Yes (waiting for input) | ✅ Send |
+| Fix in progress | ❌ No (executing) | ❌ Don't send |
+| Fix complete, reporting result | ✅ Yes (task complete) | ✅ Send |
+| Asking user "do you want A or B?" | ✅ Yes (waiting for reply) | ✅ Send |
+| Reporting error, waiting for user instructions | ✅ Yes (waiting for input) | ✅ Send |
+| Explaining analysis result, waiting for user's next instruction | ✅ Yes (waiting for input) | ✅ Send |
 
-### 觸發條件
+### Trigger Conditions
 
-以下情況**必須**發送系統通知：
+The following situations **MUST** send a system notification:
 
-1. **任務完成**：用戶交付的任務已成功完成
-2. **任務失敗**：用戶交付的任務執行過程中遇到錯誤或失敗
-3. **需要用戶確認**：任何需要用戶在 chat 中確認才能繼續進行的情境，包括但不限於：
-   - 檢測到代碼問題需要詢問是否修復
-   - 檢測到規則違規需要詢問處理方式
-   - 有多個可行方案需要用戶選擇
-   - Git 操作發生衝突需要用戶解決
-   - 任何需要用戶明確同意才能繼續的操作
+1. **Task complete**: The user-assigned task has been successfully completed
+2. **Task failed**: An error or failure occurred during task execution
+3. **User confirmation needed**: Any situation requiring user confirmation in chat before continuing, including but not limited to:
+   - Code problem detected, asking whether to fix
+   - Rule violation detected, asking how to handle
+   - Multiple viable solutions, need user to choose
+   - Git operation conflict, needs user to resolve
+   - Any operation requiring explicit user consent before continuing
 
-### 通知格式
+### Notification Format
 
-通知內容必須包含以下資訊：
+Notification content must include the following:
 
-| 項目 | 說明 | 範例 |
-|------|------|------|
-| 標題 | 當前專案資料夾名稱 | `pantheon`、`fluid-two` |
-| 訊息 | 簡短的任務結果回報 | `推送完成`、`推送失敗`、`資料整理完畢`、`MR 建立成功`、`Commit 完成` |
+| Item | Description | Example |
+|------|-------------|---------|
+| Title | Current project folder name | `pantheon`, `fluid-two` |
+| Message | Brief task result report | `Push complete`, `Push failed`, `Data organized`, `MR created`, `Commit done` |
 
-### 通知執行方式
+### Notification Execution
 
-使用以下腳本發送系統通知：
+Use the following script to send system notifications:
 
 ```bash
-node .cursor/scripts/notification/notify-cursor-rules-failed.mjs "<專案名稱>" "<簡短回報>"
+node .cursor/scripts/notification/notify-cursor-rules-failed.mjs "<project name>" "<brief report>"
 ```
 
-**🚨 CRITICAL - Sandbox 權限要求**：
+**🚨 CRITICAL — Sandbox Permission Requirement**:
 
-由於 macOS 系統通知需要使用 `osascript` 執行 AppleScript，而 Cursor 的 sandbox 環境會限制此類系統調用，**AI 在執行通知腳本時必須使用 `required_permissions: ["all"]`**，否則通知將無法正常發送。
+Since macOS system notifications need to use `osascript` to execute AppleScript, and Cursor's sandbox environment restricts such system calls, **the AI must use `required_permissions: ["all"]` when executing the notification script**, otherwise notifications will not be sent.
 
-正確的執行方式：
+Correct execution method:
 ```
 run_terminal_cmd with required_permissions: ["all"]
 ```
 
-如果未使用正確權限，腳本可能會顯示成功但實際上通知未發送。
+If the correct permissions are not used, the script may appear to succeed but the notification is actually not sent.
 
-### 簡短回報範例
+### Brief Report Examples
 
-| 情境 | 簡短回報 |
+| Scenario | Brief report |
 |---|---|
-| Git push 成功 | `推送完成` |
-| Git push 失敗 | `推送失敗` |
-| MR 建立成功 | `MR 建立成功` |
-| MR 建立失敗 | `MR 建立失敗` |
-| Commit 成功 | `Commit 完成` |
-| Commit 失敗 | `Commit 失敗` |
-| 資料處理完成 | `資料整理完畢` |
-| 檔案修改完成 | `修改完成` |
-| 分析任務完成 | `分析完成` |
-| 代碼審查完成 | `審查完成` |
-| 任務執行失敗 | `執行失敗` |
-| 配置缺失 | `配置缺失` |
-| 需要確認修復 | `待確認` |
-| 需要選擇方案 | `待選擇` |
-| 發生衝突待解決 | `待解決衝突` |
-| 需要用戶決定 | `待決定` |
-| 需要用戶輸入資訊 | `待輸入` |
-| 向用戶詢問問題 | `等待回覆` |
-| 流程因任何原因中斷 | `流程中斷` |
-| 遇到未預期的錯誤 | `遇到錯誤` |
-| 需要用戶處理 | `待處理` |
-| 報告狀態等待指示 | `等待指示` |
+| Git push succeeded | `Push complete` |
+| Git push failed | `Push failed` |
+| MR created successfully | `MR created` |
+| MR creation failed | `MR creation failed` |
+| Commit succeeded | `Commit done` |
+| Commit failed | `Commit failed` |
+| Data processing complete | `Data organized` |
+| File modification complete | `Modification done` |
+| Analysis task complete | `Analysis done` |
+| Code review complete | `Review done` |
+| Task execution failed | `Execution failed` |
+| Configuration missing | `Config missing` |
+| Fix confirmation needed | `Pending confirmation` |
+| Solution selection needed | `Pending selection` |
+| Conflict to resolve | `Pending conflict resolution` |
+| User decision needed | `Pending decision` |
+| User input needed | `Pending input` |
+| Question asked to user | `Waiting for reply` |
+| Flow interrupted for any reason | `Flow interrupted` |
+| Unexpected error | `Error encountered` |
+| User action needed | `Pending action` |
+| Reporting status, waiting for instructions | `Waiting for instructions` |
 
-### 獲取專案名稱
+### Getting Project Name
 
-從當前工作目錄路徑提取專案資料夾名稱：
+Extract project folder name from current working directory path:
 
 ```bash
-# 使用 basename 獲取當前目錄名稱
+# Use basename to get current directory name
 basename $(pwd)
 ```
 
-或在 Node.js 環境中：
+Or in a Node.js environment:
 
 ```javascript
 import { basename } from 'path';
 const projectName = basename(process.cwd());
 ```
 
-### 執行範例
+### Execution Examples
 
 ```bash
-# 推送完成通知
-node .cursor/scripts/notification/notify-cursor-rules-failed.mjs "pantheon" "推送完成"
+# Push complete notification
+node .cursor/scripts/notification/notify-cursor-rules-failed.mjs "pantheon" "Push complete"
 
-# MR 建立成功通知
-node .cursor/scripts/notification/notify-cursor-rules-failed.mjs "fluid-two" "MR 建立成功"
+# MR created notification
+node .cursor/scripts/notification/notify-cursor-rules-failed.mjs "fluid-two" "MR created"
 
-# 任務失敗通知
-node .cursor/scripts/notification/notify-cursor-rules-failed.mjs "pantheon" "推送失敗"
+# Task failed notification
+node .cursor/scripts/notification/notify-cursor-rules-failed.mjs "pantheon" "Push failed"
 
-# 需要用戶確認通知
-node .cursor/scripts/notification/notify-cursor-rules-failed.mjs "pantheon" "待確認"
+# User confirmation needed notification
+node .cursor/scripts/notification/notify-cursor-rules-failed.mjs "pantheon" "Pending confirmation"
 
-# 需要用戶選擇方案通知
-node .cursor/scripts/notification/notify-cursor-rules-failed.mjs "fluid-two" "待選擇"
+# User solution selection needed notification
+node .cursor/scripts/notification/notify-cursor-rules-failed.mjs "fluid-two" "Pending selection"
 ```
 
-### 注意事項
+### Notes
 
-1. **必須在任務結束時發送**：無論成功或失敗，都必須發送通知
-2. **簡潔明瞭**：訊息應簡短，讓用戶一眼就能了解任務狀態
-3. **使用正確的專案名稱**：從當前工作目錄提取，確保用戶知道是哪個專案的通知
-4. **通知不阻塞流程**：通知發送失敗不應影響後續流程
+1. **Must send when task ends**: Regardless of success or failure, a notification must be sent
+2. **Concise and clear**: Messages should be short so users can understand the task status at a glance
+3. **Use correct project name**: Extract from current working directory to ensure users know which project's notification this is
+4. **Notification does not block flow**: Notification failure should not affect subsequent processes
 
-### 🚨 違規自動校正機制（強制執行）
+### 🚨 Violation Auto-Correction Mechanism (Strict Enforcement)
 
-**ABSOLUTE**: 如果 AI 發現自己的回應已經結束但沒有發送通知，**必須**在下一次回應開始時立即補發通知。
+**ABSOLUTE**: If the AI discovers its response has already ended without sending a notification, it **MUST** immediately send a catch-up notification at the start of the next response.
 
-**回應結束前內部檢查流程**：
+**Internal check flow before response ends**:
 
 ```
-準備結束回應
+Preparing to end response
     ↓
-【強制自問】這個回應結束後，AI 是否會自動繼續執行下一步？
-    ├─ 是 → 正常結束回應（不需要通知）
-    └─ 否 → 【強制檢查】是否已包含發送通知的 tool call？
-            ├─ 是 → 正常結束回應
-            └─ 否 → 【強制校正】立即添加通知 tool call
+[FORCED SELF-QUESTION] After this response ends, will the AI automatically continue to the next step?
+    ├─ Yes → End response normally (no notification needed)
+    └─ No → [FORCED CHECK] Does the response already include a notification tool call?
+            ├─ Yes → End response normally
+            └─ No → [FORCED CORRECTION] Immediately add notification tool call
 ```
 
-**違規檢測時機**：
+**Violation detection timing**:
 
-| 時機 | 檢查內容 | 校正動作 |
+| Timing | Check content | Correction action |
 |---|---|---|
-| 回應結束前 | 是否需要通知但未包含 tool call | 立即添加通知 tool call |
-| 下一次回應開始 | 上一次回應是否遺漏通知 | 補發通知並報告違規 |
+| Before response ends | Notification needed but tool call not included | Immediately add notification tool call |
+| Start of next response | Did the last response miss a notification | Send catch-up notification and report violation |
 
-**違規校正報告格式**：
+**Violation correction report format**:
 
 ```
-⚠️ 通知違規校正：
+⚠️ Notification violation correction:
 
-我在上次回應中違反了「任務完成系統通知」規則：
-- 違規行為：回應結束後無法自動繼續，但未發送通知
-- 遺漏的通知類型：[待確認/待選擇/任務完成/等]
+I violated the "Task Completion System Notification" rule in the last response:
+- Violation: Response ended without being able to automatically continue, but no notification was sent
+- Missing notification type: [Pending confirmation / Pending selection / Task complete / etc.]
 
-🔄 現在補發通知。
+🔄 Sending catch-up notification now.
 ```
 
-**強制執行規則**：
+**Strict enforcement rules**:
 
-| 規則 | 說明 |
+| Rule | Description |
 |---|---|
-| **不可跳過校正** | 發現違規後，校正步驟是強制性的，不可因任何理由省略 |
-| **不可事後忽略** | 即使用戶已經回覆，也必須在回應中說明違規並記錄 |
-| **校正優先於繼續** | 發現違規時，必須先完成校正報告，才能繼續後續操作 |
+| **Correction cannot be skipped** | After a violation is found, the correction step is mandatory and cannot be omitted for any reason |
+| **Cannot ignore after the fact** | Even if the user has already replied, the violation must be mentioned and recorded in the response |
+| **Correction before continuing** | When a violation is found, the correction report must be completed before continuing subsequent operations |
 
-**常見違規場景與校正**：
+**Common violation scenarios and corrections**:
 
-| 違規場景 | 正確做法 |
+| Violation scenario | Correct approach |
 |---|---|
-| 詢問用戶問題但未發通知 | 補發「等待回覆」通知 |
-| 報告錯誤但未發通知 | 補發「遇到錯誤」或「待處理」通知 |
-| 提供選項但未發通知 | 補發「待選擇」通知 |
-| 任務完成但未發通知 | 補發對應的完成通知 |
+| Asked user a question without sending notification | Send "Waiting for reply" notification as catch-up |
+| Reported an error without sending notification | Send "Error encountered" or "Pending action" notification as catch-up |
+| Provided options without sending notification | Send "Pending selection" notification as catch-up |
+| Task completed without sending notification | Send corresponding completion notification as catch-up |
 
-## 檢查清單
+## Checklist
 
-**CRITICAL**: 在提供 chat 回應前，AI **必須**確認以下所有項目：
+**CRITICAL**: Before providing a chat response, the AI **MUST** confirm all of the following items:
 
-### 格式檢查
-- [ ] 所有 Jira ticket 引用都使用超連結格式
-- [ ] 所有 MR 引用都使用超連結格式
-- [ ] 多個連結之間使用逗號或適當分隔符
-- [ ] URL 格式正確（Jira 使用 `innotech.atlassian.net`，MR 使用 `gitlab.service-hub.tech`）
-- [ ] 統整、比較、比對類的回報是否使用表格呈現
+### Format Check
+- [ ] All Jira ticket references use hyperlink format
+- [ ] All MR references use hyperlink format
+- [ ] Multiple links separated by commas or appropriate separators
+- [ ] URL format is correct (Jira uses `innotech.atlassian.net`, MR uses `gitlab.service-hub.tech`)
+- [ ] Summary, comparison, and check-type reports use table format
 
-### 🚨 通知檢查（最高優先級）
+### 🚨 Notification Check (Highest Priority)
 
-**ABSOLUTE - 強制自問**：
-> 「這個回應結束後，我是否會自動繼續執行下一步？」
+**ABSOLUTE — Forced self-question**:
+> "After this response ends, will I automatically continue to the next step?"
 
-- [ ] 🔴 **已執行強制自問判斷**
-- [ ] 🔴 **如果答案是「否」，必須在回應中包含發送通知的 tool call**
-- [ ] 🔴 **通知必須使用 `required_permissions: ["all"]`**
-- [ ] 🔴 **通知訊息使用正確的簡短回報格式**
+- [ ] 🔴 **Forced self-question judgment has been executed**
+- [ ] 🔴 **If the answer is "no", the response must include a notification-sending tool call**
+- [ ] 🔴 **Notification must use `required_permissions: ["all"]`**
+- [ ] 🔴 **Notification message uses correct brief report format**
 
-**需要發送通知的情況（核心判斷）**：
-- [ ] AI 詢問用戶任何問題 → 必須發送通知
-- [ ] AI 等待用戶確認 → 必須發送通知
-- [ ] AI 提供選項讓用戶選擇 → 必須發送通知
-- [ ] AI 報告錯誤等待用戶處理 → 必須發送通知
-- [ ] AI 完成任務 → 必須發送通知
-- [ ] AI 任務失敗 → 必須發送通知
-- [ ] AI 因任何原因無法繼續 → 必須發送通知
+**Situations requiring notification (core judgment)**:
+- [ ] AI asks the user any question → must send notification
+- [ ] AI is waiting for user confirmation → must send notification
+- [ ] AI provides options for user to choose → must send notification
+- [ ] AI reports error waiting for user to handle → must send notification
+- [ ] AI completes task → must send notification
+- [ ] AI task fails → must send notification
+- [ ] AI cannot continue for any reason → must send notification
 
-**禁止行為**：
-- ❌ 在任務終點時忘記發送通知
-- ❌ 只在 chat 中說「已發送通知」但實際沒有執行 tool call
-- ❌ 發送通知時未使用正確的權限
-- ❌ 詢問用戶問題但不發送通知
-- ❌ 等待用戶輸入但不發送通知
-- ❌ 假設用戶一直在看 chat 所以不需要通知
+**Prohibited actions**:
+- ❌ Forgetting to send notification at task endpoints
+- ❌ Only saying "notification sent" in chat without actually executing the tool call
+- ❌ Sending notification without using correct permissions
+- ❌ Asking user questions without sending notification
+- ❌ Waiting for user input without sending notification
+- ❌ Assuming the user is always watching chat so notification is not needed
