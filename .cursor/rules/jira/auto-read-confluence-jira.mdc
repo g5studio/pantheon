@@ -1,47 +1,48 @@
 ---
-description: 當用戶提供 Confluence 或 Jira 鏈接時，自動使用腳本讀取內容
+description: When the user provides a Confluence or Jira link, automatically use the script to read the content
 alwaysApply: false
 ---
-# 自動讀取 Confluence 和 Jira 內容規則
+# Auto-Read Confluence and Jira Content Rule
 
-此規則定義了當用戶在 chat 中提供 Confluence 或 Jira 鏈接時，AI 應該自動使用對應的腳本讀取內容。
+This rule defines that when the user provides a Confluence or Jira link in chat, the AI should automatically use the corresponding script to read the content.
 
-## 適用場景
+## Applicable Scenarios
 
-當用戶在 chat 中提供以下類型的鏈接時，AI 應該自動讀取內容：
+When the user provides the following types of links in chat, the AI should automatically read the content:
 
-1. **Confluence 頁面鏈接**：
-   - 格式：`https://innotech.atlassian.net/wiki/spaces/{spaceKey}/pages/{pageId}/...`
-   - 範例：`https://innotech.atlassian.net/wiki/spaces/Frontend/pages/4078010378/Agent+Operator+Guideline`
+1. **Confluence page links**:
+   - Format: `https://innotech.atlassian.net/wiki/spaces/{spaceKey}/pages/{pageId}/...`
+   - Example: `https://innotech.atlassian.net/wiki/spaces/Frontend/pages/4078010378/Agent+Operator+Guideline`
 
-2. **Jira ticket 鏈接或 ID**：
-   - URL 格式：`https://innotech.atlassian.net/browse/{ticket}`
-   - 直接 ID 格式：`FE-1234`、`IN-5678` 等
-   - 範例：`https://innotech.atlassian.net/browse/FE-1234` 或 `FE-1234`
+2. **Jira ticket links or IDs**:
+   - URL format: `https://innotech.atlassian.net/browse/{ticket}`
+   - Direct ID format: `FE-1234`, `IN-5678`, etc.
+   - Example: `https://innotech.atlassian.net/browse/FE-1234` or `FE-1234`
 
-## 核心原則
+## Core Principles
 
-**CRITICAL**: 當用戶在 chat 中提供 Confluence 或 Jira 鏈接時，AI **必須**：
+**CRITICAL**: When the user provides a Confluence or Jira link in chat, the AI **MUST**:
 
-1. **自動偵測鏈接**：識別聊天內容中的 Confluence 或 Jira 鏈接
-2. **自動執行腳本**：使用對應的腳本讀取內容
-3. **整合到上下文**：將讀取的內容整合到對話上下文中，用於後續的任務執行
+1. **Auto-detect the link**: Identify Confluence or Jira links in the chat content
+2. **Auto-execute the script**: Use the corresponding script to read the content
+3. **Integrate into context**: Integrate the read content into the conversation context for use in subsequent task execution
 
-## 執行流程
+## Execution Flow
 
-### 1. 偵測鏈接
+### 1. Detect Links
 
-AI 應該自動偵測用戶消息中的鏈接：
+The AI should automatically detect links in the user's message:
 
-- **Confluence 鏈接模式**：`https://innotech.atlassian.net/wiki/spaces/`
-- **Jira 鏈接模式**：`https://innotech.atlassian.net/browse/` 或 ticket ID 格式 `[A-Z0-9]+-\d+`
+- **Confluence link pattern**: `https://innotech.atlassian.net/wiki/spaces/`
+- **Jira link pattern**: `https://innotech.atlassian.net/browse/` or ticket ID format `[A-Z0-9]+-\d+`
 
-### 2. 執行對應腳本
+### 2. Execute the Corresponding Script
 
-#### 對於 Confluence 鏈接：
+#### For Confluence links:
 
 ```bash
-# ✅ 強烈建議使用「路徑判斷 + fallback」方式執行（避免 .pantheon + symlink 導致搜尋結果為空）
+# ✅ Strongly recommended: use "path check + fallback" approach
+# (avoids search returning empty for .pantheon + symlink directories)
 if [ -f ".pantheon/.cursor/scripts/jira/read-confluence-page.mjs" ]; then
   SCRIPT_PATH=".pantheon/.cursor/scripts/jira/read-confluence-page.mjs"
 elif [ -f ".cursor/scripts/jira/read-confluence-page.mjs" ]; then
@@ -49,17 +50,18 @@ elif [ -f ".cursor/scripts/jira/read-confluence-page.mjs" ]; then
 elif [ -f ".cursor/scripts/prometheus/jira/read-confluence-page.mjs" ]; then
   SCRIPT_PATH=".cursor/scripts/prometheus/jira/read-confluence-page.mjs"
 else
-  echo "❌ 找不到 read-confluence-page.mjs，請確認 pantheon 掛載路徑是否正確。" 1>&2
+  echo "❌ Cannot find read-confluence-page.mjs. Please verify the Pantheon mount path is correct." 1>&2
   exit 1
 fi
 
 node "$SCRIPT_PATH" "<confluence-url>"
 ```
 
-#### 對於 Jira ticket：
+#### For Jira tickets:
 
 ```bash
-# ✅ 強烈建議使用「路徑判斷 + fallback」方式執行（避免 .pantheon + symlink 導致搜尋結果為空）
+# ✅ Strongly recommended: use "path check + fallback" approach
+# (avoids search returning empty for .pantheon + symlink directories)
 if [ -f ".pantheon/.cursor/scripts/jira/read-jira-ticket.mjs" ]; then
   SCRIPT_PATH=".pantheon/.cursor/scripts/jira/read-jira-ticket.mjs"
 elif [ -f ".cursor/scripts/jira/read-jira-ticket.mjs" ]; then
@@ -67,95 +69,94 @@ elif [ -f ".cursor/scripts/jira/read-jira-ticket.mjs" ]; then
 elif [ -f ".cursor/scripts/prometheus/jira/read-jira-ticket.mjs" ]; then
   SCRIPT_PATH=".cursor/scripts/prometheus/jira/read-jira-ticket.mjs"
 else
-  echo "❌ 找不到 read-jira-ticket.mjs，請確認 pantheon 掛載路徑是否正確。" 1>&2
+  echo "❌ Cannot find read-jira-ticket.mjs. Please verify the Pantheon mount path is correct." 1>&2
   exit 1
 fi
 
 node "$SCRIPT_PATH" "<ticket-id-or-url>"
 ```
 
-### 3. 處理結果
+### 3. Handle Results
 
-- 如果腳本執行成功，將讀取的內容整合到對話上下文中
-- 如果腳本執行失敗（如配置缺失、權限問題等），在 chat 中告知用戶並提供解決方案
-- 讀取的內容應該用於：
-  - 理解任務需求
-  - 參考文件內容執行任務
-  - 回答用戶問題
+- If the script executes successfully, integrate the read content into the conversation context
+- If the script fails (e.g., missing config, permission issues), notify the user in chat and provide a solution
+- The read content should be used for:
+  - Understanding task requirements
+  - Referencing documentation content to execute tasks
+  - Answering user questions
 
-## 重要提醒（避免誤判「腳本不存在」）
+## Important Reminder (Avoid Misjudging "Script Not Found")
 
-**CRITICAL**：在「Pantheon 以 submodule 掛載於 `.pantheon/`」且專案另外透過 **symbolic link** 同步腳本的情境下，
-部分 workspace 的搜尋能力（例如 Glob）可能對 `.pantheon/` 或 symlink 目錄回傳 **0 結果**。
+**CRITICAL**: In scenarios where Pantheon is mounted as a submodule under `.pantheon/` and the project additionally synchronizes scripts via **symbolic links**, some workspaces' search capabilities (e.g., Glob) may return **0 results** for `.pantheon/` or symlink directories.
 
-因此：
-- **不要**用「搜尋腳本檔案」作為「腳本是否存在」的依據
-- **要**用上方的「明確路徑 + `-f` 檢查 + fallback」方式執行
+Therefore:
+- **Do NOT** use "searching for the script file" as the basis for "whether the script exists"
+- **Do** use the "explicit path + `-f` check + fallback" approach shown above
 
-## 範例
+## Examples
 
-### 範例 1: 用戶提供 Confluence 鏈接
-
-```
-用戶: "請參考這個文件：https://innotech.atlassian.net/wiki/spaces/Frontend/pages/4078010378/Agent+Operator+Guideline"
-
-AI 應該：
-1. 偵測到 Confluence 鏈接
-2. 執行: node .cursor/scripts/jira/read-confluence-page.mjs "https://innotech.atlassian.net/wiki/spaces/Frontend/pages/4078010378/Agent+Operator+Guideline"
-3. 讀取內容並整合到上下文
-4. 根據文件內容執行後續任務
-```
-
-### 範例 2: 用戶提供 Jira ticket
+### Example 1: User Provides a Confluence Link
 
 ```
-用戶: "請查看 FE-1234 這個 ticket"
+User: "Please refer to this document: https://innotech.atlassian.net/wiki/spaces/Frontend/pages/4078010378/Agent+Operator+Guideline"
 
-AI 應該：
-1. 偵測到 Jira ticket ID
-2. 執行: node .cursor/scripts/jira/read-jira-ticket.mjs "FE-1234"
-3. 讀取 ticket 內容並整合到上下文
-4. 根據 ticket 內容執行後續任務
+AI should:
+1. Detect the Confluence link
+2. Execute: node .cursor/scripts/jira/read-confluence-page.mjs "https://innotech.atlassian.net/wiki/spaces/Frontend/pages/4078010378/Agent+Operator+Guideline"
+3. Read the content and integrate into context
+4. Execute subsequent tasks based on the document content
 ```
 
-### 範例 3: 用戶提供 Jira URL
+### Example 2: User Provides a Jira Ticket
 
 ```
-用戶: "請參考 https://innotech.atlassian.net/browse/IN-5678"
+User: "Please check this ticket: FE-1234"
 
-AI 應該：
-1. 偵測到 Jira URL
-2. 執行: node .cursor/scripts/jira/read-jira-ticket.mjs "https://innotech.atlassian.net/browse/IN-5678"
-3. 讀取 ticket 內容並整合到上下文
+AI should:
+1. Detect the Jira ticket ID
+2. Execute: node .cursor/scripts/jira/read-jira-ticket.mjs "FE-1234"
+3. Read the ticket content and integrate into context
+4. Execute subsequent tasks based on the ticket content
 ```
 
-## 錯誤處理
+### Example 3: User Provides a Jira URL
 
-### 配置缺失
+```
+User: "Please refer to https://innotech.atlassian.net/browse/IN-5678"
 
-如果 Jira 配置缺失（`.env.local` 中沒有 `JIRA_EMAIL` 或 `JIRA_API_TOKEN`），腳本會輸出錯誤信息。AI 應該：
+AI should:
+1. Detect the Jira URL
+2. Execute: node .cursor/scripts/jira/read-jira-ticket.mjs "https://innotech.atlassian.net/browse/IN-5678"
+3. Read the ticket content and integrate into context
+```
 
-1. 在 chat 中告知用戶配置缺失
-2. 提供設置配置的指導
-3. 建議用戶設置後重新執行
+## Error Handling
 
-### 權限問題
+### Missing Configuration
 
-如果 API token 已過期或無權限，AI 應該：
+If Jira configuration is missing (no `JIRA_EMAIL` or `JIRA_API_TOKEN` in `.env.local`), the script will output an error message. The AI should:
 
-1. 在 chat 中告知用戶權限問題
-2. 建議聯繫 william.chiang 或重新生成 token
+1. Notify the user of the missing configuration in chat
+2. Provide guidance on setting up the configuration
+3. Suggest the user set it up and then retry
 
-### 頁面/Ticket 不存在
+### Permission Issues
 
-如果指定的頁面或 ticket 不存在，AI 應該：
+If the API token has expired or lacks permissions, the AI should:
 
-1. 在 chat 中告知用戶找不到指定的內容
-2. 請用戶確認鏈接或 ticket ID 是否正確
+1. Notify the user of the permission issue in chat
+2. Suggest contacting william.chiang or regenerating the token
 
-## 注意事項
+### Page/Ticket Not Found
 
-1. **自動執行**：此規則要求 AI 自動執行，無需用戶明確要求
-2. **上下文整合**：讀取的內容應該整合到對話上下文中，用於後續任務
-3. **錯誤處理**：如果讀取失敗，應該在 chat 中提供清晰的錯誤信息和解決方案
-4. **配置檢查**：在執行腳本前，可以檢查配置是否存在，如果不存在可以提前告知用戶
+If the specified page or ticket does not exist, the AI should:
+
+1. Notify the user in chat that the specified content could not be found
+2. Ask the user to verify whether the link or ticket ID is correct
+
+## Notes
+
+1. **Auto-execute**: This rule requires the AI to execute automatically — no explicit request from the user is needed
+2. **Context integration**: The read content should be integrated into the conversation context for use in subsequent tasks
+3. **Error handling**: If reading fails, provide clear error info and a solution in chat
+4. **Config check**: Before executing the script, can optionally check if the config exists and notify the user in advance if it does not

@@ -123,21 +123,6 @@ description: 開始新任務：創建 feature branch 並分析 Jira ticket 需�
        --source-branch="{來源分支}" \
        --ai-completed=true
      ```
-   - 或使用 JSON 格式：
-     ```bash
-     node .cursor/scripts/operator/save-start-task-info.mjs --json='{
-       "ticket": "{ticket}",
-       "summary": "{標題}",
-       "issueType": "{issueType}",
-       "status": "{status}",
-       "assignee": "{assignee}",
-       "priority": "{priority}",
-       "suggestedSteps": ["步驟1", "步驟2"],
-       "sourceBranch": "{來源分支}",
-       "featureBranch": "feature/{ticket}",
-       "aiCompleted": true
-     }'
-     ```
    - 驗證保存成功：`node .cursor/scripts/operator/save-start-task-info.mjs --verify`
    - **禁止**在保存成功前開始開發
 

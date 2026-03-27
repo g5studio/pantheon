@@ -8,12 +8,11 @@
  *
  * 使用方式：
  *   node .cursor/scripts/operator/save-start-task-info.mjs --ticket=IN-107113 --summary="[標題]" --type=Bug --steps='["步驟1", "步驟2"]'
- *   node .cursor/scripts/operator/save-start-task-info.mjs --json='{"ticket":"IN-107113", ...}'
  *   node .cursor/scripts/operator/save-start-task-info.mjs --read  # 讀取當前的 start-task info
  *   node .cursor/scripts/operator/save-start-task-info.mjs --verify  # 驗證 Git notes 是否存在
  *
  * 參數說明：
- *   --ticket        Jira ticket 編號（必填，除非使用 --json）
+ *   --ticket        Jira ticket 編號（必填，除非使用 --update）
  *   --summary       Jira ticket 標題
  *   --type          Issue 類型（Bug, Story, Task, Feature 等）
  *   --status        Jira 狀態
@@ -22,7 +21,6 @@
  *   --steps         開發步驟（JSON 陣列格式）
  *   --source-branch 來源分支
  *   --ai-completed  是否為 AI 獨立完成（true/false）
- *   --json          完整的 JSON 格式 startTaskInfo（優先使用）
  *   --read          讀取當前的 start-task info
  *   --verify        驗證 Git notes 是否存在
  *   --update        更新現有的 Git notes（合併模式）
@@ -150,7 +148,7 @@ function parseArgs(args) {
     read: false,
     verify: false,
     update: false,
-    json: null,
+    unsupportedJson: false,
     ticket: null,
     summary: null,
     type: null,
@@ -170,7 +168,7 @@ function parseArgs(args) {
     } else if (arg === "--update") {
       params.update = true;
     } else if (arg.startsWith("--json=")) {
-      params.json = arg.slice("--json=".length);
+      params.unsupportedJson = true;
     } else if (arg.startsWith("--ticket=")) {
       params.ticket = arg.slice("--ticket=".length);
     } else if (arg.startsWith("--summary=")) {
@@ -197,21 +195,6 @@ function parseArgs(args) {
 
 // 構建 startTaskInfo 對象
 function buildStartTaskInfo(params, existingInfo = null) {
-  // 如果提供了完整的 JSON，直接使用
-  if (params.json) {
-    try {
-      const parsed = JSON.parse(params.json);
-      // 確保有 startedAt
-      if (!parsed.startedAt) {
-        parsed.startedAt = new Date().toISOString();
-      }
-      return parsed;
-    } catch (error) {
-      console.error(`❌ JSON 解析失敗: ${error.message}`);
-      process.exit(1);
-    }
-  }
-
   // 基於現有資訊或新建
   const info = existingInfo || {};
 
@@ -253,6 +236,13 @@ function main() {
   const args = process.argv.slice(2);
   const params = parseArgs(args);
 
+  if (params.unsupportedJson) {
+    console.error(
+      "❌ 已移除 --json 用法，請改用獨立參數傳入 start-task 計劃。"
+    );
+    process.exit(1);
+  }
+
   // 讀取模式
   if (params.read) {
     const result = readStartTaskInfo();
@@ -291,19 +281,18 @@ function main() {
   }
 
   // 檢查必要參數
-  if (!params.json && !params.ticket && !existingInfo?.ticket) {
+  if (!params.ticket && !existingInfo?.ticket) {
     console.log(`
 📝 保存 Start-Task Info 工具
 
 使用方式：
   node .cursor/scripts/operator/save-start-task-info.mjs --ticket=IN-107113 --summary="[標題]" --type=Bug --steps='["步驟1", "步驟2"]'
-  node .cursor/scripts/operator/save-start-task-info.mjs --json='{"ticket":"IN-107113", ...}'
   node .cursor/scripts/operator/save-start-task-info.mjs --read
   node .cursor/scripts/operator/save-start-task-info.mjs --verify
   node .cursor/scripts/operator/save-start-task-info.mjs --update --steps='["新步驟"]'
 
 參數說明：
-  --ticket        Jira ticket 編號（必填，除非使用 --json 或 --update）
+  --ticket        Jira ticket 編號（必填，除非使用 --update）
   --summary       Jira ticket 標題
   --type          Issue 類型（Bug, Story, Task, Feature 等）
   --status        Jira 狀態
@@ -312,7 +301,6 @@ function main() {
   --steps         開發步驟（JSON 陣列格式）
   --source-branch 來源分支
   --ai-completed  是否為 AI 獨立完成（預設 true）
-  --json          完整的 JSON 格式 startTaskInfo
   --read          讀取當前的 start-task info
   --verify        驗證 Git notes 是否存在
   --update        更新現有的 Git notes（合併模式）

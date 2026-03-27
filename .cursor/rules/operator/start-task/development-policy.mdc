@@ -77,7 +77,7 @@ For detailed specifications, see: [operation-modes.mdc](mdc:.cursor/rules/operat
 | Before preparing to commit after development | Check Git notes exist | 🚨 Required |
 | Before executing cr command | Verify Git notes exist | 🚨 Required |
 
-### startTaskInfo JSON Format
+### startTaskInfo Field Structure
 
 ```json
 {
@@ -164,7 +164,7 @@ For detailed specifications, see: [operation-modes.mdc](mdc:.cursor/rules/operat
 Use the `.cursor/scripts/operator/save-start-task-info.mjs` script to save:
 
 ```bash
-# Method 1: Use individual parameters (with operation mode)
+# Method 1: Use individual parameters to save start task plan
 node .cursor/scripts/operator/save-start-task-info.mjs \
   --ticket=IN-107113 \
   --summary="[title]" \
@@ -175,18 +175,6 @@ node .cursor/scripts/operator/save-start-task-info.mjs \
   --steps='["step 1", "step 2", "step 3"]' \
   --source-branch=main \
   --ai-completed=true \
-  --operation-mode=default \
-  --mode-config='{}'
-
-# Method 2: Use full JSON (with operation mode)
-node .cursor/scripts/operator/save-start-task-info.mjs --json='{
-  "ticket": "IN-107113",
-  "operationMode": "multi-task",
-  "modeConfig": {
-    "parentTicket": "IN-107113",
-    "subTasks": ["IN-107113-1", "IN-107113-2"]
-  }
-}'
 
 # Verify save succeeded
 node .cursor/scripts/operator/save-start-task-info.mjs --verify
@@ -197,9 +185,6 @@ node .cursor/scripts/operator/save-start-task-info.mjs --read
 # Update existing notes (merge mode)
 node .cursor/scripts/operator/save-start-task-info.mjs --update --steps='["new step"]'
 
-# Update phase progress in multi-task mode
-node .cursor/scripts/operator/save-start-task-info.mjs --update \
-  --mode-config='{"currentPhase": 2, "phaseCommits": ["hash1", "hash2"]}'
 ```
 
 ### Mandatory Checkpoints
@@ -800,7 +785,7 @@ node .cursor/scripts/operator/update-development-report.mjs --report="<report-co
 # Read report content from file
 node .cursor/scripts/operator/update-development-report.mjs --report-file="<path-to-report-file>"
 
-# Read current startTaskInfo (JSON format)
+# Read current startTaskInfo
 node .cursor/scripts/operator/update-development-report.mjs --read
 
 # Output formatted MR description (Markdown format)
