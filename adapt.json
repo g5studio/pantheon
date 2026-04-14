@@ -4,569 +4,621 @@
       "name": "AI",
       "applicable": {
         "ok": true,
-        "reason": "近期多數 MR 明確以 [AI] 為主題，且變更集中在 .cursor 規則/腳本與 LLM 代理能力，符合此 repo 的核心用途。"
+        "reason": "近期多數 MR 明確以 [AI] 為主題，內容集中在 Cursor 規則、腳本與自動化流程，且標籤使用頻繁。此標籤能有效區分 AI/代理相關變更。"
       },
-      "scenario": "當 MR 的主要產出是 AI/LLM 相關能力（例如 Cursor rules、LLM client、AI review、代理工作流）或由 AI 協作完成並需要被追蹤時使用。"
+      "scenario": "用於「由 AI/代理（如 Cursor）產出或主要針對 AI 工作流」的 MR，例如調整 .cursor/rules、.cursor/scripts、代理操作 SOP、token 使用量優化等。"
     },
     {
       "name": "Dependency",
       "applicable": {
         "ok": true,
-        "reason": "此 repo 的 MR 可能依賴其他專案或多個子變更（例如規則、腳本、環境變數）一起上版；此流程型標籤對工具 repo 仍有價值。"
+        "reason": "此標籤屬跨專案流程控管，與 repo 類型無關；即使是工具 repo，也可能存在「需等待其他專案/其他 MR」的相依關係。"
       },
-      "scenario": "當同一張需求/原單不只改動本 repo，且上版需要等待其他相依 MR/專案一併完成時加上，提醒轉單/上版人員先確認相依項目皆已合併。"
+      "scenario": "當此 MR 需要依賴其他專案或其他 MR 先合併/先上版（例如 adapt 流程需配合外部平台或另一個 repo 的 API/設定）時加，提醒上版/轉單需確認相依項目已完成。"
     },
     {
       "name": "FE Board",
       "applicable": {
         "ok": true,
-        "reason": "近期 MR 幾乎都掛 FE Board，且內容多為內部優化/協作規範（不進測試）與 DX 工具改動，完全符合此標籤定義。"
+        "reason": "近期 MR 大量使用 FE Board，且內容多為內部 DX/工作流優化（.cursor 指令、MR/Jira 串接、自動化）。此標籤符合「不進測試、確保不影響產品」的定位。"
       },
-      "scenario": "當 MR 屬於內部優化、工具鏈/規範調整、或外部協作但不應影響實際產品行為時使用；合併前需自我確認改動不會在生產環境造成可見影響。"
+      "scenario": "用於內部 DX/流程/工具優化的 MR（例如 .cursor 指令、create-mr/update-mr 腳本、Jira/ GitLab 串接、規則文件調整），通常不需要進產品測試，但需確保不會影響實際產品或生產環境。"
     },
     {
       "name": "Hotfix",
       "applicable": {
         "ok": true,
-        "reason": "即使是工具 repo 也可能需要緊急修補（例如 CI、腳本阻塞）；此流程型標籤仍適用。"
+        "reason": "Hotfix 屬通用流程標籤；即使是工具 repo，也可能需要緊急修補（例如 CI 失敗、阻斷開發流程的腳本錯誤）。"
       },
-      "scenario": "當需要緊急修補且允許直接合併（跳過常規排程）時使用，通常用於阻塞性問題（例如腳本壞掉、流程中斷）需快速恢復。"
+      "scenario": "用於需要緊急修補且希望快速合併的 MR（例如修正會阻斷 create-mr/adapt 指令的 bug），並依團隊規範允許直接合併到主分支。"
+    },
+    {
+      "name": "Plan",
+      "applicable": {
+        "ok": true,
+        "reason": "Plan 是跨 MR 的大型專案管理方式，與 repo 類型無關；工具 repo 也可能有大型重構/流程導入需要此管理。"
+      },
+      "scenario": "用於巨型改動（多需求、多 MR、需長期 feature testing/驗證）的整合計畫；在本專案可用於「大規模改造 Cursor 工作流/新增一整套 operator 能力」並以單一主分支統整。"
     },
     {
       "name": "Static File",
       "applicable": {
         "ok": true,
-        "reason": "即使是工具 repo 也可能只改動靜態資產或文件資源；此標籤可用於提示審查範圍與風險。"
+        "reason": "Static File 是通用變更類型標籤；即使本 repo 以腳本為主，仍可能有純資產/文件圖片等靜態檔案調整需要區分。"
       },
-      "scenario": "當 MR 僅調整純靜態資產（例如 assets/* 或等價的靜態檔案）且不涉及程式邏輯時使用，用於快速審查與降低測試期待。"
+      "scenario": "當 MR 只改動純靜態資產（例如 assets/ 下的圖片、字型、靜態檔）或等價的純資源檔更新時使用，用來提示審查重點在檔案內容與引用路徑。"
     },
     {
       "name": "Sub Bug",
       "applicable": {
         "ok": true,
-        "reason": "此 repo 也可能因需求衍生缺陷單而修補腳本/規範；缺陷追蹤標籤對工具 repo 仍適用。"
+        "reason": "Sub Bug 屬通用缺陷流程標籤；工具 repo 也會有需求衍生的缺陷修正。"
       },
-      "scenario": "當 MR 是針對某需求衍生出的漏洞/缺陷單進行修正時使用，用於區分「需求開發」與「需求後續修補」。"
+      "scenario": "當此 MR 是針對既有需求/功能衍生出的漏洞單（例如 adapt/create-mr 流程在特定 repo 失敗）進行修正時加，方便追蹤「需求後續修補」。"
     },
     {
       "name": "3.0UI",
       "applicable": {
         "ok": false,
-        "reason": "此專案為內部 DX/AI 工具與規範（.cursor 指令、rules、scripts），非產品 UI 專案；近期 MR 也未出現此類 UI 版本切換需求。"
+        "reason": "此 repo 主要是 .cursor 指令/規則/腳本等 DX/AI 工具，未見 v3 UI 相關目錄或實際 UI 產出物。近期 MR 也未出現此標籤使用情境。"
       },
-      "scenario": "當 MR 內容主要是 3.0 版面/元件樣式調整或 3.0 UI 規範對齊時使用；本專案通常不需要此標籤。"
+      "scenario": "當 MR 變更會影響 v3 介面呈現（例如 v3 專屬頁面或共用元件）才加；本專案多為工具腳本，通常不需要掛此標籤。"
     },
     {
       "name": "4.0UI",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 主要維護 Cursor/AI 工作流與腳本，沒有產品 4.0 UI 版面交付脈絡；近期 MR 未使用此標籤。"
+        "reason": "此 repo 為 Pantheon 工具與 Cursor 工作流，非產品 UI 專案；近期 MR 皆為 .cursor 腳本/規則調整，與 v4 UI 呈現無直接關聯。"
       },
-      "scenario": "當 MR 內容主要是 4.0 版面/元件樣式調整或 4.0 UI 規範對齊時使用；本專案通常不需要此標籤。"
+      "scenario": "當 MR 變更會影響 v4 介面呈現才加；本專案以工具為主，除非未來納入 v4 UI 資產或共用 UI 元件，否則不建議使用。"
     },
     {
       "name": "C2C",
       "applicable": {
         "ok": false,
-        "reason": "C2C 為產品業務功能領域標籤；此 repo 為工具/流程腳本，近期 MR 未涉及 C2C 業務。"
+        "reason": "此 repo 未呈現 C2C 產品功能模組或頁面結構，近期 MR 也無相關變更。對工具型 repo 來說多半不適用。"
       },
-      "scenario": "當 MR 直接實作/調整 C2C 產品功能（頁面、流程、API 串接）時使用；本專案通常不需要此標籤。"
+      "scenario": "僅在開發/調整 C2C 產品功能時使用；本專案通常不會涉及，除非新增 C2C 專用的自動化規則或腳本。"
     },
     {
       "name": "Casino",
       "applicable": {
         "ok": false,
-        "reason": "Casino 為產品功能領域標籤；此 repo 內容為 DX/AI 工具與規範，與 Casino 業務無直接關聯。"
+        "reason": "此 repo 為工具與工作流腳本，沒有 Casino 功能模組或 UI。近期 MR 也未出現此領域變更。"
       },
-      "scenario": "當 MR 直接影響 Casino 模組功能或介面時使用；本專案通常不需要此標籤。"
+      "scenario": "用於賭場相關功能/資產調整；本專案通常不適用。"
     },
     {
       "name": "Dark Mode",
       "applicable": {
         "ok": false,
-        "reason": "Dark Mode 通常屬於產品 UI 主題；此 repo 不交付實際產品樣式，近期 MR 也未出現相關變更。"
+        "reason": "此 repo 不包含 UI 主題/樣式資產，近期 MR 皆為工具腳本與規則。Dark Mode 屬產品 UI 範疇，與本 repo 不符。"
       },
-      "scenario": "當 MR 主要處理深色模式樣式/主題切換/色票對齊時使用；本專案通常不需要此標籤。"
+      "scenario": "當 MR 針對深色模式做特殊處理（樣式、主題變數、切換邏輯）才加；本專案通常不會用到。"
     },
     {
       "name": "Email Verification",
       "applicable": {
         "ok": false,
-        "reason": "電郵認證屬產品功能領域；此 repo 為內部工具與規範，近期 MR 未涉及。"
+        "reason": "此 repo 未包含會員/驗證流程等產品功能，近期 MR 也無相關內容。"
       },
-      "scenario": "當 MR 直接影響電郵認證流程（寄信、驗證頁、token 驗證）時使用；本專案通常不需要此標籤。"
+      "scenario": "用於電郵認證流程相關改動；本專案通常不適用。"
     },
     {
       "name": "Europe Cup",
       "applicable": {
         "ok": false,
-        "reason": "Europe Cup 為活動/產品領域標籤；此 repo 為工具腳本，近期 MR 未涉及。"
+        "reason": "此 repo 為工具腳本，未見活動/賽事專案內容。近期 MR 也無此類變更。"
       },
-      "scenario": "當 MR 直接支援歐洲盃活動頁/活動邏輯/資源配置時使用；本專案通常不需要此標籤。"
+      "scenario": "用於歐洲盃活動/賽事相關功能改動；本專案通常不適用。"
     },
     {
       "name": "IM",
       "applicable": {
         "ok": false,
-        "reason": "IM 為產品功能領域標籤；此 repo 為 DX/AI 工具，近期 MR 未涉及。"
+        "reason": "此 repo 未包含 IM 產品功能（聊天室/主播/打賞等）模組，近期 MR 也無相關。"
       },
-      "scenario": "當 MR 直接影響 IM/聊天室相關功能時使用；本專案通常不需要此標籤。"
+      "scenario": "用於 IM 功能開發/修正；本專案通常不適用。"
     },
     {
       "name": "New Brand",
       "applicable": {
         "ok": false,
-        "reason": "New Brand 針對多個產品專案的業主新增改動清單；此 repo 為工具/規範，不在該交付範圍內。"
+        "reason": "此 repo 不在描述的多專案品牌清單中，且內容為工具工作流，非品牌客製專案。"
       },
-      "scenario": "當 MR 屬於新增業主/品牌導入，且需要在指定產品專案做配置與功能調整時使用；本專案通常不需要此標籤。"
+      "scenario": "用於新增業主/品牌導致的多專案改動；本專案通常不適用。"
     },
     {
-      "name": "Plan",
+      "name": "New Market",
       "applicable": {
         "ok": false,
-        "reason": "Plan 標籤描述的是巨型產品專案以共享 main branch 與獨立 feature testing 的釋出模式；此 repo 目前呈現單一 main + feature 分支直合併，未見 Plan 型態。"
+        "reason": "新市場（幣種/語系/居住國）屬產品功能與 i18n/設定範疇；本 repo 為工具腳本，近期 MR 無此類內容。"
       },
-      "scenario": "當要做跨多需求的大型整合、需要獨立主分支長期開發並在完善後再回主線時使用；本專案近期不符合此使用情境。"
+      "scenario": "用於新市場開發相關改動；本專案通常不適用。"
     },
     {
       "name": "Promotion",
       "applicable": {
         "ok": false,
-        "reason": "Promotion 為產品優惠功能領域；此 repo 為工具腳本，近期 MR 未涉及。"
+        "reason": "此 repo 不含優惠活動功能模組，近期 MR 也無相關。"
       },
-      "scenario": "當 MR 直接影響優惠/活動/紅利等促銷功能時使用；本專案通常不需要此標籤。"
+      "scenario": "用於優惠/活動功能改動；本專案通常不適用。"
     },
     {
       "name": "Record",
       "applicable": {
         "ok": false,
-        "reason": "Record 為產品注單/交易紀錄模組領域；此 repo 為工具與規範，近期 MR 未涉及。"
+        "reason": "注單/交易紀錄屬產品功能模組，本 repo 為工具腳本，無相關結構與近期變更。"
       },
-      "scenario": "當 MR 直接影響注單紀錄或交易紀錄的查詢、列表、詳情、匯出等功能時使用；本專案通常不需要此標籤。"
+      "scenario": "用於紀錄模組改動；本專案通常不適用。"
     },
     {
       "name": "Sport",
       "applicable": {
         "ok": false,
-        "reason": "Sport 為產品體育功能領域；此 repo 為 DX/AI 工具，近期 MR 未涉及。"
+        "reason": "體育功能屬產品領域，本 repo 未包含相關模組，近期 MR 也無。"
       },
-      "scenario": "當 MR 直接影響體育相關功能（非 IM 聊天室）時使用；本專案通常不需要此標籤。"
+      "scenario": "用於體育相關功能改動；本專案通常不適用。"
+    },
+    {
+      "name": "Translation",
+      "applicable": {
+        "ok": false,
+        "reason": "本 repo 主要為工具腳本與規則文件，未見 i18n key 管理為主要內容；近期 MR 也無純翻譯 key 異動。"
+      },
+      "scenario": "僅在改動單純只涉及 i18n key/翻譯資源時使用；本專案通常不適用。"
     },
     {
       "name": "UI/UX",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 不交付產品 UI/UX；近期 MR 皆為 .cursor 規則/腳本與流程，非純 UI/UX 調整。"
+        "reason": "此 repo 不屬 UI 產品專案，近期 MR 也非 UI/UX 調整而是工具流程。"
       },
-      "scenario": "當 MR 僅做 UI/UX 視覺或互動微調且不影響商業邏輯時使用；本專案通常不需要此標籤。"
+      "scenario": "用於純 UI/UX 調整且不影響商業邏輯；本專案通常不適用。"
     },
     {
       "name": "v4.12",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品版本線（v4/v5）交付；近期 MR 也未以版本修補為目標。"
+        "reason": "此 repo 未呈現產品版本線（v4.x）分支/發版流程，且 git-flow 顯示以 main 為主、無 release/v4.12 分支。"
       },
-      "scenario": "當 MR 是針對 v4.12 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v4.12 版本問題；本專案通常不適用。"
     },
     {
       "name": "v4.13",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品版本線交付，且近期 MR 未使用版本標籤。"
+        "reason": "同上，本 repo 無 v4.x 版本線與對應分支策略。"
       },
-      "scenario": "當 MR 是針對 v4.13 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v4.13 版本問題；本專案通常不適用。"
     },
     {
       "name": "v4.14",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品版本線交付，與 v4.14 無直接關聯。"
+        "reason": "同上，本 repo 無 v4.x 版本線與對應分支策略。"
       },
-      "scenario": "當 MR 是針對 v4.14 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v4.14 版本問題；本專案通常不適用。"
     },
     {
       "name": "v4.15",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品版本線交付，與 v4.15 無直接關聯。"
+        "reason": "同上，本 repo 無 v4.x 版本線與對應分支策略。"
       },
-      "scenario": "當 MR 是針對 v4.15 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v4.15 版本問題；本專案通常不適用。"
     },
     {
       "name": "v4.16",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品版本線交付，與 v4.16 無直接關聯。"
+        "reason": "同上，本 repo 無 v4.x 版本線與對應分支策略。"
       },
-      "scenario": "當 MR 是針對 v4.16 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v4.16 版本問題；本專案通常不適用。"
     },
     {
       "name": "v4.17",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品版本線交付，與 v4.17 無直接關聯。"
+        "reason": "同上，本 repo 無 v4.x 版本線與對應分支策略。"
       },
-      "scenario": "當 MR 是針對 v4.17 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v4.17 版本問題；本專案通常不適用。"
     },
     {
       "name": "v4.21",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品版本線交付，與 v4.21 無直接關聯。"
+        "reason": "同上，本 repo 無 v4.x 版本線與對應分支策略。"
       },
-      "scenario": "當 MR 是針對 v4.21 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v4.21 版本問題；本專案通常不適用。"
     },
     {
       "name": "v4.22",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品版本線交付，與 v4.22 無直接關聯。"
+        "reason": "同上，本 repo 無 v4.x 版本線與對應分支策略。"
       },
-      "scenario": "當 MR 是針對 v4.22 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v4.22 版本問題；本專案通常不適用。"
     },
     {
       "name": "v4.23",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品版本線交付，與 v4.23 無直接關聯。"
+        "reason": "同上，本 repo 無 v4.x 版本線與對應分支策略。"
       },
-      "scenario": "當 MR 是針對 v4.23 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v4.23 版本問題；本專案通常不適用。"
     },
     {
       "name": "v4.24",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品版本線交付，與 v4.24 無直接關聯。"
+        "reason": "同上，本 repo 無 v4.x 版本線與對應分支策略。"
       },
-      "scenario": "當 MR 是針對 v4.24 版本線的上線/修補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於 v4.24 上線版本相關；本專案通常不適用。"
     },
     {
       "name": "v5.10",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，近期 MR 也未出現版本回補流程。"
+        "reason": "此 repo 無 v5.x 產品版本線與 release 分支；目前以工具版本（version.json/tag）為主。"
       },
-      "scenario": "當 MR 是針對 v5.10 版本線的上線/修補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於 v5.10 上線版本相關；本專案通常不適用。"
     },
     {
       "name": "v5.11",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.11 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.11 版本線的上線/修補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於 v5.11 上線版本相關；本專案通常不適用。"
     },
     {
       "name": "v5.12",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.12 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.12 版本線的上線/修補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於 v5.12 上線版本相關；本專案通常不適用。"
     },
     {
       "name": "v5.13",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.13 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.13 版本線的上線/修補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於 v5.13 上線版本相關；本專案通常不適用。"
     },
     {
       "name": "v5.14",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.14 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.14 版本線的上線/修補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於 v5.14 上線版本相關；本專案通常不適用。"
     },
     {
       "name": "v5.15",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.15 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.15 版本線的上線/修補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於 v5.15 上線版本相關；本專案通常不適用。"
     },
     {
       "name": "v5.16",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.16 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.16 版本線的上線/修補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於 v5.16 上線版本相關；本專案通常不適用。"
     },
     {
       "name": "v5.17",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.17 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.17 版本線的上線/修補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於 v5.17 上線版本相關；本專案通常不適用。"
     },
     {
       "name": "v5.18",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.18 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.18 版本線的上線/修補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於 v5.18 上線版本相關；本專案通常不適用。"
     },
     {
       "name": "v5.19",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.19 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.19 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v5.19 版本問題；本專案通常不適用。"
     },
     {
       "name": "v5.20",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.20 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.20 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v5.20 版本問題；本專案通常不適用。"
     },
     {
       "name": "v5.21",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.21 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.21 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v5.21 版本問題；本專案通常不適用。"
     },
     {
       "name": "v5.22",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.22 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.22 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v5.22 版本問題；本專案通常不適用。"
     },
     {
       "name": "v5.23",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.23 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.23 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v5.23 版本問題；本專案通常不適用。"
     },
     {
       "name": "v5.24",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.24 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.24 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v5.24 版本問題；本專案通常不適用。"
     },
     {
       "name": "v5.25",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.25 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.25 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v5.25 版本問題；本專案通常不適用。"
     },
     {
       "name": "v5.26",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.26 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.26 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v5.26 版本問題；本專案通常不適用。"
     },
     {
       "name": "v5.27",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.27 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.27 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v5.27 版本問題；本專案通常不適用。"
     },
     {
       "name": "v5.28",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.28 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.28 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v5.28 版本問題；本專案通常不適用。"
     },
     {
       "name": "v5.29",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.29 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.29 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v5.29 版本問題；本專案通常不適用。"
     },
     {
       "name": "v5.30",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.30 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.30 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v5.30 版本問題；本專案通常不適用。"
     },
     {
       "name": "v5.31",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.31 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.31 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v5.31 版本問題；本專案通常不適用。"
     },
     {
       "name": "v5.32",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.32 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.32 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v5.32 版本問題；本專案通常不適用。"
     },
     {
       "name": "v5.33",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.33 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.33 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v5.33 版本問題；本專案通常不適用。"
     },
     {
       "name": "v5.34",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.34 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.34 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v5.34 版本問題；本專案通常不適用。"
     },
     {
       "name": "v5.35",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.35 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.35 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v5.35 版本問題；本專案通常不適用。"
     },
     {
       "name": "v5.36",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.36 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.36 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v5.36 版本問題；本專案通常不適用。"
     },
     {
       "name": "v5.37",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.37 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.37 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v5.37 版本問題；本專案通常不適用。"
     },
     {
       "name": "v5.38",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.38 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.38 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v5.38 版本問題；本專案通常不適用。"
     },
     {
       "name": "v5.39",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.39 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.39 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v5.39 版本問題；本專案通常不適用。"
     },
     {
       "name": "v5.40",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.40 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.40 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v5.40 版本問題；本專案通常不適用。"
     },
     {
       "name": "v5.41",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.41 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.41 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v5.41 版本問題；本專案通常不適用。"
     },
     {
       "name": "v5.42",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.42 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.42 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v5.42 版本問題；本專案通常不適用。"
     },
     {
       "name": "v5.43",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.43 無直接關聯。"
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
       },
-      "scenario": "當 MR 是針對 v5.43 版本線的修補/回補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於修正 v5.43 版本問題；本專案通常不適用。"
+    },
+    {
+      "name": "v5.44",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
+      },
+      "scenario": "用於修正 v5.44 版本問題；本專案通常不適用。"
+    },
+    {
+      "name": "v5.45",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
+      },
+      "scenario": "用於修正 v5.45 版本問題；本專案通常不適用。"
+    },
+    {
+      "name": "v5.46",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
+      },
+      "scenario": "用於修正 v5.46 版本問題；本專案通常不適用。"
+    },
+    {
+      "name": "v5.47",
+      "applicable": {
+        "ok": false,
+        "reason": "同上，本 repo 無 v5.x 產品版本線標籤使用脈絡。"
+      },
+      "scenario": "用於修正 v5.47 版本問題；本專案通常不適用。"
     },
     {
       "name": "v5.9",
       "applicable": {
         "ok": false,
-        "reason": "此 repo 非產品 v5 版本線交付，與 v5.9 無直接關聯。"
+        "reason": "同 v5.x 系列版本標籤，本 repo 未採用該產品版本線標籤管理。"
       },
-      "scenario": "當 MR 是針對 v5.9 版本線的上線/修補時使用；本專案通常不需要此標籤。"
+      "scenario": "用於 v5.9 上線版本相關；本專案通常不適用。"
     },
     {
       "name": "Vendor Customization",
       "applicable": {
         "ok": false,
-        "reason": "Vendor Customization 屬產品端 vendor 變數調整；此 repo 為工具腳本，近期 MR 未涉及。"
+        "reason": "本 repo 未呈現 vendor 變數/資產客製結構，且近期 MR 皆為通用工作流工具。"
       },
-      "scenario": "當 MR 主要新增/調整 vendor 變數、業主客製化配置並影響產品行為時使用；本專案通常不需要此標籤。"
+      "scenario": "用於新增/調整 vendor 變數或特定業主資產影響；本專案通常不適用。"
     },
     {
       "name": "VIP Optimization",
       "applicable": {
         "ok": false,
-        "reason": "VIP Optimization 為特定產品需求/單號導向的業務標籤；此 repo 為工具與規範，近期 MR 未涉及。"
+        "reason": "VIP 優化屬產品功能議題，本 repo 為工具腳本，無對應模組與近期變更。"
       },
-      "scenario": "當 MR 直接對 VIP 模組做效能/體驗/規則優化並對應該需求單時使用；本專案通常不需要此標籤。"
+      "scenario": "用於 VIP 相關優化改動；本專案通常不適用。"
     },
     {
       "name": "Wire Transfer",
       "applicable": {
         "ok": false,
-        "reason": "Wire Transfer 為產品支付/出入款領域；此 repo 為 DX/AI 工具，近期 MR 未涉及。"
+        "reason": "電匯屬產品支付功能，本 repo 為工具腳本，無相關內容。"
       },
-      "scenario": "當 MR 直接影響電匯相關流程、表單、驗證或後台設定時使用；本專案通常不需要此標籤。"
+      "scenario": "用於電匯相關功能改動；本專案通常不適用。"
     }
   ],
   "coding-standard": [
     {
-      "rule": "Commit/MR 標題採用 Conventional Commits，並在 scope 或描述中帶 Jira/任務號（例如 FE-8007）。",
-      "example": "feat(FE-8017): add workflow api type for operator agent llm proxy"
+      "rule": "Cursor/Pantheon 腳本與規則檔集中於 .cursor/ 下，新增能力優先以「commands/rules/scripts/skills」分類放置，避免散落在根目錄。",
+      "example": "新增一個 MR 自動化能力時：指令文件放 .cursor/commands/，規則放 .cursor/rules/，可執行腳本放 .cursor/scripts/，流程技能說明放 .cursor/skills/。"
     },
     {
-      "rule": "工具腳本與規則變更集中在 .cursor/ 下，並以 commands / rules / scripts 分層維護，避免把執行邏輯塞進文件。",
-      "example": "將指令說明放在 .cursor/commands/utilities/adapt.md，實作放在 .cursor/scripts/utilities/adapt.mjs"
+      "rule": "Node.js 腳本（.mjs）以「小模組、可重用」為原則，將共用能力抽到 utilities（例如 env-loader、llm-client、repo-knowledge），避免在 create-mr/update-mr 內堆疊巨量邏輯。",
+      "example": "把呼叫 LLM 的邏輯抽成 .cursor/scripts/utilities/llm-client.mjs，create-mr.mjs 只負責組裝 prompt 與處理回傳。"
     },
     {
-      "rule": "涉及環境變數時需同步更新範例檔，避免使用者無法配置或誤用。",
-      "example": "新增/調整 env 後同步更新 .cursor/.env.example"
+      "rule": "涉及外部 URL/Token/環境變數的功能需避免把使用者可控輸入直接帶入請求，並提供 allowlist/驗證以降低 SSRF 與資訊外洩風險。",
+      "example": "對 adapt.mjs 內的 URL 參數先檢查是否符合允許的 host 清單（如 gitlab.service-hub.tech / innotech.atlassian.net），不符合就拒絕並回傳一般化錯誤訊息。"
     },
     {
-      "rule": "避免在錯誤訊息或日誌輸出敏感資訊（token、stack trace、內部 URL），並針對外部輸入做白名單/驗證以降低 SSRF 風險。",
-      "example": "對可配置的 endpoint 僅允許預先定義的 host 清單，錯誤回傳改為一般化訊息並將詳細資訊寫入內部 debug log"
+      "rule": "環境變數與範例設定集中維護在 .cursor/.env.example，新增 env key 時需同步更新範例檔與讀取邏輯（env-loader）。",
+      "example": "新增 PANTHEON_AGENT_SIGNATURE 時：更新 .cursor/.env.example 並在 .cursor/scripts/utilities/env-loader.mjs 加入讀取與預設值處理。"
+    },
+    {
+      "rule": "MR/Commit 訊息遵循 Conventional Commits 並帶入工單號（常見 FE-xxxx 或 AI-xxx），方便追蹤與自動化解析。",
+      "example": "feat(FE-8065): [AI] Jira 開單能力（Create Request）導入與流程整合"
     }
   ],
   "meta": {
     "schemaVersion": 1,
     "generatedAt": "2026-02-12T12:46:01.986Z",
-    "updatedAt": "2026-03-21T12:44:20.605Z",
+    "updatedAt": "2026-04-14T07:04:42.189Z",
     "repo": {
       "host": "https://gitlab.service-hub.tech",
       "fullPath": "frontend/pantheon"
@@ -574,60 +626,66 @@
   },
   "sources": {
     "gitlab": {
-      "labelsCount": 68,
-      "mrCount": 13,
-      "mrCreatedAfter": "2025-12-21T12:44:12.200Z",
+      "labelsCount": 74,
+      "mrCount": 15,
+      "mrCreatedAfter": "2026-01-14T07:04:32.290Z",
       "mrFilterField": "created_at"
     },
     "gitFlow": {
       "remoteHead": "main",
-      "remoteBranchCount": 29,
-      "mergePatternCount": 11
+      "remoteBranchCount": 30,
+      "mergePatternCount": 14
     }
   },
   "cache": {
-    "inputHash": "4a8904984608e03c75a45c21f0e30374c6dadeba4f209d933a37cfeec0086931",
+    "inputHash": "5ecaed1b87c6c61ef71e51c1452635dc2b5e8c1b50085b21e3cb268cdd668920",
     "llm": {
       "provider": "openai",
       "model": "gpt-5.2",
-      "analyzedAt": "2026-03-21T12:44:20.605Z"
+      "analyzedAt": "2026-04-14T07:04:42.189Z"
     },
     "note": "llm skipped"
   },
   "git-flow": {
-    "flowType": "Trunk-based（以 main 為主線）",
+    "flowType": "Trunk-based（以 main 為主）搭配短生命週期 feature/feat 分支",
     "defaultBranch": "main",
-    "summary": "以 main 作為唯一長期主線分支，日常開發從 feature/*（或少量 feat/*）切出並透過 MR 合併回 main。未觀察到長期 dev/release 分支，屬於偏 Trunk-based 的流程。",
+    "summary": "此專案以 main 作為唯一長期主線分支，日常開發從 feature/* 或 feat/* 分支開出，完成後以 MR 合併回 main。未觀察到長期 dev/release 分支，發版較可能以 tag（例如 release-1.0.x）或 version.json 管理。",
     "branches": [
       {
         "name": "main",
         "role": "主線/預設分支",
-        "description": "穩定整合分支，所有功能分支最終以 MR 合併回此分支。"
-      },
-      {
-        "name": "feature/*",
-        "role": "功能/任務分支",
-        "description": "以 Jira/任務號為核心的短生命週期分支（例如 feature/FE-8007），完成後合併回 main。"
-      },
-      {
-        "name": "feat/*",
-        "role": "功能分支（少量）",
-        "description": "少數分支使用 feat/ 前綴（例如 feat/AI-320），用途與 feature/* 類似，完成後合併回 main。"
+        "description": "所有功能最終合併回來的主分支（origin/HEAD 指向 main），維持可用狀態並作為發版基準。"
       },
       {
         "name": "prometheus",
-        "role": "實驗/工作分支",
-        "description": "存在但近期合併主流仍是 feature -> main；可視為歷史或實驗用途分支，非主要整合目標。"
+        "role": "長期工作分支（歷史/實驗性）",
+        "description": "曾出現在分支列表與合併紀錄（包含 tag merge），但近期主要合併目標仍是 main；可視為過往整合或實驗用分支，非預設目標。"
+      },
+      {
+        "name": "feature/*",
+        "role": "功能分支",
+        "description": "以 Jira/內部單號為核心的功能開發分支（例如 feature/FE-8007），完成後開 MR 合併回 main。"
+      },
+      {
+        "name": "feat/*",
+        "role": "功能分支（另一種命名）",
+        "description": "常用於 AI 相關或較輕量的功能分支（例如 feat/AI-320），同樣以 MR 合併回 main。"
+      },
+      {
+        "name": "backup/*",
+        "role": "備份分支",
+        "description": "用於保留特定時間點或 squash 前狀態（例如 backup/feature/FE-8007-before-squash-...），通常不作為 MR 目標。"
       }
     ],
-    "mergeFlow": "feature/*（或 feat/*）→ 透過 MR → main；未見固定的 release 分支串接或 dev→main 的雙主線合併方向。",
+    "mergeFlow": "一般流程為 feature/* 或 feat/* →（MR）→ main；少數情況可能先在 prometheus 整合/驗證後再回 main，但以近期紀錄看 main 為主要匯入點。",
     "branchNaming": {
-      "format": "feature/<TICKET> 或 feat/<TICKET>（TICKET 常見為 FE-數字 或 AI-數字）",
+      "format": "{type}/{TICKET}[-{short-description}]（type 常見 feature 或 feat；TICKET 常見 FE-\\d+ 或 AI-\\d+）",
       "examples": [
         "feature/FE-8007",
-        "feature/FE-8017",
-        "feature/FE-8064",
-        "feat/AI-320"
+        "feature/FE-8065-jira-create-request",
+        "feat/AI-320",
+        "feat/AI-320-2",
+        "backup/feature/FE-8007-before-squash-20260223010841"
       ]
     },
     "mrTargets": [
