@@ -1,11 +1,14 @@
 # 開發工具腳本（打包時不會使用）
 .cursor/scripts/
 
-# Cursor 命令檔案
-.cursor/commands/
+# Cursor 指令檔案
+.cursor/commands/operator/resolve-conflict.md
 
 # Cursor 規則檔案
 .cursor/rules/
+
+# Cursor 命令檔案
+.cursor/commands/
 
 # Cursor Skills 檔案
 .cursor/skills/
@@ -16,4 +19,3 @@
 
 # Repo knowledge（開發工具輸出）
 adapt.json
-
