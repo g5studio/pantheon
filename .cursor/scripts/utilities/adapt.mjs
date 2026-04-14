@@ -228,6 +228,43 @@ function validateCodingStandardSection(value) {
   return { ok: true };
 }
 
+function normalizeApplicable(value) {
+  if (typeof value === "boolean") {
+    return {
+      ok: value,
+      reason: value ? "（由 LLM 判定為適用）" : "（由 LLM 判定為不適用）",
+    };
+  }
+  if (isPlainObject(value) && typeof value.ok === "boolean") {
+    const reason = typeof value.reason === "string" ? value.reason.trim() : "";
+    if (reason) return { ok: value.ok, reason };
+  }
+  return null;
+}
+
+function normalizeLabelItem(item) {
+  if (!isPlainObject(item)) return { ok: false, error: "item 必須是 object" };
+  const name = typeof item.name === "string" ? item.name.trim() : "";
+  if (!name) return { ok: false, error: "name 必須是非空字串" };
+  const applicable = normalizeApplicable(item.applicable);
+  if (!applicable) {
+    return {
+      ok: false,
+      error: "applicable 必須是 boolean 或 { ok: boolean, reason: string }",
+    };
+  }
+  const scenario = typeof item.scenario === "string" ? item.scenario.trim() : "";
+  if (!scenario) return { ok: false, error: "scenario 必須是非空字串" };
+  return {
+    ok: true,
+    value: {
+      name,
+      applicable,
+      scenario,
+    },
+  };
+}
+
 function validateRepoKnowledgeObject(obj) {
   if (!isPlainObject(obj)) return { ok: false, error: "根節點必須是 object" };
   if (!("labels" in obj)) return { ok: false, error: "缺少 labels" };
@@ -583,6 +620,117 @@ function getAdaptResponseJsonSchema() {
   };
 }
 
+function getAdaptLabelRepairSystemPrompt() {
+  return [
+    "You are repairing invalid cases in a repository knowledge JSON generation flow.",
+    "Return ONLY valid JSON (no markdown, no comments).",
+    "Task: Fix ONLY input.invalidCases and return normalized label objects.",
+    "",
+    "Output schema:",
+    '{ "labels": [{ "name": string, "applicable": { "ok": boolean, "reason": string }, "scenario": string }] }',
+    "",
+    "Requirements:",
+    "- Keep `name` exactly the same as each invalid case.",
+    "- `applicable.reason` must clearly explain suitability for this repo in Traditional Chinese.",
+    "- `scenario` must be a reusable common scenario in Traditional Chinese.",
+    "- If confidence is low, still provide a conservative but valid result.",
+  ].join("\n");
+}
+
+function getAdaptLabelRepairJsonSchema() {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["labels"],
+    properties: {
+      labels: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["name", "applicable", "scenario"],
+          properties: {
+            name: { type: "string", minLength: 1 },
+            applicable: {
+              type: "object",
+              additionalProperties: false,
+              required: ["ok", "reason"],
+              properties: {
+                ok: { type: "boolean" },
+                reason: { type: "string", minLength: 1 },
+              },
+            },
+            scenario: { type: "string", minLength: 1 },
+          },
+        },
+      },
+    },
+  };
+}
+
+function getAdaptCodingStandardRepairSystemPrompt() {
+  return [
+    "You are repairing the `coding-standard` section for repository knowledge JSON.",
+    "Return ONLY valid JSON (no markdown, no comments).",
+    "",
+    "Output schema:",
+    '{ "coding-standard": [{ "rule": string, "example": string }] }',
+    "",
+    "Requirements:",
+    "- Provide 3-8 practical, reusable coding standards.",
+    "- Write in Traditional Chinese.",
+    "- Keep examples short and concrete.",
+  ].join("\n");
+}
+
+function getAdaptCodingStandardRepairJsonSchema() {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["coding-standard"],
+    properties: {
+      "coding-standard": {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["rule", "example"],
+          properties: {
+            rule: { type: "string", minLength: 1 },
+            example: { type: "string", minLength: 1 },
+          },
+        },
+      },
+    },
+  };
+}
+
+function getAdaptGitFlowRepairSystemPrompt() {
+  return [
+    "You are repairing the `git-flow` section for repository knowledge JSON.",
+    "Return ONLY valid JSON (no markdown, no comments).",
+    "",
+    "Output schema:",
+    '{ "git-flow": { "flowType": string, "defaultBranch": string, "summary": string, "branches": [{ "name": string, "role": string, "description": string }], "mergeFlow": string, "branchNaming": { "format": string, "examples": [string] }, "mrTargets": [string] } }',
+    "",
+    "Requirements:",
+    "- Infer from input.gitFlowData.",
+    "- All fields in Traditional Chinese except branch names/patterns.",
+    "- Prefer conservative inference when uncertain, but keep schema valid.",
+  ].join("\n");
+}
+
+function getAdaptGitFlowRepairJsonSchema() {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["git-flow"],
+    properties: {
+      "git-flow": getAdaptResponseJsonSchema().properties["git-flow"],
+    },
+  };
+}
+
 /**
  * Collect git-flow related data from local repo (no GitLab API needed).
  * Used as input for LLM to infer and output git-flow section.
@@ -769,6 +917,28 @@ function buildFallbackApplicable({ name, usageCount }) {
   };
 }
 
+async function attemptLlmJsonCall({ callArgs, sectionName, warnings, maxAttempts = 3 }) {
+  const totalAttempts = Number.isFinite(maxAttempts)
+    ? Math.max(1, Math.floor(maxAttempts))
+    : 3;
+  const attemptErrors = [];
+
+  for (let i = 1; i <= totalAttempts; i++) {
+    try {
+      if (i > 1) {
+        console.log(`🔁 LLM 重試 ${sectionName}（第 ${i}/${totalAttempts} 次）`);
+      }
+      return await callOpenAiJson(callArgs);
+    } catch (e) {
+      const msg = e?.message ? String(e.message) : String(e);
+      attemptErrors.push(`attempt ${i}: ${msg}`);
+    }
+  }
+
+  warnings.push(`${sectionName}: ${attemptErrors.join(" | ")}`);
+  return null;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
@@ -780,6 +950,10 @@ async function main() {
 
   const maxMrs = Number(args["max-mrs"] || 50);
   const createdAfterIso = String(args["created-after"] || isoDateMinus3Months());
+  const llmRetryAttemptsRaw = Number(args["llm-retries"] ?? args["llm-repair-retries"] ?? 3);
+  const llmRetryAttempts = Number.isFinite(llmRetryAttemptsRaw)
+    ? Math.max(1, Math.floor(llmRetryAttemptsRaw))
+    : 3;
 
   const projectInfo = getProjectInfo();
   const hostname = String(args["gitlab-host"] || projectInfo.host);
@@ -792,6 +966,7 @@ async function main() {
   console.log(`📄 output: ${filePath}`);
   console.log(`🗓️  MR 篩選（created_at >= ${createdAfterIso}）`);
   console.log(`🔢 max MRs: ${maxMrs}`);
+  console.log(`🔁 LLM 重試次數: ${llmRetryAttempts}`);
   console.log(`🔌 GitLab data source: ${useGlab ? "glab" : "token"}`);
 
   const gitFlowData = collectGitFlowData();
@@ -1012,28 +1187,145 @@ async function main() {
   }
   console.log(`🤖 LLM: provider=${provider} model=${model}`);
 
-  const llmOutput = await callOpenAiJson({
-    apiKey: provider === "openai" ? openaiKey : null,
-    compassApiToken,
-    compassOperatorProxyUrl,
-    model,
-    system: getAdaptSystemPrompt(),
-    input: inputPayload,
-    schema: getAdaptResponseJsonSchema(),
-    schemaName: "adapt_repo_knowledge",
+  const llmWarnings = [];
+  const llmFailureReason = "分析當下無法正確取得llm答覆，已改用保守推測。";
+
+  const llmOutput = await attemptLlmJsonCall({
+    callArgs: {
+      apiKey: provider === "openai" ? openaiKey : null,
+      compassApiToken,
+      compassOperatorProxyUrl,
+      model,
+      system: getAdaptSystemPrompt(),
+      input: inputPayload,
+      schema: getAdaptResponseJsonSchema(),
+      schemaName: "adapt_repo_knowledge",
+    },
+    sectionName: "primary-output",
+    warnings: llmWarnings,
+    maxAttempts: llmRetryAttempts,
   });
 
-  const rawOutLabels = llmOutput?.labels;
-  const outCs = llmOutput?.["coding-standard"];
-  const outGitFlow = llmOutput?.["git-flow"];
+  let rawOutLabels = llmOutput?.labels;
+  let outCs = llmOutput?.["coding-standard"];
+  let outGitFlow = llmOutput?.["git-flow"];
 
-  const a = validateLabelsSection(rawOutLabels);
-  if (!a.ok) throw new Error(`LLM output schema 錯誤：${a.error}`);
-  const b = validateCodingStandardSection(outCs);
-  if (!b.ok) throw new Error(`LLM output schema 錯誤：${b.error}`);
-  if (outGitFlow != null) {
-    const c = validateGitFlowSection(outGitFlow);
-    if (!c.ok) throw new Error(`LLM output schema 錯誤：${c.error}`);
+  if (!Array.isArray(rawOutLabels)) rawOutLabels = [];
+
+  const primaryLabelMap = new Map();
+  for (const item of rawOutLabels) {
+    const n = typeof item?.name === "string" ? item.name.trim() : "";
+    if (!n || primaryLabelMap.has(n)) continue;
+    primaryLabelMap.set(n, item);
+  }
+
+  const invalidLabelCases = labels
+    .filter((l) => l && typeof l === "object" && typeof l.name === "string")
+    .map((l) => {
+      const name = String(l.name);
+      const candidate = primaryLabelMap.get(name);
+      if (!candidate) {
+        return {
+          name,
+          description: l.description || "",
+          usageCount: labelUsageCount.get(name) || 0,
+          error: "缺少該 label 的輸出",
+          current: null,
+        };
+      }
+      const norm = normalizeLabelItem(candidate);
+      if (!norm.ok) {
+        return {
+          name,
+          description: l.description || "",
+          usageCount: labelUsageCount.get(name) || 0,
+          error: norm.error,
+          current: candidate,
+        };
+      }
+      return null;
+    })
+    .filter(Boolean);
+
+  const repairedLabelMap = new Map();
+  if (invalidLabelCases.length > 0) {
+    const repairResp = await attemptLlmJsonCall({
+      callArgs: {
+        apiKey: provider === "openai" ? openaiKey : null,
+        compassApiToken,
+        compassOperatorProxyUrl,
+        model,
+        system: getAdaptLabelRepairSystemPrompt(),
+        input: {
+          repo: { host: hostname, fullPath: projectInfo.fullPath },
+          invalidCases: invalidLabelCases,
+          repoStructure,
+          gitFlowData,
+        },
+        schema: getAdaptLabelRepairJsonSchema(),
+        schemaName: "adapt_repo_knowledge_label_repair",
+      },
+      sectionName: "label-repair",
+      warnings: llmWarnings,
+      maxAttempts: llmRetryAttempts,
+    });
+
+    const repairedLabels = Array.isArray(repairResp?.labels) ? repairResp.labels : [];
+    for (const item of repairedLabels) {
+      const n = typeof item?.name === "string" ? item.name.trim() : "";
+      if (!n || repairedLabelMap.has(n)) continue;
+      const norm = normalizeLabelItem(item);
+      if (norm.ok) repairedLabelMap.set(n, norm.value);
+    }
+  }
+
+  const codingStandardCheck = validateCodingStandardSection(outCs);
+  if (!codingStandardCheck.ok) {
+    const repairResp = await attemptLlmJsonCall({
+      callArgs: {
+        apiKey: provider === "openai" ? openaiKey : null,
+        compassApiToken,
+        compassOperatorProxyUrl,
+        model,
+        system: getAdaptCodingStandardRepairSystemPrompt(),
+        input: {
+          repo: { host: hostname, fullPath: projectInfo.fullPath },
+          gitFlowData,
+          mrs: mrSamples.slice(0, 20),
+          labels: labels.map((l) => ({ name: l.name, description: l.description || "" })),
+        },
+        schema: getAdaptCodingStandardRepairJsonSchema(),
+        schemaName: "adapt_repo_knowledge_cs_repair",
+      },
+      sectionName: "coding-standard-repair",
+      warnings: llmWarnings,
+      maxAttempts: llmRetryAttempts,
+    });
+    outCs = repairResp?.["coding-standard"];
+  }
+
+  const gitFlowCheck = validateGitFlowSection(outGitFlow);
+  if (!gitFlowCheck.ok) {
+    const repairResp = await attemptLlmJsonCall({
+      callArgs: {
+        apiKey: provider === "openai" ? openaiKey : null,
+        compassApiToken,
+        compassOperatorProxyUrl,
+        model,
+        system: getAdaptGitFlowRepairSystemPrompt(),
+        input: {
+          repo: { host: hostname, fullPath: projectInfo.fullPath },
+          gitFlowData,
+          recentMrs: mrSamples.slice(0, 15).map((x) => x.changes),
+        },
+        schema: getAdaptGitFlowRepairJsonSchema(),
+        schemaName: "adapt_repo_knowledge_gitflow_repair",
+      },
+      sectionName: "git-flow-repair",
+      warnings: llmWarnings,
+      maxAttempts: llmRetryAttempts,
+    });
+    outGitFlow = repairResp?.["git-flow"];
   }
 
   // Normalize labels output:
@@ -1041,24 +1333,11 @@ async function main() {
   // - If missing, fill with conservative fallback
   const outMap = new Map();
   for (const item of rawOutLabels) {
-    const n = typeof item?.name === "string" ? item.name.trim() : "";
-    const s = typeof item?.scenario === "string" ? item.scenario.trim() : "";
-    const aRaw = item?.applicable;
-    const applicable =
-      typeof aRaw === "boolean"
-        ? { ok: aRaw, reason: aRaw ? "（由 LLM 判定為適用）" : "（由 LLM 判定為不適用）" }
-        : isPlainObject(aRaw) &&
-            typeof aRaw.ok === "boolean" &&
-            typeof aRaw.reason === "string"
-          ? { ok: aRaw.ok, reason: aRaw.reason.trim() }
-          : undefined;
-    if (!n) continue;
+    const norm = normalizeLabelItem(item);
+    if (!norm.ok) continue;
+    const n = norm.value.name;
     if (outMap.has(n)) continue;
-    outMap.set(n, {
-      name: n,
-      applicable,
-      scenario: s || "（缺少 scenario，請補充）",
-    });
+    outMap.set(n, norm.value);
   }
 
   const normalizedLabels = labels
@@ -1067,25 +1346,30 @@ async function main() {
       const name = String(l.name);
       const found = outMap.get(name);
       const usageCount = labelUsageCount.get(name) || 0;
-      if (found && typeof found.scenario === "string" && found.scenario.trim()) {
+      const repaired = repairedLabelMap.get(name);
+      const preferred = repaired || found;
+      if (preferred && typeof preferred.scenario === "string" && preferred.scenario.trim()) {
         return {
           name,
           applicable:
-            found.applicable && typeof found.applicable.ok === "boolean"
-              ? found.applicable
+            preferred.applicable && typeof preferred.applicable.ok === "boolean"
+              ? preferred.applicable
               : buildFallbackApplicable({ name, usageCount }),
-          scenario: found.scenario.trim(),
+          scenario: preferred.scenario.trim(),
         };
       }
       return {
         name,
-        applicable: buildFallbackApplicable({ name, usageCount }),
-        scenario: buildFallbackScenario({
+        applicable: {
+          ...buildFallbackApplicable({ name, usageCount }),
+          reason: llmFailureReason,
+        },
+        scenario: `（${llmFailureReason}）${buildFallbackScenario({
           name,
           description: l.description || "",
           usageCount,
           repoStructure,
-        }),
+        })}`,
       };
     });
 
@@ -1096,18 +1380,39 @@ async function main() {
     if (aOk !== bOk) return bOk - aOk;
     return String(a.name || "").localeCompare(String(b.name || ""));
   });
-  base["coding-standard"] = outCs;
+  if (validateCodingStandardSection(outCs).ok) {
+    base["coding-standard"] = outCs;
+  } else {
+    const existingCs = validateCodingStandardSection(base["coding-standard"]).ok
+      ? base["coding-standard"]
+      : [];
+    base["coding-standard"] = existingCs.length
+      ? existingCs
+      : [
+          {
+            rule: "分析備註：本次 coding-standard 無法正確取得 llm 回覆",
+            example: "請於下一次執行 adapt 時重試，或人工補齊 coding-standard 內容",
+          },
+        ];
+  }
 
   if (outGitFlow != null && validateGitFlowSection(outGitFlow).ok) {
     base["git-flow"] = outGitFlow;
   } else {
     // Fallback: infer from local data when LLM didn't return valid git-flow
     const inferred = inferGitFlowFromData(gitFlowData);
-    if (inferred) base["git-flow"] = inferred;
+    if (inferred) {
+      inferred.summary = `${inferred.summary}（${llmFailureReason}）`;
+      base["git-flow"] = inferred;
+    }
   }
 
   base.cache.inputHash = inputHash;
   base.cache.llm = { provider, model, analyzedAt: nowIso };
+  if (llmWarnings.length > 0) {
+    base.cache.llm.warnings = llmWarnings.slice(0, 20);
+    console.log(`⚠️  LLM 部分輸出異常，已採局部重試/保守降級（${llmWarnings.length} 項）`);
+  }
 
   writeKnowledge(filePath, base);
   console.log(`✅ 已更新：${filePath}\n`);
