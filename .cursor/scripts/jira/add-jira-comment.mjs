@@ -6,6 +6,7 @@
  */
 
 import { getJiraConfig } from "../utilities/env-loader.mjs";
+import { appendAgentSignature } from "../utilities/agent-signature.mjs";
 
 // 從 Jira URL 解析 ticket ID
 function parseJiraUrl(url) {
@@ -209,7 +210,7 @@ async function addJiraComment(ticketOrUrl, comment, options = {}) {
 
   // 準備請求體
   const requestBody = {
-    body: textToADF(comment),
+    body: textToADF(appendAgentSignature(comment)),
   };
 
   // 如果指定為內部評論（Jira Service Management）

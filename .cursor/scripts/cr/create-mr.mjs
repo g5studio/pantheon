@@ -13,20 +13,21 @@ import {
   getProjectRoot,
   loadEnvLocal,
   getJiraConfig,
-  guideJiraConfig,
   getGitLabToken,
   getJiraEmail,
   getCompassApiToken,
-  getMRReviewer,
 } from "../utilities/env-loader.mjs";
 import {
   determineLabels,
+  readStartTaskInfo,
   getJiraFixVersion,
-  extractVersionLabel,
   isHotfixVersion,
   extractReleaseBranch,
-  readStartTaskInfo,
 } from "./label-analyzer.mjs";
+import {
+  appendAgentSignature,
+  stripTrailingAgentSignature,
+} from "../utilities/agent-signature.mjs";
 
 // 使用 env-loader 提供的 projectRoot
 const projectRoot = getProjectRoot();
@@ -120,13 +121,13 @@ function getTokenFromUser() {
 
     console.log("\n📝 請輸入你的 GitLab Personal Access Token");
     console.log(
-      "   獲取 token: https://gitlab.service-hub.tech/-/user_settings/personal_access_tokens"
+      "   獲取 token: https://gitlab.service-hub.tech/-/user_settings/personal_access_tokens",
     );
     console.log("   需要的權限: api, write_repository\n");
 
     console.log("💡 如何獲取 Token：");
     console.log(
-      "   1. 前往: https://gitlab.service-hub.tech/-/user_settings/personal_access_tokens"
+      "   1. 前往: https://gitlab.service-hub.tech/-/user_settings/personal_access_tokens",
     );
     console.log('   2. 點擊 "Add new token"');
     console.log('   3. 填寫 Token name（例如: "glab-cli"）');
@@ -153,7 +154,7 @@ function getTokenFromUser() {
 async function findExistingMR(token, host, projectPath, sourceBranch) {
   try {
     const url = `${host}/api/v4/projects/${projectPath}/merge_requests?source_branch=${encodeURIComponent(
-      sourceBranch
+      sourceBranch,
     )}&state=opened`;
     const response = await fetch(url, {
       headers: {
@@ -177,7 +178,7 @@ function findExistingMRWithGlab(sourceBranch) {
   try {
     const result = exec(
       "glab mr list --source-branch " + sourceBranch + " --state opened",
-      { silent: true }
+      { silent: true },
     );
     const match = result.match(/!(\d+)/);
     if (match) {
@@ -230,7 +231,7 @@ function updateMRWithGlab(
   draft,
   reviewer,
   labels = [],
-  shouldUpdateReviewer = true
+  shouldUpdateReviewer = true,
 ) {
   const args = ["mr", "update", mrId];
 
@@ -291,7 +292,7 @@ function createMRWithGlab(
   draft,
   reviewer,
   assignee,
-  labels = []
+  labels = [],
 ) {
   const args = [
     "mr",
@@ -425,7 +426,7 @@ function pushToRemote(branch, forceWithLease = false) {
     console.log(
       `🚀 正在推送 commits 到 origin/${branch}${
         forceWithLease ? "（force-with-lease）" : ""
-      }...`
+      }...`,
     );
     exec(`git push origin ${branch}${forceFlag}`, { silent: false });
     return { success: true, error: null };
@@ -491,10 +492,10 @@ function isRebaseInProgress() {
   try {
     const gitDir = exec("git rev-parse --git-dir", { silent: true }).trim();
     const rebaseMergeExists = existsSync(
-      join(projectRoot, gitDir, "rebase-merge")
+      join(projectRoot, gitDir, "rebase-merge"),
     );
     const rebaseApplyExists = existsSync(
-      join(projectRoot, gitDir, "rebase-apply")
+      join(projectRoot, gitDir, "rebase-apply"),
     );
     return rebaseMergeExists || rebaseApplyExists;
   } catch (error) {
@@ -615,7 +616,7 @@ async function checkJiraTicketExists(ticket) {
 
   try {
     const auth = Buffer.from(`${config.email}:${config.apiToken}`).toString(
-      "base64"
+      "base64",
     );
     const baseUrl = config.baseUrl.endsWith("/")
       ? config.baseUrl.slice(0, -1)
@@ -672,7 +673,7 @@ function formatJiraTicketsAsLinks(tickets) {
   if (!tickets || tickets.length === 0) return "";
 
   const links = tickets.map(
-    (ticket) => `[${ticket}](${generateJiraLink(ticket)})`
+    (ticket) => `[${ticket}](${generateJiraLink(ticket)})`,
   );
   return links.join(" , ");
 }
@@ -760,7 +761,7 @@ async function getJiraTicketTitle(ticket) {
   try {
     const config = getJiraConfig();
     const auth = Buffer.from(`${config.email}:${config.apiToken}`).toString(
-      "base64"
+      "base64",
     );
     const baseUrl = config.baseUrl.endsWith("/")
       ? config.baseUrl.slice(0, -1)
@@ -856,7 +857,7 @@ function checkAndGuideConfigForAIReview() {
 
   if (missingConfigs.length > 0) {
     console.error(
-      `\n❌ 缺少以下配置（AI review 需要）: ${missingConfigs.join(", ")}\n`
+      `\n❌ 缺少以下配置（AI review 需要）: ${missingConfigs.join(", ")}\n`,
     );
     console.error("📝 請按照以下步驟設置：\n");
 
@@ -891,17 +892,17 @@ async function getAIReviewEmail() {
   console.error("📝 請設置以下配置之一：\n");
   console.error("**方法 1: 設置 GitLab Token（推薦）**");
   console.error(
-    "   1. 前往: https://gitlab.service-hub.tech/-/user_settings/personal_access_tokens"
+    "   1. 前往: https://gitlab.service-hub.tech/-/user_settings/personal_access_tokens",
   );
   console.error(
-    '   2. 創建 token 並設置: git config --global gitlab.token "YOUR_TOKEN"'
+    '   2. 創建 token 並設置: git config --global gitlab.token "YOUR_TOKEN"',
   );
   console.error(
-    "   或執行: glab auth login --hostname gitlab.service-hub.tech\n"
+    "   或執行: glab auth login --hostname gitlab.service-hub.tech\n",
   );
   console.error("**方法 2: 設置 Jira Email**");
   console.error(
-    "   在 .env.local 文件中添加: JIRA_EMAIL=your-email@example.com\n"
+    "   在 .env.local 文件中添加: JIRA_EMAIL=your-email@example.com\n",
   );
   console.error("💡 設置完成後，請重新執行命令。\n");
 
@@ -912,7 +913,7 @@ async function getAIReviewEmail() {
 async function submitAIReview(mrUrl) {
   if (!checkAndGuideConfigForAIReview()) {
     throw new Error(
-      "配置不完整，請先設置必要的配置（Compass API token、GitLab token 或 Jira email）"
+      "配置不完整，請先設置必要的配置（Compass API token、GitLab token 或 Jira email）",
     );
   }
 
@@ -957,7 +958,7 @@ async function submitAIReview(mrUrl) {
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `AI review API 請求失敗: ${response.status} ${errorText}`
+        `AI review API 請求失敗: ${response.status} ${errorText}`,
       );
     }
 
@@ -979,7 +980,7 @@ async function listMrNotesWithToken(
   host,
   projectPath,
   mrIid,
-  perPage = 100
+  perPage = 100,
 ) {
   const url = `${host}/api/v4/projects/${projectPath}/merge_requests/${mrIid}/notes?per_page=${perPage}&sort=desc&order_by=updated_at`;
   const response = await fetch(url, { headers: { "PRIVATE-TOKEN": token } });
@@ -992,19 +993,19 @@ async function upsertAiReviewMarkerNoteWithToken(
   host,
   projectPath,
   mrIid,
-  headSha
+  headSha,
 ) {
   const notes = await listMrNotesWithToken(
     token,
     host,
     projectPath,
     mrIid,
-    100
+    100,
   );
-  const body = buildAiReviewMarkerBody(headSha);
+  const body = appendAgentSignature(buildAiReviewMarkerBody(headSha));
   const existing = notes.find(
     (n) =>
-      typeof n.body === "string" && n.body.includes(AI_REVIEW_MARKER_PREFIX)
+      typeof n.body === "string" && n.body.includes(AI_REVIEW_MARKER_PREFIX),
   );
 
   if (existing?.id) {
@@ -1055,20 +1056,20 @@ function glabApiRequest(method, path, fields = {}) {
 
 async function upsertAiReviewMarkerNoteWithGlab(projectPath, mrIid, headSha) {
   const notes = glabApiJson(
-    `projects/${projectPath}/merge_requests/${mrIid}/notes?per_page=100&sort=desc&order_by=updated_at`
+    `projects/${projectPath}/merge_requests/${mrIid}/notes?per_page=100&sort=desc&order_by=updated_at`,
   );
-  const body = buildAiReviewMarkerBody(headSha);
+  const body = appendAgentSignature(buildAiReviewMarkerBody(headSha));
   const list = Array.isArray(notes) ? notes : [];
   const existing = list.find(
     (n) =>
-      typeof n.body === "string" && n.body.includes(AI_REVIEW_MARKER_PREFIX)
+      typeof n.body === "string" && n.body.includes(AI_REVIEW_MARKER_PREFIX),
   );
 
   if (existing?.id) {
     glabApiRequest(
       "PUT",
       `projects/${projectPath}/merge_requests/${mrIid}/notes/${existing.id}`,
-      { body }
+      { body },
     );
     return;
   }
@@ -1078,7 +1079,7 @@ async function upsertAiReviewMarkerNoteWithGlab(projectPath, mrIid, headSha) {
     `projects/${projectPath}/merge_requests/${mrIid}/notes`,
     {
       body,
-    }
+    },
   );
 }
 
@@ -1093,7 +1094,7 @@ async function updateMR(
   draft,
   reviewerId,
   labels = [],
-  shouldUpdateReviewer = true
+  shouldUpdateReviewer = true,
 ) {
   const url = `${host}/api/v4/projects/${projectPath}/merge_requests/${mrIid}`;
 
@@ -1150,7 +1151,7 @@ async function createMR(
   draft,
   reviewerId,
   assigneeId,
-  labels = []
+  labels = [],
 ) {
   const url = `${host}/api/v4/projects/${projectPath}/merge_requests`;
 
@@ -1194,7 +1195,7 @@ async function createMR(
         if (existingMRMatch) {
           const existingMRId = existingMRMatch[1];
           throw new Error(
-            `已存在 MR !${existingMRId}。請更新現有 MR 或關閉後再建立新的 MR。\n現有 MR: ${host}/frontend/fluid-two/-/merge_requests/${existingMRId}`
+            `已存在 MR !${existingMRId}。請更新現有 MR 或關閉後再建立新的 MR。\n現有 MR: ${host}/frontend/fluid-two/-/merge_requests/${existingMRId}`,
           );
         }
       }
@@ -1218,7 +1219,7 @@ async function findUserId(token, host, username) {
         headers: {
           "PRIVATE-TOKEN": token,
         },
-      }
+      },
     );
 
     if (!response.ok) {
@@ -1249,7 +1250,7 @@ async function getProjectLabels(token, host, projectPath) {
 
     if (!response.ok) {
       console.error(
-        `⚠️  無法獲取專案 labels 清單: ${response.status} ${response.statusText}`
+        `⚠️  無法獲取專案 labels 清單: ${response.status} ${response.statusText}`,
       );
       return null;
     }
@@ -1266,10 +1267,9 @@ async function getProjectLabels(token, host, projectPath) {
 // 使用 glab 獲取專案的可用 label 清單（包含完整資訊）
 function getProjectLabelsWithGlab(projectPath) {
   try {
-    const result = exec(
-      `glab api "projects/${projectPath}/labels"`,
-      { silent: true }
-    );
+    const result = exec(`glab api "projects/${projectPath}/labels"`, {
+      silent: true,
+    });
     if (result && result.trim()) {
       const labels = JSON.parse(result);
       // 返回完整的 label 物件陣列
@@ -1281,23 +1281,142 @@ function getProjectLabelsWithGlab(projectPath) {
   }
 }
 
+function readAdaptKnowledge() {
+  const filePath = join(projectRoot, "adapt.json");
+  if (!existsSync(filePath)) return null;
+  try {
+    const text = readFileSync(filePath, "utf-8").replace(/^\uFEFF/, "");
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 根據 adapt.json git-flow + Jira ticket 推演 target branch
+ * 優先順序：用戶指定 -> adapt 推演 -> 預設 main
+ * @param {string} ticket - Jira ticket（可為 N/A）
+ * @returns {Promise<string|null>} 推演出的 target branch，無則 null
+ */
+async function inferTargetBranchFromAdaptAndJira(ticket) {
+  const adapt = readAdaptKnowledge();
+  const gitFlow = adapt?.["git-flow"];
+  if (!gitFlow || typeof gitFlow !== "object") return null;
+
+  let fixVersion = null;
+  if (ticket && ticket !== "N/A") {
+    try {
+      fixVersion = await getJiraFixVersion(ticket);
+    } catch {
+      // 略過 Jira 錯誤，繼續用 git-flow 推演
+    }
+  }
+
+  // Hotfix：fix version patch !== 0 → release/X.Y
+  if (fixVersion && isHotfixVersion(fixVersion)) {
+    const releaseBranch = extractReleaseBranch(fixVersion);
+    if (releaseBranch) return releaseBranch;
+  }
+
+  // 一般：使用 git-flow.defaultBranch 或 mrTargets 首項
+  const defaultBranch = typeof gitFlow.defaultBranch === "string" ? gitFlow.defaultBranch.trim() : null;
+  if (defaultBranch) return defaultBranch;
+
+  const mrTargets = Array.isArray(gitFlow.mrTargets) ? gitFlow.mrTargets : [];
+  const first = mrTargets.find((t) => typeof t === "string" && t.trim());
+  return first ? first.trim() : null;
+}
+
+function readAdaptKnowledgeOrExit() {
+  const filePath = join(projectRoot, "adapt.json");
+  if (!existsSync(filePath)) {
+    console.error("\n❌ 找不到 adapt.json，無法驗證 labels 可用性\n");
+    console.error(`📁 預期路徑：${filePath}`);
+    console.error(
+      "\n✅ 請先執行（擇一）：\n" +
+        "   - node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs\n" +
+        "   - node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs\n",
+    );
+    process.exit(1);
+  }
+
+  try {
+    const text = readFileSync(filePath, "utf-8").replace(/^\uFEFF/, "");
+    return JSON.parse(text);
+  } catch (e) {
+    console.error("\n❌ 讀取 adapt.json 失敗，無法驗證 labels 可用性\n");
+    console.error(`📁 路徑：${filePath}`);
+    console.error(`原因：${e.message}\n`);
+    process.exit(1);
+  }
+}
+
+function getAdaptAllowedLabelSet() {
+  const knowledge = readAdaptKnowledgeOrExit();
+  const list = Array.isArray(knowledge?.labels) ? knowledge.labels : [];
+  const allowed = new Set();
+  for (const item of list) {
+    const name = typeof item?.name === "string" ? item.name.trim() : "";
+    if (!name) continue;
+
+    // Backward-compatible:
+    // - applicable missing => allowed
+    // - applicable boolean
+    // - applicable: { ok: boolean }
+    const a = item.applicable;
+    const ok =
+      a === undefined ||
+      a === null ||
+      a === true ||
+      (typeof a === "object" && a !== null && a.ok === true);
+
+    if (ok) allowed.add(name);
+  }
+  return allowed;
+}
+
+function filterLabelsByAdaptAllowed(labelsToFilter, allowedSet, labelSource) {
+  const input = Array.isArray(labelsToFilter) ? labelsToFilter : [];
+  const valid = [];
+  const invalid = [];
+
+  for (const raw of input) {
+    const label = String(raw || "").trim();
+    if (!label) continue;
+    if (allowedSet.has(label)) valid.push(label);
+    else invalid.push(label);
+  }
+
+  if (invalid.length > 0) {
+    console.error(
+      `\n❌ 以下 ${labelSource} 的 labels 未在 adapt.json 標示為可用，已過濾：\n`,
+    );
+    invalid.forEach((l) => console.error(`   - ${l}`));
+    console.error(
+      "\n💡 若要使用上述 labels，請先更新 adapt.json 的 labels/applicable.ok（再重新執行 create-mr）\n",
+    );
+  }
+
+  return { valid, invalid };
+}
+
 // 驗證並過濾 labels
 function validateAndFilterLabels(
   labelsToValidate,
   availableLabels,
-  labelSource = "外部傳入"
+  labelSource = "外部傳入",
 ) {
   if (!availableLabels || availableLabels.length === 0) {
     // 如果無法獲取可用 labels，發出警告但不阻止
     console.log(
-      `⚠️  無法獲取專案可用 labels 清單，將跳過驗證（建議檢查網路連線或 API 權限）\n`
+      `⚠️  無法獲取專案可用 labels 清單，將跳過驗證（建議檢查網路連線或 API 權限）\n`,
     );
     return { valid: labelsToValidate, invalid: [] };
   }
 
   // 將 label 物件陣列轉換為名稱陣列，用於驗證
   const availableLabelNames = availableLabels.map((label) =>
-    typeof label === "string" ? label : label.name
+    typeof label === "string" ? label : label.name,
   );
 
   const valid = [];
@@ -1313,7 +1432,7 @@ function validateAndFilterLabels(
 
   if (invalid.length > 0) {
     console.error(
-      `\n❌ 以下 ${labelSource} 的 labels 在專案中不存在，已過濾：\n`
+      `\n❌ 以下 ${labelSource} 的 labels 在專案中不存在，已過濾：\n`,
     );
     invalid.forEach((label) => {
       console.error(`   - ${label}`);
@@ -1324,7 +1443,7 @@ function validateAndFilterLabels(
       (label) =>
         typeof label === "object" &&
         label.description &&
-        label.description.trim().length > 0
+        label.description.trim().length > 0,
     );
 
     console.error(`\n💡 專案可用 labels 清單（前 30 個）：`);
@@ -1342,36 +1461,32 @@ function validateAndFilterLabels(
     }
 
     if (labelsWithDescription.length > 0) {
+      console.error(`\n📋 【重要提醒】AI 在傳入 --labels 參數前，必須：\n`);
       console.error(
-        `\n📋 【重要提醒】AI 在傳入 --labels 參數前，必須：\n`
+        `   1. 先查看當前專案內所有 labels 的添加規則和描述（如上所示）\n`,
       );
       console.error(
-        `   1. 先查看當前專案內所有 labels 的添加規則和描述（如上所示）\n`
+        `   2. 依照專案的 label 規範描述判定要添加哪些額外 label\n`,
       );
       console.error(
-        `   2. 依照專案的 label 規範描述判定要添加哪些額外 label\n`
+        `   3. 僅使用專案中存在的 labels，不存在的 labels 將被自動過濾，不會添加到 MR\n`,
       );
       console.error(
-        `   3. 僅使用專案中存在的 labels，不存在的 labels 將被自動過濾，不會添加到 MR\n`
-      );
-      console.error(
-        `   4. 不可自行創建新 label，必須使用專案已定義的 labels\n`
+        `   4. 不可自行創建新 label，必須使用專案已定義的 labels\n`,
       );
     } else {
+      console.error(`\n📋 【重要提醒】AI 在傳入 --labels 參數前，必須：\n`);
       console.error(
-        `\n📋 【重要提醒】AI 在傳入 --labels 參數前，必須：\n`
+        `   1. 先查看當前專案內所有可用的 labels 清單（如上所示）\n`,
       );
       console.error(
-        `   1. 先查看當前專案內所有可用的 labels 清單（如上所示）\n`
+        `   2. 依照專案的 label 添加規則（若有）判定要添加哪些額外 label\n`,
       );
       console.error(
-        `   2. 依照專案的 label 添加規則（若有）判定要添加哪些額外 label\n`
+        `   3. 僅使用專案中存在的 labels，不存在的 labels 將被自動過濾，不會添加到 MR\n`,
       );
       console.error(
-        `   3. 僅使用專案中存在的 labels，不存在的 labels 將被自動過濾，不會添加到 MR\n`
-      );
-      console.error(
-        `   4. 不可自行創建新 label，必須使用專案已定義的 labels\n`
+        `   4. 不可自行創建新 label，必須使用專案已定義的 labels\n`,
       );
     }
   }
@@ -1535,7 +1650,7 @@ function appendSectionIfMissing(base, section) {
 
 function mergeExistingMrDescription(
   existingDescription,
-  sectionsToAppend = []
+  sectionsToAppend = [],
 ) {
   let merged =
     typeof existingDescription === "string" ? existingDescription : "";
@@ -1577,67 +1692,9 @@ function normalizeExternalMarkdownArg(input) {
   return content;
 }
 
-function hasMarkdownTable(content, expectedHeaderLine) {
-  if (!content) return false;
-  // normalizeExternalMarkdownArg 已將 CRLF 統一成 LF；這裡只做簡單判斷
-  const headerIdx = content.indexOf(expectedHeaderLine);
-  if (headerIdx === -1) return false;
-  const afterHeader = content.slice(headerIdx);
-  // 必須包含分隔線，且至少有一行資料列（簡單用 "\n|" 判斷）
-  return afterHeader.includes("\n|---|") && /(\n\|.+\|)/.test(afterHeader);
-}
-
-function validateMrDescriptionFormat(description, startTaskInfo) {
-  const desc = typeof description === "string" ? description : "";
-  const missing = [];
-
-  // 1) 關聯單資訊（必須）
-  if (
-    !desc.includes("## 📋 關聯單資訊") ||
-    !hasMarkdownTable(desc, "| 項目 | 值 |")
-  ) {
-    missing.push("## 📋 關聯單資訊（含表格）");
-  }
-
-  // 2) 變更摘要（必須）
-  if (!desc.includes("## 📝 變更摘要")) {
-    missing.push("## 📝 變更摘要");
-  }
-
-  // 3) 變更內容（必須：表格）
-  if (
-    !desc.includes("### 變更內容") ||
-    !hasMarkdownTable(desc, "| 檔案 | 狀態 | 說明 |")
-  ) {
-    missing.push("### 變更內容（含檔案表格：| 檔案 | 狀態 | 說明 |）");
-  }
-
-  // 4) 風險評估（必須：表格）
-  if (
-    !desc.includes("## ⚠️ 風險評估") ||
-    !hasMarkdownTable(desc, "| 檔案 | 風險等級 | 評估說明 |")
-  ) {
-    missing.push("## ⚠️ 風險評估（含表格：| 檔案 | 風險等級 | 評估說明 |）");
-  }
-
-  // 5) Bug 類型（若可辨識為 Bug，強制）
-  const issueType = startTaskInfo?.issueType;
-  const isBug =
-    typeof issueType === "string" && issueType.toLowerCase().includes("bug");
-  if (isBug) {
-    if (!desc.includes("## 影響範圍")) {
-      missing.push("## 影響範圍（Bug 類型必須）");
-    }
-    if (!desc.includes("## 根本原因")) {
-      missing.push("## 根本原因（Bug 類型必須）");
-    }
-  }
-
-  return { ok: missing.length === 0, missing, isBug };
-}
-
 async function main() {
   const args = process.argv.slice(2);
+  const updateIfExists = args.includes("--update-if-exists");
   const targetBranchArg = args.find((arg) => arg.startsWith("--target="));
   const userExplicitlySetTarget = !!targetBranchArg;
   let targetBranch = targetBranchArg?.split("=")[1] || "main";
@@ -1645,11 +1702,11 @@ async function main() {
 
   // 解析外部傳入的開發計劃
   const developmentPlanArg = args.find((arg) =>
-    arg.startsWith("--development-plan=")
+    arg.startsWith("--development-plan="),
   );
   const externalDevelopmentPlan = developmentPlanArg
     ? parseExternalDevelopmentPlan(
-        developmentPlanArg.split("=").slice(1).join("=")
+        developmentPlanArg.split("=").slice(1).join("="),
       )
     : null;
 
@@ -1667,7 +1724,7 @@ async function main() {
 
   // 解析外部傳入的 Agent 版本資訊
   const agentVersionArg = args.find((arg) =>
-    arg.startsWith("--agent-version=")
+    arg.startsWith("--agent-version="),
   );
   const agentVersionInfo = agentVersionArg
     ? parseAgentVersion(agentVersionArg.split("=").slice(1).join("="))
@@ -1676,11 +1733,11 @@ async function main() {
   // 解析外部傳入的開發報告（與開發計劃不同，開發報告是完成後的報告）
   // 開發報告包含：影響範圍、根本原因、改動前後邏輯差異（Bug）或預期效果、需求覆蓋率、潛在影響風險（Request）
   const developmentReportArg = args.find((arg) =>
-    arg.startsWith("--development-report=")
+    arg.startsWith("--development-report="),
   );
   const externalDevelopmentReportFromArg = developmentReportArg
     ? normalizeExternalMarkdownArg(
-        developmentReportArg.split("=").slice(1).join("=")
+        developmentReportArg.split("=").slice(1).join("="),
       )
     : null;
 
@@ -1702,6 +1759,16 @@ async function main() {
   }
 
   let currentBranch = getCurrentBranch();
+
+  // 目標分支優先順序：用戶指定 -> adapt 推演 -> 預設 main
+  if (!userExplicitlySetTarget) {
+    const ticketForInference = currentBranch.match(/[A-Z0-9]+-\d+/)?.[0] || "N/A";
+    const inferredTarget = await inferTargetBranchFromAdaptAndJira(ticketForInference);
+    if (inferredTarget) {
+      targetBranch = inferredTarget;
+      console.log(`🌿 依 adapt.json git-flow + Jira 推演 target branch: ${targetBranch}\n`);
+    }
+  }
 
   // 獲取專案資訊（在函數開始時宣告，供後續使用）
   const projectInfo = getProjectInfo();
@@ -1919,7 +1986,7 @@ async function main() {
       console.log(`✅ 已使用 Jira ticket title: ${mrTitle}\n`);
     } else {
       console.log(
-        `⚠️  無法獲取 Jira ticket ${ticket} 的 title，將使用 commit message 作為 MR title\n`
+        `⚠️  無法獲取 Jira ticket ${ticket} 的 title，將使用 commit message 作為 MR title\n`,
       );
     }
   }
@@ -1969,7 +2036,7 @@ async function main() {
     } else {
       // 結構化計劃，走格式化流程
       const planSection = generateDevelopmentPlanSection(
-        externalDevelopmentPlan
+        externalDevelopmentPlan,
       );
       if (planSection) {
         console.log("📋 檢測到開發計劃，將添加到 MR description\n");
@@ -2017,6 +2084,11 @@ async function main() {
     }
   }
 
+  // FE-8004: 確保「署名永遠最後一行」
+  // - 報告/計劃內容可能已經自帶署名
+  // - 若後續再追加 Agent Version/其他區塊，署名可能被推到中間造成重複
+  description = stripTrailingAgentSignature(description);
+
   // 添加 Agent 版本資訊到 description 最下方
   if (agentVersionInfo) {
     const versionSection = generateAgentVersionSection(agentVersionInfo);
@@ -2029,12 +2101,17 @@ async function main() {
     }
   }
 
+  // FE-8004: 署名必須為 MR description 的最後一行（可見內容）
+  description = appendAgentSignature(description);
+
   // 根據 Jira ticket 決定 labels（不再自動分析 v3/v4，由外部傳入）
   console.log("🔍 分析 Jira ticket 信息...\n");
   let labels = [];
+  const adaptAllowedLabelSet = getAdaptAllowedLabelSet();
 
   const labelResult = await determineLabels(ticket, {
     startTaskInfo,
+    targetBranch,
   });
   labels = labelResult.labels;
 
@@ -2042,8 +2119,18 @@ async function main() {
     const originalTargetBranch = targetBranch;
     targetBranch = labelResult.releaseBranch;
     console.log(
-      `   → 檢測到 Hotfix，自動設置 target branch: ${originalTargetBranch} → ${targetBranch}\n`
+      `   → 檢測到 Hotfix，自動設置 target branch: ${originalTargetBranch} → ${targetBranch}\n`,
     );
+  }
+
+  // 🚨 CRITICAL: 任何準備帶入 GitLab API 的 labels，必須先通過 adapt.json 可用性白名單
+  if (labels.length > 0) {
+    const adaptCheck = filterLabelsByAdaptAllowed(
+      labels,
+      adaptAllowedLabelSet,
+      "自動產生",
+    );
+    labels = adaptCheck.valid;
   }
 
   if (labels.length > 0) {
@@ -2052,7 +2139,7 @@ async function main() {
 
   // 獲取專案可用 labels 清單並驗證外部傳入的 labels
   let availableLabelsData = null;
-  
+
   // 優先使用 glab，否則使用 API token
   if (hasGlab() && isGlabAuthenticated("gitlab.service-hub.tech")) {
     availableLabelsData = getProjectLabelsWithGlab(projectInfo.projectPath);
@@ -2064,7 +2151,7 @@ async function main() {
       availableLabelsData = await getProjectLabels(
         token,
         projectInfo.host,
-        projectInfo.projectPath
+        projectInfo.projectPath,
       );
     }
   }
@@ -2075,19 +2162,22 @@ async function main() {
     const validationResult = validateAndFilterLabels(
       externalLabels,
       availableLabelsData,
-      "外部傳入"
+      "外部傳入",
     );
 
     // 只合併有效的 labels（去重）
-    for (const label of validationResult.valid) {
-      if (!labels.includes(label)) {
-        labels.push(label);
-      }
+    const adaptChecked = filterLabelsByAdaptAllowed(
+      validationResult.valid,
+      adaptAllowedLabelSet,
+      "外部傳入",
+    );
+    for (const label of adaptChecked.valid) {
+      if (!labels.includes(label)) labels.push(label);
     }
 
     if (validationResult.invalid.length > 0) {
       console.log(
-        `\n⚠️  已過濾 ${validationResult.invalid.length} 個不存在的 labels，僅使用有效的 labels\n`
+        `\n⚠️  已過濾 ${validationResult.invalid.length} 個不存在的 labels，僅使用有效的 labels\n`,
       );
     }
 
@@ -2101,7 +2191,7 @@ async function main() {
   const isReleaseBranch = /^release\//.test(targetBranch);
   if (hasHotfixLabel && !isReleaseBranch && userExplicitlySetTarget) {
     console.log(
-      "⚠️  檢測到 Hotfix label，但用戶明確指定的 target branch 不是 release/*\n"
+      "⚠️  檢測到 Hotfix label，但用戶明確指定的 target branch 不是 release/*\n",
     );
     console.log(`   當前 target branch: ${targetBranch}`);
     console.log(`   Hotfix 通常應該合併到 release/* 分支\n`);
@@ -2120,12 +2210,12 @@ async function main() {
             answer.toLowerCase() === "y" || answer.toLowerCase() === "yes";
           if (!confirmed) {
             console.log(
-              "\n❌ 已取消建立 MR。請確認 target branch 是否正確。\n"
+              "\n❌ 已取消建立 MR。請確認 target branch 是否正確。\n",
             );
             process.exit(0);
           }
           resolve();
-        }
+        },
       );
     });
   }
@@ -2157,7 +2247,7 @@ async function main() {
           token,
           projectInfo.host,
           projectInfo.projectPath,
-          currentBranch
+          currentBranch,
         );
         if (existingMR) {
           existingMRId = existingMR.iid;
@@ -2169,7 +2259,7 @@ async function main() {
           token,
           projectInfo.host,
           projectInfo.projectPath,
-          existingMRId
+          existingMRId,
         );
       }
     }
@@ -2177,13 +2267,94 @@ async function main() {
 
   // 🚨 CRITICAL: create-mr 僅用於「建立新 MR」；若已存在 MR，必須改用 update-mr 更新
   if (existingMRId) {
-    console.error("\n❌ 已存在 MR，create-mr 不會更新既有 MR\n");
-    console.error(`📋 當前分支: ${currentBranch}`);
-    console.error(`📊 現有 MR: !${existingMRId}`);
-    console.error(
-      '✅ 請改用：node .cursor/scripts/cr/update-mr.mjs --development-report="<markdown>"\n'
+    if (!updateIfExists) {
+      console.error("\n❌ 已存在 MR，create-mr 不會更新既有 MR\n");
+      console.error(`📋 當前分支: ${currentBranch}`);
+      console.error(`📊 現有 MR: !${existingMRId}`);
+      console.error(
+        "✅ 請改用（擇一）：\n" +
+          '   - node .cursor/scripts/utilities/run-pantheon-script.mjs cr/update-mr.mjs -- --development-report="<markdown>"\n' +
+          '   - node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs cr/update-mr.mjs -- --development-report="<markdown>"\n',
+      );
+      console.error(
+        '   或加上：--update-if-exists（自動改走 update-mr 流程）\n',
+      );
+      process.exit(1);
+    }
+
+    if (!externalDevelopmentReport || !externalDevelopmentReport.trim()) {
+      console.error("\n❌ 使用 --update-if-exists 需要提供 --development-report\n");
+      console.error(
+        "💡 因為更新既有 MR 必須帶開發報告（用於補齊/更新 description），避免覆蓋原內容\n",
+      );
+      process.exit(1);
+    }
+
+    console.log(`\n🔁 已存在 MR（!${existingMRId}），將改用 update-mr 更新...\n`);
+
+    const runnerCandidates = [
+      join(
+        projectRoot,
+        ".pantheon",
+        ".cursor",
+        "scripts",
+        "utilities",
+        "run-pantheon-script.mjs",
+      ),
+      join(projectRoot, ".cursor", "scripts", "utilities", "run-pantheon-script.mjs"),
+      join(
+        projectRoot,
+        ".cursor",
+        "scripts",
+        "prometheus",
+        "utilities",
+        "run-pantheon-script.mjs",
+      ),
+    ];
+    const runnerPath = runnerCandidates.find((p) => existsSync(p));
+    if (!runnerPath) {
+      console.error("\n❌ 找不到 run-pantheon-script.mjs，無法執行 update-mr\n");
+      runnerCandidates.forEach((p) => console.error(`   - ${p}`));
+      process.exit(1);
+    }
+
+    const forwardArgs = [
+      `--development-report=${JSON.stringify(externalDevelopmentReport)}`,
+    ];
+
+    if (skipReview) {
+      forwardArgs.push("--no-review");
+    }
+
+    // labels：update-mr 只做 add_labels（不覆寫），可用於補齊 AI / FE Board / Hotfix... 等
+    if (labels && labels.length > 0) {
+      forwardArgs.push(`--add-labels=${labels.join(",")}`);
+    }
+
+    // reviewer：只在用戶明確指定 reviewer 時才更新（避免覆寫既有 reviewer）
+    if (userExplicitlySetReviewer && reviewer) {
+      forwardArgs.push(`--reviewer=${reviewer}`);
+    }
+
+    const result = spawnSync(
+      process.execPath,
+      [runnerPath, "cr/update-mr.mjs", "--", ...forwardArgs],
+      {
+      cwd: projectRoot,
+      encoding: "utf-8",
+      stdio: "inherit",
+      },
     );
-    process.exit(1);
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    if (result.status !== 0) {
+      process.exit(result.status || 1);
+    }
+
+    return;
   }
 
   // 檢查是否應該更新 reviewer
@@ -2202,40 +2373,6 @@ async function main() {
       console.log(`ℹ️  現有 MR 已有 reviewer: ${existingReviewers}`);
       console.log(`   用戶未明確指定 reviewer，將保留現有 reviewer\n`);
     }
-  }
-
-  // 🚨 CRITICAL: MR description 開發報告格式回歸檢查（提交/更新 MR 前必須通過）
-  // - 規範來源：.cursor/rules/cr/commit-and-mr-guidelines.mdc（Development Report Requirement）
-  // - 若不符合，直接中止並提示補齊 --development-report
-  const descriptionValidation = validateMrDescriptionFormat(
-    description,
-    startTaskInfo
-  );
-  if (!descriptionValidation.ok) {
-    console.error(
-      "\n❌ MR description 開發報告格式不符合規範，已中止建立/更新 MR\n"
-    );
-    console.error("📋 缺少以下必要區塊：");
-    descriptionValidation.missing.forEach((m) => console.error(`- ${m}`));
-    console.error("");
-    if (descriptionValidation.isBug) {
-      console.error(
-        "💡 已偵測到 issueType 為 Bug，因此額外要求：## 影響範圍、## 根本原因\n"
-      );
-    }
-    console.error("✅ 修正方式建議（擇一）：");
-    console.error(
-      "1) 使用 --development-report 傳入完整 markdown（需確保不跑版）"
-    );
-    console.error(
-      "2) 若你是用 shell 傳參，建議使用 heredoc 或傳入 JSON string（讓腳本自動轉成真正換行）"
-    );
-    console.error("");
-    console.error("ℹ️  也可先更新 Git notes 的開發報告：");
-    console.error(
-      '   node .cursor/scripts/operator/update-development-report.mjs --report-file="development-report.md"\n'
-    );
-    process.exit(1);
   }
 
   console.log("\n🔨 建立 Merge Request...\n");
@@ -2264,7 +2401,7 @@ async function main() {
 
       if (sshConfigured) {
         console.log(
-          "💡 你的 SSH 已配置，只需要 Personal Access Token 進行 API 調用"
+          "💡 你的 SSH 已配置，只需要 Personal Access Token 進行 API 調用",
         );
         console.log("   Git 操作將自動使用 SSH 協議\n");
       }
@@ -2313,13 +2450,13 @@ async function main() {
           draft,
           reviewer,
           assignee,
-          labels
+          labels,
         );
 
         console.log("\n✅ MR 建立成功！\n");
 
         const mrUrlMatch = result.match(
-          /https:\/\/[^\s]+merge_requests\/(\d+)/
+          /https:\/\/[^\s]+merge_requests\/(\d+)/,
         );
         if (mrUrlMatch) {
           const mrUrl = mrUrlMatch[0];
@@ -2352,12 +2489,12 @@ async function main() {
                 await upsertAiReviewMarkerNoteWithGlab(
                   projectInfoForNote.projectPath,
                   mrId,
-                  headSha
+                  headSha,
                 );
                 console.log(`🧷 已寫入 AI_REVIEW_SHA 狀態: ${headSha}\n`);
               } catch (error) {
                 console.error(
-                  `⚠️  AI_REVIEW_SHA 狀態寫入失敗（不影響 MR 建立）: ${error.message}\n`
+                  `⚠️  AI_REVIEW_SHA 狀態寫入失敗（不影響 MR 建立）: ${error.message}\n`,
                 );
               }
             } catch (error) {
@@ -2389,12 +2526,12 @@ async function main() {
     console.error("  brew install glab  # macOS");
     console.error("  或訪問: https://github.com/profclems/glab");
     console.error(
-      "  然後執行: glab auth login --hostname gitlab.service-hub.tech\n"
+      "  然後執行: glab auth login --hostname gitlab.service-hub.tech\n",
     );
     console.error("方式 2: 設置 API token\n");
     console.error("💡 如何獲取 Token：");
     console.error(
-      "   1. 前往: https://gitlab.service-hub.tech/-/user_settings/personal_access_tokens"
+      "   1. 前往: https://gitlab.service-hub.tech/-/user_settings/personal_access_tokens",
     );
     console.error('   2. 點擊 "Add new token"');
     console.error('   3. 填寫 Token name（例如: "glab-cli"）');
@@ -2408,7 +2545,7 @@ async function main() {
     console.error("   永久設置（推薦）:");
     console.error('     git config --global gitlab.token "your-token"');
     console.error(
-      '   設置後重新執行: pnpm run create-mr --reviewer="@william.chiang"\n'
+      '   設置後重新執行: pnpm run create-mr --reviewer="@william.chiang"\n',
     );
 
     process.exit(1);
@@ -2433,7 +2570,7 @@ async function main() {
         console.error(`   1. 使用預設 reviewer (william.chiang)`);
         console.error(`   2. 重新輸入 reviewer 用戶名`);
         console.error(
-          `\n   然後重新執行: pnpm run create-mr --reviewer="<選擇的reviewer>"\n`
+          `\n   然後重新執行: pnpm run create-mr --reviewer="<選擇的reviewer>"\n`,
         );
 
         process.exit(1);
@@ -2455,7 +2592,7 @@ async function main() {
       draft,
       reviewerId,
       assigneeId,
-      labels
+      labels,
     );
 
     console.log("\n✅ MR 建立成功！\n");
@@ -2468,7 +2605,7 @@ async function main() {
     }
     if (mr.reviewers && mr.reviewers.length > 0) {
       console.log(
-        `👤 Reviewers: ${mr.reviewers.map((r) => r.username).join(", ")}`
+        `👤 Reviewers: ${mr.reviewers.map((r) => r.username).join(", ")}`,
       );
     }
     const jiraTickets = extractJiraTickets(description);
@@ -2495,12 +2632,12 @@ async function main() {
             projectInfo.host,
             projectInfo.projectPath,
             mr.iid,
-            headSha
+            headSha,
           );
           console.log(`🧷 已寫入 AI_REVIEW_SHA 狀態: ${headSha}\n`);
         } catch (error) {
           console.error(
-            `⚠️  AI_REVIEW_SHA 狀態寫入失敗（不影響 MR 建立）: ${error.message}\n`
+            `⚠️  AI_REVIEW_SHA 狀態寫入失敗（不影響 MR 建立）: ${error.message}\n`,
           );
         }
       } catch (error) {

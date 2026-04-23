@@ -6,6 +6,30 @@ alwaysApply: true
 
 This rule defines the requirements for commit messages and merge requests in this project.
 
+## Tool Selection (Pantheon-first, mount-safe)
+
+**CRITICAL**: For commit/MR workflows, always follow `tool-selection-by-package-scripts.mdc`:
+
+1. Read current project's `package.json` scripts first.
+2. If matching script exists, use `pnpm run <script> -- <args>`.
+3. If script does not exist (common in mounted projects like fluid-two), use Pantheon runner:
+   - `node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs <script-path> <args>`
+   - fallback (when running inside Pantheon repo): `node .cursor/scripts/utilities/run-pantheon-script.mjs <script-path> <args>`
+4. Do not hardcode Pantheon script execution as `node .cursor/scripts/<pantheon-script>.mjs` in mounted projects.
+5. Use direct API/web calls only when no matching script exists and runner/script execution fails.
+6. If falling back to direct API/web calls, explain the reason in chat.
+
+Recommended script mapping:
+- Jira read: `pnpm run read-jira-ticket -- --ticket=<TICKET>`
+- Confluence read: `pnpm run read-confluence-page -- --url="<URL>"`
+- Commit automation: `pnpm run agent-commit -- ...`
+- MR create/update: `pnpm run create-mr -- ...`, `pnpm run update-mr -- ...`
+
+Mounted-project equivalents (when scripts are not in host `package.json`):
+- Jira read: `node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs jira/read-jira-ticket.mjs --ticket=<TICKET>`
+- Commit automation: `node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs cr/agent-commit.mjs ...`
+- MR create/update: `node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs cr/create-mr.mjs ...`, `node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs cr/update-mr.mjs ...`
+
 ## Commit Message Requirements
 
 ### Language
@@ -662,7 +686,7 @@ d. **改動皆為『新增』，不對既有邏輯造成影響**
 
 **執行範例**：
 ```bash
-node .cursor/scripts/cr/create-mr.mjs \
+pnpm run create-mr -- \
   --ticket=FE-7910 \
   --development-report="## 📋 關聯單資訊\n\n| 項目 | 值 |\n|---|---|\n| **單號** | [FE-7910](URL) |\n..." \
   --agent-version='{"pantheon":"0.0.3"}'
@@ -763,12 +787,12 @@ fi
 ```bash
 # 讀取版本資訊並傳遞給 create-mr
 VERSION_INFO=$(cat .pantheon/version.json)
-pnpm run create-mr --agent-version="$VERSION_INFO"
+pnpm run create-mr -- --agent-version="$VERSION_INFO"
 ```
 
 **或使用 JSON 字串格式**：
 ```bash
-pnpm run create-mr --agent-version='{"pantheon":"0.0.1"}'
+pnpm run create-mr -- --agent-version='{"pantheon":"0.0.1"}'
 ```
 
 #### MR Description 中的版本資訊格式
@@ -828,7 +852,7 @@ pnpm run create-mr --agent-version='{"pantheon":"0.0.1"}'
 AI 執行：
 1. 檢查 .pantheon/version.json → 存在 ✓
 2. 讀取內容：{"pantheon": "0.0.1"}
-3. 執行：pnpm run create-mr --agent-version='{"pantheon":"0.0.1"}'
+3. 執行：pnpm run create-mr -- --agent-version='{"pantheon":"0.0.1"}'
 ```
 
 **Example 2: 在 Pantheon 專案本身**
@@ -843,7 +867,7 @@ AI 執行：
 1. 檢查 .pantheon/version.json → 不存在
 2. 檢查 version.json（根目錄）→ 存在 ✓
 3. 讀取內容：{"pantheon": "0.0.1"}
-4. 執行：pnpm run create-mr --agent-version='{"pantheon":"0.0.1"}'
+4. 執行：pnpm run create-mr -- --agent-version='{"pantheon":"0.0.1"}'
 ```
 
 **Example 3: 版本檔案在其他位置**
@@ -983,7 +1007,7 @@ This rebase requirement is **automatically enforced** by `create-mr.mjs` for all
 ### Creating Commits
 Use the `agent-commit` script to ensure compliance:
 ```bash
-pnpm run agent-commit --type=feat --ticket=FE-7838 --message="enable new sport baseball"
+pnpm run agent-commit -- --type=feat --ticket=FE-7838 --message="enable new sport baseball"
 ```
 
 **Note**: Rebase is no longer required before commit. It will be automatically executed when creating MR.
@@ -997,7 +1021,7 @@ Use the `create-mr` script which automatically:
 - Adds FE Board label if applicable
 
 ```bash
-pnpm run create-mr --reviewer="@william.chiang"
+pnpm run create-mr -- --reviewer="@william.chiang"
 ```
 
 ## Enforcement

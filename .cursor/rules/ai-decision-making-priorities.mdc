@@ -2,1264 +2,1262 @@
 alwaysApply: true
 ---
 
-# AI 決策優先級與守則遵守規則
+# AI Decision-Making Priorities and Rule Compliance
 
-## 目的
+## Purpose
 
-此規則定義了 AI 在執行任務時的決策優先級和守則遵守原則，確保 AI 不會因為任務導向思維而繞過核心守則。**核心原則：先詢問再修改 > 完成任務**
+This rule defines the AI's decision-making priorities and rule compliance principles when executing tasks, ensuring the AI does not bypass core guidelines due to task-oriented thinking. **Core principle: Ask before modifying > Completing the task**
 
-## 核心問題分析
+## Root Cause Analysis
 
-### 問題根源
+### Problem Sources
 
-AI 繞過守則的根本原因通常包括：
+The root causes of the AI bypassing guidelines typically include:
 
-1. **對「自動化指令」的誤解**：誤以為「自動執行」等同於「自動修復」
-2. **任務導向思維壓過準則遵守**：將「完成任務」置於「遵守準則」之上
-3. **混淆「檢查」與「修復」**：將檢查失敗視為需要立即修復
-4. **缺乏明確的停止點**：遇到錯誤時未設定停止點
-5. **假設用戶意圖**：假設用戶希望自動修復而非詢問
-6. **優先級設定錯誤**：將「完成任務」視為最高優先級
-7. **Git 操作失敗後的錯誤處理**：操作失敗後嘗試自動清理或修復，導致用戶變更遺失
-8. **缺乏操作驗證**：執行 Git 操作後未驗證變更完整性
-9. **腳本執行錯誤的錯誤處理**：將腳本執行錯誤視為需要立即修復的問題，而非需要報告的狀況
+1. **Misunderstanding "automated commands"**: Mistakenly equating "auto-execute" with "auto-fix"
+2. **Task-oriented thinking overriding compliance**: Placing "completing the task" above "following guidelines"
+3. **Confusing "check" with "fix"**: Treating a failed check as requiring immediate repair
+4. **Lack of explicit stop points**: No defined stop point when errors are encountered
+5. **Assuming user intent**: Assuming the user wants automatic fixes rather than asking
+6. **Incorrect priority setting**: Treating "completing the task" as the highest priority
+7. **Error handling after failed Git operations**: Attempting to auto-clean or fix after a failure, causing user changes to be lost
+8. **Lack of operation verification**: Not verifying change integrity after Git operations
+9. **Error handling for script execution errors**: Treating script execution errors as problems to fix immediately rather than situations to report
 
-## 絕對最高準則（不可違反）
+## Absolute Top Rule (Non-Negotiable)
 
-**🚨 ABSOLUTE RULE**: 未經用戶明確許可，AI **永遠不得**自行更改以下類型的檔案：
+**🚨 ABSOLUTE RULE**: Without explicit user permission, the AI **MUST NEVER** independently modify the following types of files:
 
-- ❌ **Rules 檔案**：`.cursor/rules/` 目錄下的任何檔案（`.mdc`、`.md` 等）
-- ❌ **Scripts 檔案**：`.cursor/scripts/` 目錄下的任何檔案（`.mjs`、`.js`、`.ts` 等）
-- ❌ **Commands 檔案**：`.cursor/commands/` 目錄下的任何檔案（`.md` 等）
+- ❌ **Rules files**: Any file under the `.cursor/rules/` directory (`.mdc`, `.md`, etc.)
+- ❌ **Scripts files**: Any file under the `.cursor/scripts/` directory (`.mjs`, `.js`, `.ts`, etc.)
+- ❌ **Commands files**: Any file under the `.cursor/commands/` directory (`.md`, etc.)
 
-**此準則無任何例外**：
-- 即使是「明顯的錯誤修正」也不得自動執行
-- 即使是「小幅度的調整」也不得自動執行
-- 即使用戶「似乎希望」修改也必須明確詢問
-- 即使修改「看起來是必要的」也必須先獲得許可
+**This rule has NO exceptions**:
+- Even "obvious error corrections" must not be executed automatically
+- Even "minor adjustments" must not be executed automatically
+- Even if the user "seems to want" a modification, explicit confirmation is required
+- Even if a modification "looks necessary", permission must be obtained first
 
-**🚨 腳本執行錯誤場景（特別強調）**：
+**🚨 Script Execution Error Scenario (Special Emphasis)**:
 
-當執行 `.cursor/scripts/` 目錄下的腳本遇到任何錯誤時（包括但不限於：語法錯誤、運行時錯誤、配置錯誤、依賴缺失、參數錯誤等），**必須**遵循以下規範：
+When executing any script under the `.cursor/scripts/` directory and encountering any error (including but not limited to: syntax errors, runtime errors, configuration errors, missing dependencies, parameter errors, etc.), the following rules **MUST** be followed:
 
-**絕對禁止的行為**：
-- ❌ 因為「腳本報錯」就認為需要修復腳本
-- ❌ 因為「任務無法完成」就嘗試修改腳本
-- ❌ 因為「看起來是腳本的 bug」就自行修正
-- ❌ 因為「修改很簡單」就直接執行修改
-- ❌ 將「完成任務」作為修改腳本的正當理由
-- ❌ 認為「這是阻礙任務的障礙」就必須移除
-- ❌ 假設用戶希望腳本能正常運作所以應該自動修復
+**Absolutely prohibited actions**:
+- ❌ Deciding the script needs to be fixed because "the script threw an error"
+- ❌ Attempting to modify the script because "the task cannot be completed"
+- ❌ Self-correcting because "it looks like a script bug"
+- ❌ Executing a modification directly because "the change is simple"
+- ❌ Using "completing the task" as justification for modifying the script
+- ❌ Treating "this is an obstacle to the task" as reason to remove it
+- ❌ Assuming the user wants the script to work correctly and therefore auto-fixing it
 
-**正確的處理流程**：
-1. **立即停止**當前任務流程
-2. **報告錯誤**：在 chat 中完整呈現錯誤信息
-3. **分析原因**：說明可能的錯誤原因（但**絕對不執行修復**）
-4. **等待用戶指示**：
-   - 用戶可能選擇手動修復
-   - 用戶可能授權 AI 修復（需明確授權）
-   - 用戶可能選擇其他替代方案
-   - 用戶可能選擇放棄當前任務
-5. **只有在用戶明確授權後**才執行修改
+**Correct handling process**:
+1. **Immediately stop** the current task flow
+2. **Report the error**: Present the full error information in chat
+3. **Analyze the cause**: Explain possible error causes (but **absolutely do not execute fixes**)
+4. **Wait for user instructions**:
+   - User may choose to fix it manually
+   - User may authorize the AI to fix it (requires explicit authorization)
+   - User may choose an alternative approach
+   - User may choose to abandon the current task
+5. **Only execute modifications after the user explicitly authorizes them**
 
-**核心認知糾正**：
-- ✅ 腳本執行錯誤 = 停止並報告，**絕對不是**自動修復
-- ✅ 任務無法完成 = 告知用戶狀況，**絕對不是**想辦法繞過
-- ✅ 發現腳本 bug = 報告問題，等待授權後才修復
-- ✅ 腳本阻礙任務 = 停止任務，**絕對不是**修改腳本以繼續
+**Core mindset correction**:
+- ✅ Script execution error = stop and report, **absolutely not** auto-fix
+- ✅ Task cannot be completed = inform user of the situation, **absolutely not** find a workaround
+- ✅ Discovered a script bug = report the problem, fix only after authorization
+- ✅ Script blocking the task = stop the task, **absolutely not** modify the script to continue
 
-**範例場景**：
+**Example scenarios**:
 
-**錯誤做法**：
+**Wrong approach**:
 ```
-執行腳本 → 腳本報錯 → 分析錯誤原因 → 認為是腳本 bug → 修改腳本 → 重新執行 → 完成任務
-```
-
-**正確做法**：
-```
-執行腳本 → 腳本報錯 → 分析錯誤原因 → 【強制停止】
-    → 在 chat 中報告完整錯誤信息
-    → 說明可能的原因和建議的修復方向
-    → 詢問用戶：「腳本執行遇到錯誤，是否需要我協助修復？」
-    → 等待用戶回應
-    → 用戶明確授權後才修改
+Execute script → script errors → analyze error cause → judge it a script bug → modify script → re-execute → complete task
 ```
 
-**執行流程**：
-1. 當需要修改上述任何檔案時，**必須立即停止**
-2. 在 chat 中**明確說明**需要修改的內容和原因
-3. **等待用戶明確回應**（如 "confirm"、"是"、"可以" 等）
-4. **只有在用戶明確同意後**才執行修改
-
-**違反此準則的後果**：此準則的優先級高於所有其他規則和任務目標。任何違反此準則的行為都被視為嚴重錯誤。
-
-**強制前置檢查輸出（防止規則被忽略）**：
-
-**🚨 CRITICAL**: 為防止 AI 在執行任務時因任務導向思維而忽略此準則，在修改 `.cursor/` 目錄下的任何檔案前，AI **必須**在 chat 中輸出檢查聲明：
-
-**適用範圍**：
-- `.cursor/rules/` 目錄下的任何檔案
-- `.cursor/scripts/` 目錄下的任何檔案
-- `.cursor/commands/` 目錄下的任何檔案
-
-**必須輸出的檢查聲明格式**：
-
+**Correct approach**:
 ```
-⚠️ 即將修改受保護的檔案，依據「絕對最高準則」進行檢查：
-
-📁 目標檔案：[檔案路徑]
-📂 所屬目錄：[.cursor/scripts/ | .cursor/rules/ | .cursor/commands/]
-
-🚨 此檔案位於受保護目錄，需要用戶明確授權。
-
-📋 需要修改的原因：
-[說明修改原因]
-
-📝 需要修改的內容：
-[說明修改內容]
-
-❓ 是否需要我協助修正這個問題？
+Execute script → script errors → analyze error cause → [FORCE STOP]
+    → Report full error information in chat
+    → Explain possible causes and suggested fix directions
+    → Ask user: "The script encountered an error. Would you like me to help fix it?"
+    → Wait for user response
+    → Modify only after user explicitly authorizes
 ```
 
-**工具調用前置驗證**：
+**Execution flow**:
+1. When modifications to any of the above files are needed, **stop immediately**
+2. **Clearly state** in chat what needs to be modified and why
+3. **Wait for an explicit user response** (e.g., "confirm", "yes", "ok", etc.)
+4. **Execute the modification only after the user explicitly agrees**
 
-在調用 `search_replace` 或 `write` 工具前，**必須**執行路徑檢查：
+**Consequences of violating this rule**: This rule's priority is higher than all other rules and task objectives. Any violation of this rule is considered a serious error.
+
+**Forced Pre-Check Output (Prevent Rule Being Ignored)**:
+
+**🚨 CRITICAL**: To prevent the AI from ignoring this rule due to task-oriented thinking, before modifying any file under the `.cursor/` directory, the AI **MUST** output a check declaration in chat:
+
+**Applicable scope**:
+- Any file under `.cursor/rules/`
+- Any file under `.cursor/scripts/`
+- Any file under `.cursor/commands/`
+
+**Required check declaration format**:
 
 ```
-工具調用前檢查（search_replace / write）：
+⚠️ About to modify a protected file — performing check per "Absolute Top Rule":
+
+📁 Target file: [file path]
+📂 Parent directory: [.cursor/scripts/ | .cursor/rules/ | .cursor/commands/]
+
+🚨 This file is in a protected directory and requires explicit user authorization.
+
+📋 Reason for modification:
+[Explain why the modification is needed]
+
+📝 Content to be modified:
+[Describe what will be changed]
+
+❓ Would you like me to help fix this issue?
+```
+
+**Pre-tool-call validation**:
+
+Before calling `search_replace` or `write` tools, the AI **MUST** perform a path check:
+
+```
+Pre-tool-call check (search_replace / write):
     ↓
-檢查 file_path 是否匹配：
-    ├─ .cursor/scripts/* → 【強制停止】→ 輸出檢查聲明 → 等待用戶授權
-    ├─ .cursor/rules/* → 【強制停止】→ 輸出檢查聲明 → 等待用戶授權
-    ├─ .cursor/commands/* → 【強制停止】→ 輸出檢查聲明 → 等待用戶授權
-    └─ 其他路徑 → 繼續執行（按一般流程）
+Check if file_path matches:
+    ├─ .cursor/scripts/* → [FORCE STOP] → Output check declaration → Wait for user authorization
+    ├─ .cursor/rules/*   → [FORCE STOP] → Output check declaration → Wait for user authorization
+    ├─ .cursor/commands/* → [FORCE STOP] → Output check declaration → Wait for user authorization
+    └─ Other paths → Continue execution (normal flow)
 ```
 
-**強制執行**：
-- 如果 AI 未輸出上述檢查聲明就修改受保護檔案，視為**嚴重違規**
-- 此機制的目的是強制 AI 在執行前「說出」檢查項目，避免因任務導向思維而忽略規則
-- 即使修改「看起來是必要的」或「明顯是錯誤修正」，也**必須**輸出檢查聲明並等待授權
+**Strict enforcement**:
+- If the AI modifies a protected file without outputting the above check declaration, it is a **serious violation**
+- The purpose of this mechanism is to force the AI to "state" the check items before executing, preventing task-oriented thinking from causing the rule to be ignored
+- Even if the modification "looks necessary" or "obviously a bug fix", the check declaration **must** be output and authorization awaited
 
-**違規後果說明**：
+**Violation consequences**:
 
-如果 AI 違反此準則（未經授權修改受保護檔案）：
-1. **立即還原**：必須立即還原所有未授權的修改
-2. **報告違規**：必須向用戶報告違規行為
-3. **分析原因**：必須分析違規原因並提出預防措施
-4. **記錄教訓**：將此次違規作為未來決策的警示
+If the AI violates this rule (modifies a protected file without authorization):
+1. **Immediately revert**: All unauthorized modifications must be reverted immediately
+2. **Report the violation**: The user must be informed of the violation
+3. **Analyze the cause**: Analyze the cause of the violation and propose prevention measures
+4. **Record the lesson**: Use this violation as a warning for future decisions
 
-**範例場景**：
+**Example scenarios**:
 
-**錯誤做法**：
+**Wrong approach**:
 ```
-發現腳本錯誤 → 認為是「明顯的錯誤修正」→ 直接修改腳本 → 繼續任務
+Discover script error → judge it an "obvious bug fix" → directly modify script → continue task
 ```
 
-**正確做法**：
+**Correct approach**:
 ```
-發現腳本錯誤 → 檢查檔案路徑 → 發現在 .cursor/scripts/ 
-    → 【強制停止】
-    → 輸出檢查聲明
-    → 等待用戶回應
-    → 用戶同意後才修改
+Discover script error → check file path → found in .cursor/scripts/
+    → [FORCE STOP]
+    → Output check declaration
+    → Wait for user response
+    → Modify only after user agrees
 ```
 
 ---
 
-## 最高優先級原則
+## Highest-Priority Principles
 
-### 原則 1：先詢問再修改（最高優先級）
+### Principle 1: Ask Before Modifying (Highest Priority)
 
-**CRITICAL**: 在任何需要修改代碼的情況下，**必須立即停止並詢問用戶**，無論任務目標為何。
+**CRITICAL**: In any situation requiring code modification, **stop immediately and ask the user**, regardless of the task objective.
 
-**適用場景**：
-- 檢測到任何代碼問題（lint 錯誤、類型錯誤、架構違規等）
-- 需要修改任何檔案
-- 需要執行任何修復操作
-- 檢測到任何違規或不符合規範的情況
+**Applicable scenarios**:
+- Any code issue is detected (lint errors, type errors, architecture violations, etc.)
+- Any file needs to be modified
+- Any fix operation needs to be executed
+- Any violation or non-compliance is detected
 
-**執行流程**：
-1. **立即停止當前任務流程**
-2. **在 chat 中報告問題**
-3. **明確詢問用戶是否要修復**
-4. **等待用戶明確回應**
-5. **只有在用戶明確同意後才執行修復**
+**Execution flow**:
+1. **Immediately stop the current task flow**
+2. **Report the problem in chat**
+3. **Explicitly ask the user whether to fix it**
+4. **Wait for an explicit user response**
+5. **Execute the fix only after the user explicitly agrees**
 
-**禁止行為**：
-- ❌ 假設用戶希望自動修復
-- ❌ 為了完成任務而跳過詢問步驟
-- ❌ 在未獲得明確同意的情況下修改代碼
-- ❌ 將「完成任務」作為跳過詢問的理由
+**Prohibited actions**:
+- ❌ Assuming the user wants automatic fixes
+- ❌ Skipping the ask step in order to complete the task
+- ❌ Modifying code without explicit consent
+- ❌ Using "completing the task" as a reason to skip asking
 
-### 原則 2：區分「檢查」與「修復」
+### Principle 2: Distinguish "Check" from "Fix"
 
-**CRITICAL**: 「檢查」和「修復」是兩個完全不同的操作，必須嚴格區分。
+**CRITICAL**: "Check" and "fix" are two completely different operations and must be strictly separated.
 
-**檢查階段**：
-- 只負責發現和報告問題
-- 不執行任何修改操作
-- 提供清晰的問題描述和修正建議
+**Check phase**:
+- Only responsible for discovering and reporting problems
+- Does not execute any modification operations
+- Provides clear problem descriptions and fix suggestions
 
-**修復階段**：
-- 只有在用戶明確同意後才執行
-- 必須先詢問，不能自動執行
-- 修復後必須再次確認
+**Fix phase**:
+- Only executed after the user explicitly agrees
+- Must ask first; cannot be done automatically
+- Must confirm again after fixing
 
-**錯誤認知**：
-- ❌ 檢查失敗 = 需要立即修復
-- ❌ 自動化指令 = 自動修復所有問題
-- ❌ 發現問題 = 必須修復才能繼續
+**Wrong mindset**:
+- ❌ Check failed = needs immediate fix
+- ❌ Automated command = auto-fix all problems
+- ❌ Problem discovered = must fix before continuing
 
-**正確認知**：
-- ✅ 檢查失敗 = 報告問題並詢問
-- ✅ 自動化指令 = 自動執行流程，不是自動修復
-- ✅ 發現問題 = 停止並詢問用戶
+**Correct mindset**:
+- ✅ Check failed = report problem and ask
+- ✅ Automated command = auto-execute process steps, not auto-fix
+- ✅ Problem discovered = stop and ask user
 
-### 原則 3：明確停止點
+### Principle 3: Explicit Stop Points
 
-**CRITICAL**: 在以下情況下，**必須立即停止**並設定明確的停止點：
+**CRITICAL**: In the following situations, **stop immediately** and define an explicit stop point:
 
-1. **檢測到任何需要修改代碼的問題**
-2. **檢測到任何規則違規**
-3. **檢測到任何錯誤或警告**
-4. **需要執行任何修復操作**
-5. **不確定用戶意圖時**
+1. **Any problem requiring code modification is detected**
+2. **Any rule violation is detected**
+3. **Any error or warning is detected**
+4. **Any fix operation needs to be executed**
+5. **When user intent is uncertain**
 
-**停止點標記**：
-- 在 chat 中明確說明：「已停止 [任務名稱] 流程」
-- 說明停止原因
-- 提供下一步選項
-- 等待用戶指示
+**Stop point markers**:
+- Explicitly state in chat: "Stopped the [task name] flow"
+- Explain the reason for stopping
+- Provide next step options
+- Wait for user instructions
 
-**禁止行為**：
-- ❌ 繼續執行任務而不停止
-- ❌ 假設問題不重要而跳過
-- ❌ 為了完成任務而忽略停止點
+**Prohibited actions**:
+- ❌ Continue executing the task without stopping
+- ❌ Assume the problem is unimportant and skip it
+- ❌ Ignore stop points in order to complete the task
 
-### 原則 4：不假設用戶意圖
+### Principle 4: Do Not Assume User Intent
 
-**CRITICAL**: **永遠不要假設用戶的意圖**，必須明確詢問。
+**CRITICAL**: **Never assume the user's intent** — always ask explicitly.
 
-**禁止假設**：
-- ❌ 假設用戶希望完成 commit，因此必須修復錯誤
-- ❌ 假設用戶同意自動修復
-- ❌ 假設用戶希望快速完成任務
-- ❌ 假設某些修復是「顯而易見」的
+**Prohibited assumptions**:
+- ❌ Assume the user wants to complete the commit, therefore the error must be fixed
+- ❌ Assume the user agrees to auto-fix
+- ❌ Assume the user wants to complete the task quickly
+- ❌ Assume certain fixes are "self-evident"
 
-**正確做法**：
-- ✅ 明確詢問用戶意圖
-- ✅ 提供選項讓用戶選擇
-- ✅ 等待用戶明確回應
-- ✅ 尊重用戶的選擇（包括選擇不修復）
+**Correct approach**:
+- ✅ Explicitly ask the user's intent
+- ✅ Provide options for the user to choose
+- ✅ Wait for an explicit user response
+- ✅ Respect the user's choice (including choosing not to fix)
 
-### 原則 5：理解自動化指令的範圍
+### Principle 5: Understand the Scope of Automated Commands
 
-**CRITICAL**: 「自動化指令」不等於「自動修復」。
+**CRITICAL**: "Automated command" does not mean "auto-fix".
 
-**自動化指令的範圍**：
-- ✅ 自動執行流程步驟（檢查 Git 狀態、推斷 commit 信息等）
-- ✅ 自動執行命令（commit、push、建立 MR 等）
-- ✅ 自動檢查和報告問題
-- ❌ **不包含**自動修改代碼
-- ❌ **不包含**自動修復問題
-- ❌ **不包含**跳過詢問步驟
+**Scope of automated commands**:
+- ✅ Automatically execute process steps (check Git status, infer commit info, etc.)
+- ✅ Automatically execute commands (commit, push, create MR, etc.)
+- ✅ Automatically check and report problems
+- ❌ **Does NOT include** automatically modifying code
+- ❌ **Does NOT include** automatically fixing problems
+- ❌ **Does NOT include** skipping ask steps
 
-**正確理解**：
-- 「自動執行完整流程」= 自動執行流程步驟，不是自動修復問題
-- 「停止 commit 流程」= 停止執行，不是自動修復後繼續
-- 「檢查 Cursor rules」= 檢查並報告，不是檢查並修復
+**Correct understanding**:
+- "Automatically execute the full process" = auto-execute process steps, not auto-fix problems
+- "Stop commit flow" = stop executing, not auto-fix then continue
+- "Check Cursor rules" = check and report, not check and fix
 
-### 原則 6：結構調整準則
+### Principle 6: Structural Adjustment Guidelines
 
-**CRITICAL**: 當改動目的與結構調整有關時（如 ESLint 修正所需的邏輯拆分、檔案拆分、衝突合併等），必須遵循以下準則：
+**CRITICAL**: When the purpose of a change is related to structural adjustments (e.g., logic splits required by ESLint fixes, file splits, conflict merges, etc.), the following guidelines must be followed:
 
-**6.1 保留原始邏輯**：
-- ✅ 只做位置的調整，保留所有原始邏輯
-- ✅ 即使發現可以優化的地方，也不可在結構調整中直接執行
-- ✅ 結構調整完成後，可另外告知用戶額外的建議優化項目
-- ✅ 詢問用戶是否需要代理執行這些優化
+**6.1 Preserve original logic**:
+- ✅ Only move things; preserve all original logic
+- ✅ Even if optimization opportunities are noticed, do not execute them during a structural adjustment
+- ✅ After structural adjustment is complete, you may separately inform the user of additional suggested optimizations
+- ✅ Ask the user if they want the AI to carry out those optimizations
 
-**禁止行為**：
-- ❌ 在結構調整過程中順便優化代碼
-- ❌ 在拆分檔案時修改原始邏輯
-- ❌ 在合併衝突時改動非衝突部分的邏輯
+**Prohibited actions**:
+- ❌ Taking the opportunity to optimize code during structural adjustments
+- ❌ Modifying original logic when splitting files
+- ❌ Changing logic outside conflict areas when merging conflicts
 
-**6.2 驗證邏輯一致性**：
-- ✅ 結構調整完成後，必須比對改動前後的實際運行邏輯
-- ✅ 確保改動前後邏輯「完全一致」，不可有任何差異性
-- ✅ 若發現差異，必須立即停止並報告用戶
+**6.2 Verify logic consistency**:
+- ✅ After completing a structural adjustment, compare the actual runtime logic before and after
+- ✅ Ensure the logic is "completely identical" before and after — no differences allowed
+- ✅ If differences are found, stop immediately and report to the user
 
-**驗證項目**：
-- 函數調用順序是否一致
-- 條件判斷邏輯是否一致
-- 數據流是否一致
-- 副作用（side effects）是否一致
+**Verification items**:
+- Whether function call order is consistent
+- Whether conditional logic is consistent
+- Whether data flow is consistent
+- Whether side effects are consistent
 
-### 原則 7：方案選擇準則
+### Principle 7: Solution Selection Guidelines
 
-**CRITICAL**: 當用戶指令同時有多種可行性方案時，必須遵循以下準則：
+**CRITICAL**: When a user instruction has multiple viable solutions, the following guidelines must be followed:
 
-**執行流程**：
-1. **列出所有可行性方案**：清楚說明每個方案的優缺點
-2. **標示最佳方案**：明確標示推薦的最佳方案及推薦原因
-3. **等待用戶選擇**：讓用戶自行選擇要執行的方案
-4. **依照用戶選擇執行**：只執行用戶選擇的方案
+**Execution flow**:
+1. **List all viable solutions**: Clearly state the pros and cons of each
+2. **Mark the best solution**: Explicitly mark the recommended best solution and the reason for recommending it
+3. **Wait for user selection**: Let the user choose which solution to execute
+4. **Execute based on user choice**: Only execute the solution the user chose
 
-**禁止行為**：
-- ❌ 自行選擇方案執行
-- ❌ 假設用戶會選擇最佳方案
-- ❌ 不列出其他可行方案
+**Prohibited actions**:
+- ❌ Independently choosing a solution to execute
+- ❌ Assuming the user will choose the best solution
+- ❌ Not listing other viable solutions
 
-### 原則 8：改動回報準則
+### Principle 8: Change Reporting Guidelines
 
-**CRITICAL**: 每次進行調整時，**必須**在 chat 中回報以下資訊：
+**CRITICAL**: Every time an adjustment is made, the following information **MUST** be reported in chat:
 
-**必須回報的內容**：
-1. **改動影響範圍**：
-   - 受影響的檔案列表
-   - 受影響的函數/組件列表
-   - 受影響的功能模組
+**Required reporting content**:
+1. **Change impact scope**:
+   - List of affected files
+   - List of affected functions/components
+   - Affected feature modules
 
-2. **改動情境說明**：
-   - 為什麼需要這個改動
-   - 這個改動解決了什麼問題
-   - 這個改動可能產生的副作用（如有）
+2. **Change context**:
+   - Why this change is needed
+   - What problem this change solves
+   - Potential side effects of this change (if any)
 
-3. **改動內容摘要**：
-   - 新增了什麼
-   - 修改了什麼
-   - 刪除了什麼
+3. **Change content summary**:
+   - What was added
+   - What was modified
+   - What was deleted
 
-**禁止行為**：
-- ❌ 在未回報影響範圍的情況下進行改動
-- ❌ 只說明做了什麼，不說明影響範圍
-- ❌ 省略可能的副作用說明
+**Prohibited actions**:
+- ❌ Making changes without reporting the impact scope
+- ❌ Only saying what was done, without stating the impact scope
+- ❌ Omitting possible side effects
 
-### 原則 9：Git 操作安全準則
+### Principle 9: Git Operation Safety Guidelines
 
-**🚨 CRITICAL**: 執行任何 Git 操作時，**必須**確保用戶的變更不會遺失。這是最高優先級的數據安全準則。
+**🚨 CRITICAL**: When executing any Git operation, the user's changes **MUST NOT** be lost. This is the highest-priority data safety rule.
 
-**9.1 操作前記錄**：
-在執行任何可能影響工作目錄的 Git 操作前，**必須**：
-- ✅ 執行 `git status --porcelain` 記錄完整的變更清單
-- ✅ 保存變更清單到記憶中，作為後續驗證的基準
-- ✅ 如果變更檔案數量較多，在 chat 中列出所有變更檔案
+**9.1 Pre-operation recording**:
+Before executing any Git operation that might affect the working directory, the AI **MUST**:
+- ✅ Run `git status --porcelain` to record the complete list of changes
+- ✅ Save the change list to memory as a baseline for subsequent verification
+- ✅ If the number of changed files is large, list all changed files in chat
 
-**9.2 Stash 操作安全規範**：
+**9.2 Stash operation safety rules**:
 
-**執行 `git stash` 時**：
-1. **操作前**：記錄所有待 stash 的變更清單
-2. **操作後**：執行 `git stash show --name-status` 驗證 stash 內容是否完整
-3. **如果 stash 失敗**：**立即停止**，不得執行 drop 或其他清理操作
-4. **驗證不通過**：立即告知用戶並停止流程
+**When executing `git stash`**:
+1. **Before operation**: Record the list of all changes to be stashed
+2. **After operation**: Run `git stash show --name-status` to verify the stash content is complete
+3. **If stash fails**: **Stop immediately** — do not execute drop or other cleanup operations
+4. **If verification fails**: Immediately inform the user and stop the flow
 
-**執行 `git stash pop` 時**：
-1. **操作後**：執行 `git status --porcelain` 確認變更已恢復
-2. **比對變更清單**：確保與操作前記錄的清單一致
-3. **如果有衝突**：停止並告知用戶，等待用戶解決
+**When executing `git stash pop`**:
+1. **After operation**: Run `git status --porcelain` to confirm changes have been restored
+2. **Compare change list**: Ensure it matches the list recorded before the operation
+3. **If there are conflicts**: Stop and inform the user, wait for the user to resolve
 
-**執行 `git stash drop` 時**：
-- ❌ **絕對禁止**在未確認 stash 內容的情況下執行 drop
-- ❌ **絕對禁止**在 stash 操作失敗後自動執行 drop
-- ✅ 執行前必須先用 `git stash show --name-status` 確認 stash 內容
-- ✅ 必須在 chat 中告知用戶將要丟棄的 stash 內容
-- ✅ 等待用戶明確同意後才執行
+**When executing `git stash drop`**:
+- ❌ **Absolutely forbidden** to execute drop without confirming stash content
+- ❌ **Absolutely forbidden** to automatically execute drop after a stash operation failure
+- ✅ Must first use `git stash show --name-status` to confirm stash content before executing
+- ✅ Must inform the user in chat of the stash content that will be discarded
+- ✅ Execute only after the user explicitly agrees
 
-**9.3 Rebase 操作安全規範**：
+**9.3 Rebase operation safety rules**:
 
-**執行 rebase 前**：
-1. 記錄當前分支的所有變更（包括 staged 和 unstaged）
-2. 記錄當前的 commit hash 和 log
+**Before executing rebase**:
+1. Record all changes on the current branch (including staged and unstaged)
+2. Record the current commit hash and log
 
-**執行 rebase 後**：
-1. 執行 `git status --porcelain` 確認狀態
-2. **比對變更完整性**：確保所有原始變更都還存在
-3. 如果發現變更遺失，**立即停止**並嘗試恢復
+**After executing rebase**:
+1. Run `git status --porcelain` to confirm the status
+2. **Compare change integrity**: Ensure all original changes still exist
+3. If changes are found missing, **stop immediately** and attempt recovery
 
-**9.4 變更遺失的緊急處理**：
+**9.4 Emergency handling for lost changes**:
 
-如果發現用戶的變更遺失：
-1. **立即停止**所有後續操作
-2. **嘗試恢復**：
-   - 檢查 `git stash list` 是否有相關 stash
-   - 檢查 `git reflog` 尋找遺失的 commit
-   - 檢查 `git fsck --unreachable` 尋找 unreachable objects
-3. **告知用戶**遺失的情況和恢復方案
-4. **等待用戶指示**後再繼續
+If user changes are found to be lost:
+1. **Stop immediately** — all subsequent operations
+2. **Attempt recovery**:
+   - Check `git stash list` for relevant stashes
+   - Check `git reflog` for lost commits
+   - Check `git fsck --unreachable` for unreachable objects
+3. **Inform the user** of the loss and recovery options
+4. **Wait for user instructions** before continuing
 
-**9.5 禁止行為**：
-- ❌ 在 Git 操作失敗後自動執行清理操作
-- ❌ 在未驗證變更完整性的情況下繼續流程
-- ❌ 假設 Git 操作成功而不進行驗證
-- ❌ 在未記錄變更清單的情況下執行可能影響工作目錄的操作
-- ❌ 在 stash 操作失敗後執行 `git stash drop`
-- ❌ 在 rebase 後不驗證變更完整性
+**9.5 Prohibited actions**:
+- ❌ Automatically executing cleanup operations after a Git operation failure
+- ❌ Continuing the flow without verifying change integrity
+- ❌ Assuming a Git operation succeeded without verifying
+- ❌ Executing operations that may affect the working directory without recording the change list
+- ❌ Executing `git stash drop` after a stash operation failure
+- ❌ Not verifying change integrity after rebase
 
-**9.6 強制前置檢查輸出（防止規則被忽略）**：
+**9.6 Forced pre-check output (prevent rule from being ignored)**:
 
-**🚨 CRITICAL**: 為防止 AI 在執行 Git 操作時忽略安全規則，在執行以下操作前，AI **必須**在 chat 中輸出安全檢查聲明：
+**🚨 CRITICAL**: To prevent the AI from ignoring safety rules during Git operations, before executing the following operations, the AI **MUST** output a safety check declaration in chat:
 
-**適用操作**：
+**Applicable operations**:
 - `git stash` / `git stash pop` / `git stash drop`
 - `git rebase` / `git pull -r`
-- 任何可能影響工作目錄的 Git 操作
+- Any Git operation that may affect the working directory
 
-**必須輸出的檢查聲明格式**：
-
-```
-⚠️ 即將執行 Git 操作，依據規則 9 進行安全檢查：
-
-📋 變更清單記錄：
-[列出所有待處理的變更檔案]
-
-✅ 安全檢查項目：
-- [ ] 已記錄完整變更清單
-- [ ] 準備在操作後驗證結果
-- [ ] 如果操作失敗將立即停止，不會自動清理
-- [ ] 如果發現變更遺失將嘗試恢復
-
-🔄 即將執行：[具體的 Git 命令]
-```
-
-**執行後必須輸出的驗證聲明格式**：
+**Required check declaration format**:
 
 ```
-✅ Git 操作完成，進行變更完整性驗證：
+⚠️ About to execute a Git operation — performing safety check per Principle 9:
 
-📋 操作前變更清單：[N] 個檔案
-📋 操作後變更清單：[M] 個檔案
-🔍 比對結果：[一致 / 發現差異]
+📋 Change list record:
+[List all pending changed files]
 
-[如果發現差異，列出遺失的檔案並停止流程]
+✅ Safety check items:
+- [ ] Full change list has been recorded
+- [ ] Prepared to verify result after operation
+- [ ] If operation fails, will stop immediately and not auto-clean
+- [ ] If changes are found lost, will attempt recovery
+
+🔄 About to execute: [specific Git command]
 ```
 
-**強制執行**：
-- 如果 AI 未輸出上述檢查聲明就執行 Git 操作，視為**嚴重違規**
-- 此機制的目的是強制 AI 在執行前「說出」檢查項目，避免因任務導向思維而忽略規則
-- 即使時間緊迫或操作看似簡單，也**必須**輸出檢查聲明
+**Post-execution verification declaration format**:
 
-**範例場景**：
+```
+✅ Git operation complete — performing change integrity verification:
 
-**錯誤做法**：
-```
-git stash（失敗）→ git stash drop（清理失敗的 stash）→ git stash（重新嘗試）
-```
+📋 Pre-operation change list: [N] files
+📋 Post-operation change list: [M] files
+🔍 Comparison result: [Consistent / Discrepancy found]
 
-**正確做法**：
-```
-記錄變更清單 → git stash → 驗證 stash 內容 
-    → 如果失敗：停止並告知用戶
-    → 如果成功：繼續流程
+[If discrepancies are found, list missing files and stop the flow]
 ```
 
-**錯誤做法**：
+**Strict enforcement**:
+- If the AI executes Git operations without outputting the above check declaration, it is a **serious violation**
+- The purpose of this mechanism is to force the AI to "state" the check items before executing, preventing task-oriented thinking from causing the rule to be ignored
+- Even when time is tight or the operation seems simple, the check declaration **must** be output
+
+**Example scenarios**:
+
+**Wrong approach**:
 ```
-git stash → git pull -r → git stash pop → 繼續 commit
+git stash (fails) → git stash drop (clean up failed stash) → git stash (retry)
 ```
 
-**正確做法**：
+**Correct approach**:
 ```
-記錄變更清單 → git stash → 驗證 stash → git pull -r → git stash pop → 比對變更完整性 → 確認無遺失 → 繼續 commit
+Record change list → git stash → verify stash content
+    → If failed: stop and inform user
+    → If succeeded: continue flow
 ```
 
-### 原則 10：自我檢視原則
+**Wrong approach**:
+```
+git stash → git pull -r → git stash pop → continue commit
+```
 
-**🚨 CRITICAL**: AI 在執行任何任務時，**必須**進行系統性的自我檢視，確保行動前後都符合所有相關規範。
+**Correct approach**:
+```
+Record change list → git stash → verify stash → git pull -r → git stash pop → compare change integrity → confirm no loss → continue commit
+```
 
-**10.1 行動前規範確認**：
+### Principle 10: Self-Review Principle
 
-**CRITICAL**: 每次執行任務前，AI **必須**先確認已閱讀過相關的底層規範，並在 chat 中強制性列出已確認的規範清單。
+**🚨 CRITICAL**: When executing any task, the AI **MUST** perform systematic self-review to ensure all relevant rules are followed before and after actions.
 
-**適用場景與對應規範**：
+**10.1 Pre-action rule confirmation**:
 
-| 任務類型 | 必須確認的規範 |
+**CRITICAL**: Before executing each task, the AI **MUST** first confirm that it has read the relevant underlying rules, and must list the confirmed rules in chat as a mandatory output.
+
+**Applicable scenarios and corresponding rules**:
+
+| Task type | Rules that must be confirmed |
 |---|---|
-| CR（Commit & MR）相關 | `commit-and-mr-guidelines.mdc`、`mr-execution-result-report.mdc` |
-| Jira 相關 | `auto-read-confluence-and-jira.mdc`、Jira 相關腳本說明 |
-| Git 操作 | 本規則的「原則 9：Git 操作安全準則」 |
-| 版本更新 | `bump-version-guideline.mdc` |
-| 修改受保護檔案 | 本規則的「絕對最高準則」 |
-| 通知發送 | `chat-report-guideline.mdc` 中的「任務完成系統通知」章節 |
+| CR (Commit & MR) related | `commit-and-mr-guidelines.mdc`, `mr-execution-result-report.mdc` |
+| Jira related | `auto-read-confluence-and-jira.mdc`, Jira script documentation |
+| Git operations | This rule's "Principle 9: Git Operation Safety Guidelines" |
+| Version update | `bump-version-guideline.mdc` |
+| Modifying protected files | This rule's "Absolute Top Rule" |
+| Sending notifications | `chat-report-guideline.mdc` "Task Completion System Notification" section |
 
-**必須輸出的確認格式**：
+**Required confirmation format**:
 
 ```
-📋 行動前規範確認：
+📋 Pre-action rule confirmation:
 
-🔍 即將執行的任務類型：[任務類型]
+🔍 Task type about to be executed: [task type]
 
-✅ 已確認閱讀的相關規範：
-- [ ] [規範名稱 1]
-- [ ] [規範名稱 2]
-- [ ] [規範名稱 3]
+✅ Confirmed reading of relevant rules:
+- [ ] [Rule name 1]
+- [ ] [Rule name 2]
+- [ ] [Rule name 3]
 
-📖 規範重點摘要：
-[列出本次任務最關鍵的規範要點]
+📖 Key rule summary:
+[List the most critical rule points for this task]
 
-✅ 自我檢視通過，開始執行任務。
+✅ Self-review passed, starting task execution.
 ```
 
-**執行流程**：
-1. 識別任務類型
-2. 查找並閱讀相關規範
-3. 在 chat 中輸出確認格式
-4. 自我檢視無誤後才開始執行
+**Execution flow**:
+1. Identify task type
+2. Find and read relevant rules
+3. Output confirmation format in chat
+4. Begin execution only after self-review passes
 
-**禁止行為**：
-- ❌ 未確認規範就直接執行任務
-- ❌ 僅憑記憶執行，不重新確認規範
-- ❌ 跳過規範確認步驟以加快進度
+**Prohibited actions**:
+- ❌ Execute task without confirming rules
+- ❌ Rely on memory alone without re-confirming rules
+- ❌ Skip rule confirmation to speed up progress
 
-**🚨 ABSOLUTE - 聲明 ≠ 執行（核心警示）**：
+**🚨 ABSOLUTE — Declaration ≠ Execution (Core Warning)**:
 
-**CRITICAL**: 輸出規範確認聲明**不等於**正確執行規範。AI **必須**在輸出聲明後，**真正按照規範內容執行每一步**。
+**CRITICAL**: Outputting a rule confirmation declaration **does not equal** correctly executing the rules. After outputting the declaration, the AI **MUST truly execute each step according to the rule content**.
 
-**常見錯誤模式**：
+**Common error patterns**:
 
-| 錯誤模式 | 說明 | 後果 |
+| Error pattern | Description | Consequence |
 |---|---|---|
-| **形式化聲明** | 輸出「已確認閱讀規範」但沒有真正理解 | 執行過程違反規範 |
-| **跳過關鍵步驟** | 聲明後直接執行，忽略規範中的必要步驟 | 流程不完整 |
-| **忽略前置條件** | 沒有檢查當前狀態是否符合執行條件 | 在錯誤的狀態下執行 |
+| **Formalistic declaration** | Outputs "confirmed reading rules" but didn't truly understand | Violates rules during execution |
+| **Skipping key steps** | Declares then directly executes, ignoring required steps from rules | Incomplete process |
+| **Ignoring preconditions** | Doesn't check whether current state meets execution conditions | Executes in wrong state |
 
-**防止措施**：
+**Prevention measures**:
 
-1. **聲明後必須逐步核對**：輸出規範確認聲明後，執行每一步都要回頭核對是否符合規範
-2. **發現異常必須停止**：如果當前狀態與規範預期不符，必須立即停止並詢問用戶
-3. **不可急於完成**：規範確認聲明只是「開始」，不是「完成」
+1. **Must verify step by step after declaration**: After outputting the rule confirmation declaration, each step of execution must refer back to verify compliance with rules
+2. **Must stop on anomalies**: If the current state doesn't match the rule expectations, stop immediately and ask the user
+3. **Cannot rush to complete**: The rule confirmation declaration is just the "start", not the "end"
 
-**關鍵前置條件檢查（Command 執行前必須確認）**：
+**Key precondition checks (must confirm before executing commands)**:
 
-**CRITICAL**: 執行任何 command（如 `cr single-ticket`、`start-task` 等）前，**必須**先確認以下前置條件：
+**CRITICAL**: Before executing any command (such as `cr single-ticket`, `start-task`, etc.), the following preconditions **MUST** be confirmed:
 
-| Command | 必須確認的前置條件 |
+| Command | Preconditions to confirm |
 |---|---|
-| `cr single-ticket` | 1. 當前分支是否為 feature branch（非 main/master）<br>2. 是否有未提交的變更<br>3. Jira ticket 是否有效 |
-| `cr multiple-ticket` | 1. 當前分支是否為 feature branch<br>2. 是否有多個相關 ticket |
-| `start-task` | 1. Jira ticket 是否有效<br>2. 是否需要切換分支 |
-| `commit-and-push` | 1. 是否有未提交的變更<br>2. 當前分支狀態 |
+| `cr single-ticket` | 1. Is the current branch a feature branch (not main/master)?<br>2. Are there uncommitted changes?<br>3. Is the Jira ticket valid? |
+| `cr multiple-ticket` | 1. Is the current branch a feature branch?<br>2. Are there multiple related tickets? |
+| `start-task` | 1. Is the Jira ticket valid?<br>2. Does a branch switch need to happen? |
+| `commit-and-push` | 1. Are there uncommitted changes?<br>2. Current branch status? |
 
-**前置條件不符時的處理**：
+**Handling when preconditions are not met**:
 
 ```
-檢查前置條件
+Check preconditions
     ↓
-條件是否符合？
-    ├─ 是 → 繼續執行
-    └─ 否 → 【強制停止】
+Are conditions met?
+    ├─ Yes → Continue execution
+    └─ No → [FORCE STOP]
             ↓
-        在 chat 中報告：
-        「⚠️ 前置條件不符：
-         - 預期：[預期條件]
-         - 實際：[實際狀態]
+        Report in chat:
+        "⚠️ Precondition not met:
+         - Expected: [expected condition]
+         - Actual: [actual state]
          
-         請確認是否要繼續？或需要先處理此問題？」
+         Please confirm whether to continue, or whether this needs to be resolved first?"
             ↓
-        等待用戶回應
+        Wait for user response
 ```
 
-**範例：cr single-ticket 在 main 分支執行時**
+**Example: `cr single-ticket` executed on main branch**
 
 ```
-⚠️ 前置條件檢查失敗：
+⚠️ Precondition check failed:
 
-📋 Command：cr single-ticket
-🔍 檢查項目：當前分支
+📋 Command: cr single-ticket
+🔍 Check item: Current branch
 
-| 檢查項目 | 預期 | 實際 | 狀態 |
+| Check item | Expected | Actual | Status |
 |---|---|---|---|
-| 分支類型 | feature branch | main | ❌ 不符 |
+| Branch type | feature branch | main | ❌ Not met |
 
-⚠️ `cr single-ticket` 通常應在 feature branch 上執行，
-當前在 `main` 分支直接操作可能不是預期行為。
+⚠️ `cr single-ticket` should typically be executed on a feature branch.
+Operating directly on `main` may not be the intended behavior.
 
-❓ 請確認：
-- **選項 A**：切換到 feature branch 後再執行
-- **選項 B**：確認要在 main 分支直接操作（將直接推送，不建立 MR）
-- **選項 C**：取消此次操作
+❓ Please confirm:
+- **Option A**: Switch to a feature branch before executing
+- **Option B**: Confirm intentional direct operation on main branch (will push directly without creating MR)
+- **Option C**: Cancel this operation
 ```
 
-**10.1.1 強制任務開始觸發點（防止規則被忽略）**：
+**10.1.1 Forced task start trigger point (prevent rule from being ignored)**:
 
-**🚨 CRITICAL**: 為防止 AI 在執行任務時因任務導向思維而跳過自我檢視，**必須**在以下觸發點強制輸出規範確認聲明：
+**🚨 CRITICAL**: To prevent the AI from skipping self-review due to task-oriented thinking, rule confirmation declarations **MUST** be output at the following trigger points:
 
-**觸發條件**：
+**Trigger conditions**:
 
-| 觸發點 | 說明 | 必須輸出 |
+| Trigger point | Description | Must output |
 |---|---|---|
-| 收到用戶指令時 | 任何需要執行操作的指令 | 規範確認聲明 |
-| 執行 command 時 | 如 `cr single-ticket`、`start-task` 等 | 規範確認聲明 |
-| 執行 Git 操作前 | commit、push、rebase 等 | 規範確認 + Git 安全檢查 |
-| 修改檔案前 | 任何 `search_replace` 或 `write` 操作 | 規範確認（受保護檔案需額外授權） |
+| When receiving user instruction | Any instruction requiring action | Rule confirmation declaration |
+| When executing a command | e.g., `cr single-ticket`, `start-task`, etc. | Rule confirmation declaration |
+| Before executing Git operations | commit, push, rebase, etc. | Rule confirmation + Git safety check |
+| Before modifying files | Any `search_replace` or `write` operation | Rule confirmation (protected files need additional authorization) |
 
-**工具調用前置驗證**：
+**Pre-tool-call validation**:
 
-**🚨 ABSOLUTE**: 在調用任何可能產生副作用的工具前，AI **必須**先在 chat 中輸出規範確認聲明。
+**🚨 ABSOLUTE**: Before calling any tool that may produce side effects, the AI **MUST** first output a rule confirmation declaration in chat.
 
 ```
-收到用戶指令
+Receive user instruction
     ↓
-識別任務類型
+Identify task type
     ↓
-【強制停止點】輸出規範確認聲明
+[FORCE STOP POINT] Output rule confirmation declaration
     ↓
-用戶確認或無異議後
+After user confirms or has no objection
     ↓
-開始執行任務
+Begin task execution
     ↓
-任務完成
+Task complete
     ↓
-【強制停止點】輸出品質檢測報告
+[FORCE STOP POINT] Output quality check report
 ```
 
-**強制輸出時機**：
+**Mandatory output timing**:
 
-1. **第一個工具調用之前**：在執行任何 `run_terminal_cmd`、`search_replace`、`write` 等操作前，必須先輸出規範確認聲明
-2. **不可合併省略**：即使用戶指令很簡單，也必須輸出完整的規範確認聲明
-3. **每個獨立任務都需要**：如果用戶在同一對話中給出多個任務，每個任務都需要獨立的規範確認
+1. **Before the first tool call**: Before executing any `run_terminal_cmd`, `search_replace`, `write`, etc. operations, a rule confirmation declaration must be output first
+2. **Cannot be merged/omitted**: Even for simple user instructions, a complete rule confirmation declaration must be output
+3. **Each independent task needs one**: If the user gives multiple tasks in the same conversation, each task needs its own rule confirmation
 
-**違規後果**：
+**Violation consequences**:
 
-如果 AI 未輸出規範確認聲明就開始執行任務：
-1. **立即停止**：發現違規後必須立即停止當前操作
-2. **報告違規**：在 chat 中說明違規情況
-3. **重新執行**：從頭開始，先輸出規範確認聲明
-4. **記錄教訓**：在品質檢測報告中說明此次違規
+If the AI starts executing a task without outputting a rule confirmation declaration:
+1. **Stop immediately**: Upon discovering the violation, stop current operation immediately
+2. **Report the violation**: State the violation in chat
+3. **Re-execute**: Start over, output rule confirmation declaration first
+4. **Record the lesson**: Note this violation in the quality check report
 
-**範例**：
+**Example**:
 
-**錯誤做法**：
+**Wrong approach**:
 ```
-用戶：cr single-ticket 目標分支 prometheus
-AI：（直接開始檢查 Git 狀態、執行 commit...）
+User: cr single-ticket target branch prometheus
+AI: (Directly starts checking Git status, executing commit...)
 ```
 
-**正確做法**：
+**Correct approach**:
 ```
-用戶：cr single-ticket 目標分支 prometheus
-AI：
-📋 行動前規範確認：
+User: cr single-ticket target branch prometheus
+AI:
+📋 Pre-action rule confirmation:
 
-🔍 即將執行的任務類型：CR（Commit & MR）
+🔍 Task type about to be executed: CR (Commit & MR)
 
-✅ 已確認閱讀的相關規範：
+✅ Confirmed reading of relevant rules:
 - [x] commit-and-mr-guidelines.mdc
 - [x] mr-execution-result-report.mdc
-- [x] ai-decision-making-priorities.mdc（原則 9、10）
+- [x] ai-decision-making-priorities.mdc (Principles 9, 10)
 
-📖 規範重點摘要：
-- Commit message 必須英文
-- MR 建立前必須 rebase 到目標分支
-- 必須生成開發報告
-- 必須傳入 Agent 版本
-- 行動後必須輸出品質檢測報告
+📖 Key rule summary:
+- Commit message must be in English
+- Must rebase to target branch before creating MR
+- Must generate development report
+- Must pass Agent version
+- Must output quality check report after action
 
-✅ 自我檢視通過，開始執行任務。
+✅ Self-review passed, starting task execution.
 
-（然後才開始執行 Git 操作）
+(Then starts executing Git operations)
 ```
 
-**10.2 Agent 版本檢查**：
+**10.2 Agent version check**:
 
-**CRITICAL**: 每次執行任務前，AI **必須**檢查自身版本是否為最新，並在 chat 中進行自我問答確認。
+**CRITICAL**: Before executing each task, the AI **MUST** check whether its own version is the latest, and confirm via a self-Q&A in chat.
 
-**版本檢查流程**：
+**Version check flow**:
 
-1. **讀取當前版本**：
-   - 檢查 `version.json`（根目錄）或 `.pantheon/version.json`（掛載專案）
-   - 記錄當前版本號
+1. **Read current version**:
+   - Check `version.json` (root directory) or `.pantheon/version.json` (mounted project)
+   - Record current version number
 
-2. **自我問答格式**：
+2. **Self-Q&A format**:
 ```
-🤖 Agent 版本自我檢查：
+🤖 Agent version self-check:
 
-❓ 我是否已經是最新版本？
+❓ Am I already on the latest version?
 
-📋 當前版本資訊：
-- Pantheon: [版本號]
+📋 Current version info:
+- Pantheon: [version number]
 
-🔍 檢查結果：[最新 / 需要更新]
+🔍 Check result: [Latest / Needs update]
 ```
 
-3. **版本落後時的處理**：
-   - 如果發現版本落後，**必須**自動運行 `oracle` 腳本同步最新版本
-   - 同步完成後，重新讀取規範內容
-   - 依照最新版本的規範執行任務
+3. **Handling when version is behind**:
+   - If the version is found to be behind, **MUST** automatically run the `oracle` script to sync the latest version
+   - After sync, re-read the rule content
+   - Execute the task according to the latest version's rules
 
-**oracle 腳本執行**：
+**oracle script execution**:
 ```bash
-# 檢查路徑並執行 oracle
-# 如果在掛載專案中
+# Check path and execute oracle
+# If in a mounted project
 node .pantheon/.cursor/scripts/utilities/oracle.mjs
 
-# 如果在 Pantheon 專案本身
+# If in the Pantheon project itself
 node .cursor/scripts/utilities/oracle.mjs
 ```
 
-**版本落後時必須輸出的格式**：
+**Required output format when version is behind**:
 ```
-⚠️ Agent 版本落後，需要同步更新：
+⚠️ Agent version is behind — sync update needed:
 
-📋 當前版本：[舊版本號]
-📋 最新版本：[新版本號]
+📋 Current version: [old version number]
+📋 Latest version: [new version number]
 
-🔄 正在執行 oracle 腳本同步最新版本...
+🔄 Executing oracle script to sync to latest version...
 
-✅ 同步完成，已更新至最新版本。
-📖 重新讀取相關規範後繼續執行任務。
+✅ Sync complete, updated to latest version.
+📖 Re-reading relevant rules before continuing task execution.
 ```
 
-**禁止行為**：
-- ❌ 版本落後時仍依照舊版規範執行
-- ❌ 跳過版本檢查直接執行任務
-- ❌ 發現版本落後但不執行同步
+**Prohibited actions**:
+- ❌ Still executing based on old version rules when version is behind
+- ❌ Skipping version check to directly execute task
+- ❌ Discovering version is behind but not executing sync
 
-**10.3 行動後品質核對**：
+**10.3 Post-action quality review**:
 
-**CRITICAL**: 每次任務完成後，AI **必須**核對工作成果是否符合相關規範，並在 chat 中說明品質檢測結果。
+**CRITICAL**: After each task is complete, the AI **MUST** review whether the work meets the relevant rules, and report the quality check result in chat.
 
-**適用場景與檢核項目**：
+**Applicable scenarios and check items**:
 
-| 任務類型 | 必須檢核的項目 |
+| Task type | Items to check |
 |---|---|
-| MR 建立 | Description 格式、Labels 正確性、Assignee 設定、Reviewer 設定、開發報告完整性 |
-| Commit | Message 格式、Ticket 格式、語言（必須英文） |
-| 版本更新 | 版本號格式、所有版本檔案同步更新、Commit message 格式 |
-| 通知發送 | 通知內容正確性、權限設定正確 |
-| 檔案修改 | 影響範圍回報、副作用說明 |
+| MR creation | Description format, labels correctness, assignee setting, reviewer setting, development report completeness |
+| Commit | Message format, ticket format, language (must be English) |
+| Version update | Version number format, all version files updated in sync, commit message format |
+| Notification sent | Notification content correctness, permission settings correct |
+| File modification | Impact scope reported, side effects explained |
 
-**必須輸出的品質檢測格式**：
+**Required quality check format**:
 
 ```
-✅ 工作品質檢測報告：
+✅ Work quality check report:
 
-📋 任務類型：[任務類型]
-📋 完成時間：[時間戳]
+📋 Task type: [task type]
+📋 Completion time: [timestamp]
 
-🔍 規範符合性檢核：
+🔍 Rule compliance check:
 
-| 檢核項目 | 規範要求 | 實際結果 | 狀態 |
+| Check item | Rule requirement | Actual result | Status |
 |---|---|---|---|
-| [項目1] | [規範要求] | [實際值] | ✅/❌ |
-| [項目2] | [規範要求] | [實際值] | ✅/❌ |
+| [item 1] | [rule requirement] | [actual value] | ✅/❌ |
+| [item 2] | [rule requirement] | [actual value] | ✅/❌ |
 | ... | ... | ... | ... |
 
-📊 檢測結果：[全部通過 / 發現問題]
+📊 Check result: [All passed / Issues found]
 
-[如果全部通過]
-✅ 品質檢測通過，繼續下一步驟。
+[If all passed]
+✅ Quality check passed, continuing to next step.
 
-[如果發現問題]
-⚠️ 發現以下問題需要處理：
-- [問題1]：[說明]
-- [問題2]：[說明]
+[If issues found]
+⚠️ The following issues need to be addressed:
+- [Issue 1]: [description]
+- [Issue 2]: [description]
 
-❓ 是否需要我協助修正這些問題？
+❓ Would you like me to help fix these issues?
 ```
 
-**MR 建立後的完整檢核範例**：
+**Complete check example after MR creation**:
 
 ```
-✅ 工作品質檢測報告：
+✅ Work quality check report:
 
-📋 任務類型：MR 建立
-📋 MR 連結：[MR !1234](URL)
+📋 Task type: MR creation
+📋 MR link: [MR !1234](URL)
 
-🔍 規範符合性檢核：
+🔍 Rule compliance check:
 
-| 檢核項目 | 規範要求 | 實際結果 | 狀態 |
+| Check item | Rule requirement | Actual result | Status |
 |---|---|---|---|
-| Description | 包含開發報告 | ✅ 已包含關聯單資訊、變更摘要 | ✅ |
-| Labels | 正確的 labels | FE Board, AI | ✅ |
-| Assignee | 設定當前用戶 | @current.user | ✅ |
-| Reviewer | 依優先順序設定 | @william.chiang | ✅ |
-| Agent Version | 顯示在 Description 底部 | pantheon: 0.0.3 | ✅ |
-| Draft 狀態 | 預設為 Draft | Draft: ... | ✅ |
+| Description | Contains development report | ✅ Includes ticket info and change summary | ✅ |
+| Labels | Correct labels | FE Board, AI | ✅ |
+| Assignee | Set to current user | @current.user | ✅ |
+| Reviewer | Set by priority order | @william.chiang | ✅ |
+| Agent Version | Shown at bottom of Description | pantheon: 0.0.3 | ✅ |
+| Draft status | Default is Draft | Draft: ... | ✅ |
 
-📊 檢測結果：全部通過
+📊 Check result: All passed
 
-✅ 品質檢測通過，MR 已成功建立。
+✅ Quality check passed, MR has been successfully created.
 ```
 
-**執行流程**：
-1. 任務完成後立即執行品質檢測
-2. 逐項核對是否符合規範
-3. 在 chat 中輸出檢測報告
-4. 如果全部通過，繼續下一步驟
-5. 如果發現問題，停止並詢問用戶是否需要修正
+**Execution flow**:
+1. Execute quality check immediately after task completes
+2. Review compliance with rules item by item
+3. Output the check report in chat
+4. If all passed, continue to next step
+5. If issues are found, stop and ask user whether to fix them
 
-**禁止行為**：
-- ❌ 任務完成後不進行品質檢測
-- ❌ 發現問題但不報告
-- ❌ 品質檢測未通過就繼續下一步驟
-- ❌ 省略檢測報告的輸出
+**Prohibited actions**:
+- ❌ Not performing quality check after task completes
+- ❌ Finding issues but not reporting them
+- ❌ Continuing to next step without passing quality check
+- ❌ Omitting the check report output
 
-**10.4 強制執行機制**：
+**10.4 Strict enforcement mechanism**:
 
-**🚨 CRITICAL**: 為確保自我檢視原則被嚴格遵守，AI **必須**遵循以下強制執行機制：
+**🚨 CRITICAL**: To ensure the self-review principle is strictly followed, the AI **MUST** follow the enforcement mechanisms below:
 
-**10.4.1 行動前強制檢查**：
+**10.4.1 Pre-action mandatory checks**:
 
-在執行任何任務前，AI **必須**依序完成：
+Before executing any task, the AI **MUST** complete the following in order:
 
-| 步驟 | 內容 | 強制性 |
+| Step | Content | Mandatory |
 |---|---|---|
-| 1 | 識別任務類型 | 🚨 必須 |
-| 2 | 查找相關規範 | 🚨 必須 |
-| 3 | **輸出規範確認聲明**（見 10.1 格式） | 🚨 必須 |
-| 4 | 檢查 Agent 版本（見 10.2） | 🚨 必須 |
-| 5 | 確認無誤後才開始執行 | 🚨 必須 |
+| 1 | Identify task type | 🚨 Required |
+| 2 | Find relevant rules | 🚨 Required |
+| 3 | **Output rule confirmation declaration** (see 10.1 format) | 🚨 Required |
+| 4 | Check Agent version (see 10.2) | 🚨 Required |
+| 5 | Confirm no issues before starting execution | 🚨 Required |
 
-**10.4.2 行動後強制檢查**：
+**10.4.2 Post-action mandatory checks**:
 
-在任務完成後，AI **必須**立即：
+After task completion, the AI **MUST** immediately:
 
-| 步驟 | 內容 | 強制性 |
+| Step | Content | Mandatory |
 |---|---|---|
-| 1 | **輸出品質檢測報告**（見 10.3 格式） | 🚨 必須 |
-| 2 | 逐項核對規範符合性 | 🚨 必須 |
-| 3 | 如有問題，停止並詢問用戶 | 🚨 必須 |
+| 1 | **Output quality check report** (see 10.3 format) | 🚨 Required |
+| 2 | Review rule compliance item by item | 🚨 Required |
+| 3 | If issues exist, stop and ask user | 🚨 Required |
 
-**10.4.3 違規檢測與處理**：
+**10.4.3 Violation detection and handling**:
 
-**自我違規檢測**：AI 在執行過程中應持續自問：
-- 「我是否已輸出規範確認聲明？」
-- 「我是否已完成版本檢查？」
-- 「任務完成後，我是否已輸出品質檢測報告？」
+**Self-violation detection**: The AI should continuously self-ask during task execution:
+- "Have I already output the rule confirmation declaration?"
+- "Have I completed the version check?"
+- "After task completion, have I output the quality check report?"
 
-**違規處理流程**：
+**Violation handling flow**:
 
 ```
-發現違規（跳過自我檢視步驟）
+Violation discovered (self-review step skipped)
     ↓
-【立即停止】當前操作
+[STOP IMMEDIATELY] current operation
     ↓
-在 chat 中報告違規：
-    「⚠️ 違規報告：我未遵守原則 10 的自我檢視要求，
-     跳過了 [具體步驟]。現在補充執行。」
+Report violation in chat:
+    "⚠️ Violation report: I failed to follow the self-review requirement of Principle 10,
+     skipping [specific step]. Now performing catch-up execution."
     ↓
-從頭執行完整的自我檢視流程
+Execute the complete self-review flow from the beginning
     ↓
-在品質檢測報告中記錄此次違規
+Record this violation in the quality check report
 ```
 
-**違規嚴重程度**：
+**Violation severity**:
 
-| 違規類型 | 嚴重程度 | 處理方式 |
+| Violation type | Severity | Handling |
 |---|---|---|
-| 未輸出規範確認聲明就執行任務 | 🔴 嚴重 | 立即停止，補齊規範確認聲明 |
-| 未進行版本檢查 | 🟡 中度 | 補充執行版本檢查 |
-| 未輸出品質檢測報告 | 🔴 嚴重 | 立即補充輸出品質檢測報告 |
-| 品質檢測不完整 | 🟡 中度 | 補充缺失項目 |
+| Executed task without outputting rule confirmation declaration | 🔴 Serious | Stop immediately, add rule confirmation declaration |
+| Did not perform version check | 🟡 Moderate | Perform version check as catch-up |
+| Did not output quality check report | 🔴 Serious | Immediately add quality check report |
+| Incomplete quality check | 🟡 Moderate | Add missing items |
 
-**🚨 10.4.3.1 違規自動校正機制（強制執行）**：
+**🚨 10.4.3.1 Violation auto-correction mechanism (strict enforcement)**:
 
-**ABSOLUTE**: 當 AI 發現自己違反了自我檢視原則時，**必須自動執行校正流程**，補齊所有缺漏的步驟。此機制**不可被跳過**。
+**ABSOLUTE**: When the AI discovers it has violated the self-review principle, it **MUST automatically execute the correction flow** to make up for all missing steps. This mechanism **cannot be skipped**.
 
-**自動校正觸發點 1：工具調用時檢查**
+**Auto-correction trigger point 1: Check during tool call**
 
-在調用任何 `run_terminal_cmd`、`search_replace`、`write` 工具時，AI **必須**執行內部檢查：
+When calling any `run_terminal_cmd`, `search_replace`, `write` tool, the AI **MUST** perform an internal check:
 
 ```
-準備調用工具
+Preparing to call tool
     ↓
-【自動檢查】本次對話中是否已輸出「📋 行動前規範確認」？
-    ├─ 是 → 繼續執行工具調用
-    └─ 否 → 【強制校正】
+[AUTO CHECK] Has "📋 Pre-action rule confirmation" been output in this conversation?
+    ├─ Yes → Continue with tool call
+    └─ No → [FORCE CORRECTION]
             ↓
-        立即在 chat 中輸出：
-        「⚠️ 違規校正：我尚未完成行動前規範確認，現在補充執行。」
+        Immediately output in chat:
+        "⚠️ Violation correction: I have not yet completed the pre-action rule confirmation. Performing it now."
             ↓
-        輸出完整的規範確認聲明（見 10.1 格式）
+        Output complete rule confirmation declaration (see 10.1 format)
             ↓
-        然後才繼續執行工具調用
+        Then continue with the tool call
 ```
 
-**自動校正觸發點 2：回應結束前檢查**
+**Auto-correction trigger point 2: Check before response ends**
 
-在每次 AI 回應**結束前**，必須執行內部檢查：
+Before each AI response **ends**, an internal check must be performed:
 
 ```
-準備結束回應
+Preparing to end response
     ↓
-【自動檢查】本次任務是否已完成？
-    ├─ 否（任務進行中）→ 正常結束回應
-    └─ 是（任務已完成）
+[AUTO CHECK] Is the current task complete?
+    ├─ No (task in progress) → End response normally
+    └─ Yes (task complete)
             ↓
-        【自動檢查】是否已輸出「✅ 工作品質檢測報告」？
-            ├─ 是 → 正常結束回應
-            └─ 否 → 【強制校正】
+        [AUTO CHECK] Has "✅ Work quality check report" been output?
+            ├─ Yes → End response normally
+            └─ No → [FORCE CORRECTION]
                     ↓
-                立即在回應中補充品質檢測報告（見 10.3 格式）
+                Immediately add quality check report in the response (see 10.3 format)
                     ↓
-                然後才結束回應
+                Then end response
 ```
 
-**自動校正觸發點 3：事後發現違規**
+**Auto-correction trigger point 3: Post-hoc violation discovered**
 
-當 AI 在任務過程中發現自己已經執行了工具但沒有先完成規範確認時：
+When the AI discovers during a task that it has already executed a tool without completing the rule confirmation:
 
 ```
-發現已執行工具但沒有規範確認
+Discovered tool was executed without rule confirmation
     ↓
-【不可忽略】必須立即在 chat 中輸出校正報告：
+[CANNOT IGNORE] Must immediately output a correction report in chat:
 
-⚠️ 違規校正報告：
+⚠️ Violation correction report:
 
-我在本次任務中違反了「原則 10：自我檢視原則」：
-- 違規行為：[具體描述，如「未輸出規範確認聲明就執行 git status」]
-- 違規時間點：[如「收到 cr single-ticket 指令後」]
+I violated "Principle 10: Self-Review Principle" in this task:
+- Violation: [specific description, e.g., "executed git status without outputting rule confirmation declaration"]
+- When: [e.g., "after receiving cr single-ticket instruction"]
 
-🔄 現在補充執行缺漏的步驟：
+🔄 Now performing the missing steps:
 
-📋 行動前規範確認：
-[完整的規範確認內容，見 10.1 格式]
+📋 Pre-action rule confirmation:
+[Full rule confirmation content, see 10.1 format]
 
-✅ 校正完成，繼續執行任務。
+✅ Correction complete, continuing task execution.
 ```
 
-**任務結束時的強制校正**：
-
-當任務完成但發現未輸出品質檢測報告時：
+**Force correction when task ends without quality check report**:
 
 ```
-⚠️ 違規校正報告：
+⚠️ Violation correction report:
 
-我在本次任務中違反了「原則 10：自我檢視原則」：
-- 違規行為：任務完成後未輸出品質檢測報告
+I violated "Principle 10: Self-Review Principle" in this task:
+- Violation: Did not output quality check report after task completion
 
-🔄 現在補充執行：
+🔄 Now performing catch-up:
 
-✅ 工作品質檢測報告：
-[完整的品質檢測報告內容，見 10.3 格式]
+✅ Work quality check report:
+[Full quality check report content, see 10.3 format]
 
-📝 違規記錄：本次任務存在自我檢視違規，已補充校正。
+📝 Violation record: This task had a self-review violation; correction has been applied.
 ```
 
-**強制執行規則**：
+**Strict enforcement rules**:
 
-| 規則 | 說明 |
+| Rule | Description |
 |---|---|
-| **不可跳過校正** | 發現違規後，校正步驟是強制性的，不可因任何理由省略 |
-| **不可事後忽略** | 即使任務「已經完成」，也必須補充缺漏的自我檢視步驟 |
-| **校正優先於繼續** | 發現違規時，必須先完成校正，才能繼續後續操作 |
-| **記錄違規** | 校正報告必須明確說明違規行為和時間點 |
+| **Correction cannot be skipped** | After a violation is found, the correction step is mandatory and cannot be omitted for any reason |
+| **Cannot ignore after the fact** | Even if the task is "already complete", missing self-review steps must be added |
+| **Correction before continuing** | When a violation is found, correction must be completed before continuing subsequent operations |
+| **Record violations** | Correction reports must clearly state the violation and its timing |
 
-**10.4.4 防止任務導向思維覆蓋**：
+**10.4.4 Prevent task-oriented thinking from overriding**:
 
-**🚨 ABSOLUTE**: 自我檢視步驟的優先級**高於**任務完成。
+**🚨 ABSOLUTE**: Self-review steps have **higher priority** than task completion.
 
-- ❌ 不可因為「任務很簡單」而跳過自我檢視
-- ❌ 不可因為「用戶在等待」而跳過自我檢視
-- ❌ 不可因為「之前做過類似任務」而跳過自我檢視
-- ❌ 不可因為「規範沒有變化」而跳過自我檢視
-- ✅ 每次任務都是獨立的，都需要完整的自我檢視
-- ✅ 自我檢視是任務的一部分，不是額外負擔
+- ❌ Cannot skip self-review because "the task is simple"
+- ❌ Cannot skip self-review because "the user is waiting"
+- ❌ Cannot skip self-review because "similar tasks have been done before"
+- ❌ Cannot skip self-review because "the rules haven't changed"
+- ✅ Each task is independent and requires a complete self-review
+- ✅ Self-review is part of the task, not an extra burden
 
-### 原則 11：規則衝突處理準則
+### Principle 11: Rule Conflict Handling Guidelines
 
-**🚨 CRITICAL**: 當用戶指令與專案內規則相悖時，AI **不可直接執行**，必須先與用戶確認並說明風險。
+**🚨 CRITICAL**: When user instructions conflict with project rules, the AI **MUST NOT execute directly** — it must first confirm with the user and explain the risks.
 
-**11.1 規則優先級確立**：
+**11.1 Rule priority hierarchy**:
 
-**ABSOLUTE**: `ai-decision-making-priorities.mdc` 為**最高準則**。當任何其他規則與本規則衝突時，**以本規則為準**。
+**ABSOLUTE**: `ai-decision-making-priorities.mdc` is the **highest rule**. When any other rule conflicts with this rule, **this rule takes precedence**.
 
-**規則優先級順序**：
-1. **最高優先級**：`ai-decision-making-priorities.mdc`（本規則）
-2. **次優先級**：專案特定規則（如架構規範、代碼風格規範等）
-3. **一般優先級**：通用慣例和最佳實踐
+**Rule priority order**:
+1. **Highest priority**: `ai-decision-making-priorities.mdc` (this rule)
+2. **Second priority**: Project-specific rules (architecture rules, code style rules, etc.)
+3. **General priority**: Common conventions and best practices
 
-**11.2 用戶指令與專案規則相悖的處理**：
+**11.2 Handling user instructions that conflict with project rules**:
 
-**CRITICAL**: 當用戶提供的指令或資訊明確與當前專案內相關規則相悖時，AI **必須**：
+**CRITICAL**: When user instructions or information explicitly conflict with relevant rules in the current project, the AI **MUST**:
 
-1. **立即停止**：不可直接執行違反規則的指令
-2. **說明衝突**：在 chat 中清楚說明用戶指令與哪些規則相悖
-3. **提供風險說明**：說明執意執行可能產生的風險和後果
-4. **等待用戶決定**：讓用戶在充分了解風險後做出決定
-5. **記錄決策**：如果用戶堅持執行，記錄此為用戶明確決定
+1. **Stop immediately**: Must not directly execute instructions that violate the rules
+2. **Explain the conflict**: Clearly state in chat which rules the user's instruction conflicts with
+3. **Provide risk explanation**: Explain the risks and consequences of insisting on execution
+4. **Wait for user decision**: Let the user make a decision after fully understanding the risks
+5. **Record the decision**: If the user insists on execution, record this as an explicit user decision
 
-**適用場景範例**：
+**Applicable scenario examples**:
 
-| 場景 | 用戶指令 | 專案規則 | 正確處理 |
+| Scenario | User instruction | Project rule | Correct handling |
 |---|---|---|---|
-| 功能同步規則 | 「只修改 A 功能，不要動 B 功能」 | 規則規定「調整 A 功能時必須同步調整 B 功能」 | 停止並說明衝突，提供風險 |
-| 代碼風格規則 | 「使用 var 宣告變數」 | 規則規定「必須使用 const/let」 | 停止並說明衝突，提供風險 |
-| 架構規則 | 「在 Provider 中直接調用 API」 | 規則規定「Provider 不可執行 side effects」 | 停止並說明衝突，提供風險 |
-| 命名規則 | 「函數命名用中文」 | 規則規定「函數命名必須使用英文」 | 停止並說明衝突，提供風險 |
+| Feature sync rule | "Only modify feature A, don't touch feature B" | Rule says "when adjusting feature A, feature B must be synced" | Stop and explain conflict, provide risk |
+| Code style rule | "Use var to declare variables" | Rule says "must use const/let" | Stop and explain conflict, provide risk |
+| Architecture rule | "Call API directly in Provider" | Rule says "Provider must not execute side effects" | Stop and explain conflict, provide risk |
+| Naming rule | "Use Chinese for function names" | Rule says "function names must use English" | Stop and explain conflict, provide risk |
 
-**必須輸出的衝突說明格式**：
-
-```
-⚠️ 指令與專案規則衝突，依據「原則 11」進行處理：
-
-📋 用戶指令：
-[用戶的具體指令內容]
-
-📜 相關專案規則：
-- 規則來源：[規則檔案路徑]
-- 規則內容：[規則的具體描述]
-
-⚡ 衝突說明：
-[說明用戶指令與規則的具體衝突點]
-
-🚨 執意執行的風險：
-1. [風險1]：[風險說明]
-2. [風險2]：[風險說明]
-3. [風險3]：[風險說明]
-
-❓ 請確認您的決定：
-- **選項 A**：遵循專案規則，調整指令內容
-- **選項 B**：了解風險後，仍堅持執行原指令
-- **選項 C**：取消此次操作
-```
-
-**11.3 用戶堅持執行的處理**：
-
-如果用戶在了解風險後仍堅持執行違反規則的指令：
-
-1. **再次確認**：明確詢問「您確定要執行此操作嗎？這將違反 [規則名稱]」
-2. **執行並記錄**：在用戶明確確認後執行，並在相關位置（如 commit message、MR description）記錄此為用戶明確決定
-3. **不承擔責任**：AI 已盡告知義務，後續問題由用戶決策承擔
-
-**記錄格式**：
-```
-⚠️ 此變更違反專案規則 [規則名稱]，經用戶 [用戶名/時間] 明確確認後執行。
-```
-
-**11.4 與本規則衝突的特殊處理**：
-
-**ABSOLUTE**: 如果用戶指令與本規則（`ai-decision-making-priorities.mdc`）相悖：
-
-- ❌ **絕對不可**繞過本規則的核心原則
-- ❌ **絕對不可**自動修改受保護檔案
-- ❌ **絕對不可**跳過詢問步驟
-- ✅ 必須向用戶說明本規則為最高準則
-- ✅ 必須說明無法執行違反本規則的指令
-- ✅ 可以建議用戶修改本規則後再執行（需經授權流程）
-
-**範例場景**：
-
-**錯誤做法**：
-```
-用戶說「直接修改腳本不用問我」→ AI 直接修改腳本
-```
-
-**正確做法**：
-```
-用戶說「直接修改腳本不用問我」→ AI 說明這違反本規則的「絕對最高準則」
-    → 說明無法執行此指令
-    → 建議：如果用戶希望更改此行為，可以授權修改本規則
-    → 等待用戶決定
-```
-
-**11.5 禁止行為**：
-- ❌ 直接執行明顯違反專案規則的指令
-- ❌ 假設用戶知道自己在違反規則
-- ❌ 省略風險說明
-- ❌ 在用戶未明確確認前執行違規操作
-- ❌ 繞過本規則的任何核心原則
-
-## 決策樹
-
-### 當檢測到問題時
+**Required conflict explanation format**:
 
 ```
-檢測到問題
+⚠️ Instruction conflicts with project rules — handling per "Principle 11":
+
+📋 User instruction:
+[Specific instruction content]
+
+📜 Relevant project rules:
+- Rule source: [rule file path]
+- Rule content: [specific rule description]
+
+⚡ Conflict explanation:
+[Explain the specific conflict between the user's instruction and the rules]
+
+🚨 Risks of insisting on execution:
+1. [Risk 1]: [risk explanation]
+2. [Risk 2]: [risk explanation]
+3. [Risk 3]: [risk explanation]
+
+❓ Please confirm your decision:
+- **Option A**: Follow project rules and adjust the instruction
+- **Option B**: Proceed with the original instruction after understanding the risks
+- **Option C**: Cancel this operation
+```
+
+**11.3 Handling when user insists on execution**:
+
+If the user insists on executing an instruction that violates the rules after understanding the risks:
+
+1. **Re-confirm**: Explicitly ask "Are you sure you want to execute this? It will violate [rule name]"
+2. **Execute and record**: After the user explicitly confirms, execute and record in relevant locations (such as commit message, MR description) that this was an explicit user decision
+3. **No liability**: The AI has fulfilled its duty to inform; subsequent issues are the user's responsibility
+
+**Record format**:
+```
+⚠️ This change violates project rule [rule name] and was executed after explicit confirmation by user [user/time].
+```
+
+**11.4 Special handling for conflicts with this rule**:
+
+**ABSOLUTE**: If user instructions conflict with this rule (`ai-decision-making-priorities.mdc`):
+
+- ❌ **Absolutely cannot** bypass the core principles of this rule
+- ❌ **Absolutely cannot** automatically modify protected files
+- ❌ **Absolutely cannot** skip the asking step
+- ✅ Must inform the user that this rule is the highest rule
+- ✅ Must state that instructions violating this rule cannot be executed
+- ✅ May suggest the user modify this rule before executing (requires authorization flow)
+
+**Example scenarios**:
+
+**Wrong approach**:
+```
+User says "directly modify the script without asking me" → AI directly modifies script
+```
+
+**Correct approach**:
+```
+User says "directly modify the script without asking me" → AI explains this violates the "Absolute Top Rule" of this rule
+    → States that this instruction cannot be executed
+    → Suggests: if the user wants to change this behavior, they can authorize modification of this rule
+    → Waits for user decision
+```
+
+**11.5 Prohibited actions**:
+- ❌ Directly executing instructions that obviously violate project rules
+- ❌ Assuming the user knows they are violating rules
+- ❌ Omitting risk explanation
+- ❌ Executing the violating operation without explicit user confirmation
+- ❌ Bypassing any core principle of this rule
+
+## Decision Tree
+
+### When a problem is detected
+
+```
+Problem detected
     ↓
-是否需要修改代碼？
-    ├─ 否 → 繼續執行任務
-    └─ 是 → 【必須停止】
+Does it require code modification?
+    ├─ No → Continue task execution
+    └─ Yes → [MUST STOP]
             ↓
-        在 chat 中報告問題
+        Report problem in chat
             ↓
-        明確詢問：「是否需要我協助修正這些問題？」
+        Explicitly ask: "Would you like me to help fix these issues?"
             ↓
-        等待用戶回應
-            ├─ 用戶同意 → 執行修復 → 顯示變更 → 詢問確認 → 繼續任務
-            └─ 用戶拒絕 → 停止任務，讓用戶自行處理
+        Wait for user response
+            ├─ User agrees → Execute fix → Show changes → Ask for confirmation → Continue task
+            └─ User declines → Stop task, let user handle it
 ```
 
-### 當執行自動化指令時
+### When executing an automated command
 
 ```
-收到自動化指令（如 cr-single-ticket）
+Received automated command (e.g., cr-single-ticket)
     ↓
-執行流程步驟（檢查 Git、推斷信息等）
+Execute process steps (check Git, infer info, etc.)
     ↓
-檢查 Cursor rules
-    ├─ 通過 → 繼續執行 commit
-    └─ 違規 → 【必須停止】
+Check Cursor rules
+    ├─ Pass → Continue executing commit
+    └─ Violation → [MUST STOP]
             ↓
-        在 chat 中列出違規和修正建議
+        List violations and fix suggestions in chat
             ↓
-        提供 Apply 按鈕
+        Provide Apply button
             ↓
-        等待用戶選擇
-            ├─ 用戶套用修正 → 繼續 commit 流程
-            └─ 用戶跳過 → 警告後繼續（或停止，視情況而定）
+        Wait for user selection
+            ├─ User applies fix → Continue commit flow
+            └─ User skips → Warn then continue (or stop, depending on situation)
 ```
 
-## 具體執行規則
+## Concrete Execution Rules
 
-### 規則 1：檢查階段
+### Rule 1: Check phase
 
-**當執行任何檢查時**：
+**When executing any check**:
 
-1. **只負責檢查和報告**
-   - 檢查代碼是否符合規範
-   - 檢查是否有錯誤或警告
-   - 檢查是否有規則違規
+1. **Responsible only for checking and reporting**
+   - Check whether code meets standards
+   - Check for errors or warnings
+   - Check for rule violations
 
-2. **不執行任何修改**
-   - 不修改任何檔案
-   - 不調用任何修復腳本
-   - 不執行任何自動修復
+2. **Do not execute any modifications**
+   - Do not modify any files
+   - Do not call any fix scripts
+   - Do not execute any auto-fixes
 
-3. **提供清晰的報告**
-   - 列出所有發現的問題
-   - 說明問題的嚴重性
-   - 提供修正建議
+3. **Provide clear reports**
+   - List all discovered issues
+   - State the severity of issues
+   - Provide fix suggestions
 
-### 規則 2：修復階段
+### Rule 2: Fix phase
 
-**當需要修復問題時**：
+**When a problem needs to be fixed**:
 
-1. **必須先詢問**
-   - 明確詢問：「是否需要我協助修正這些問題？」
-   - 等待用戶明確回應
-   - 不假設用戶意圖
+1. **Must ask first**
+   - Explicitly ask: "Would you like me to help fix these issues?"
+   - Wait for explicit user response
+   - Do not assume user intent
 
-2. **獲得同意後才執行**
-   - 只有在用戶明確同意後才執行修復
-   - 執行修復後顯示變更內容
-   - 再次詢問確認
+2. **Execute only after consent is obtained**
+   - Only execute fixes after the user explicitly agrees
+   - Show changes after executing fixes
+   - Confirm again
 
-3. **尊重用戶選擇**
-   - 如果用戶拒絕，停止並讓用戶自行處理
-   - 如果用戶選擇部分修復，只修復同意的部分
-   - 不強迫用戶接受所有修復
+3. **Respect user choices**
+   - If user declines, stop and let user handle it themselves
+   - If user chooses partial fix, only fix the agreed parts
+   - Do not force the user to accept all fixes
 
-### 規則 3：自動化指令執行
+### Rule 3: Automated command execution
 
-**當執行自動化指令時**：
+**When executing automated commands**:
 
-1. **理解指令範圍**
-   - 自動化 = 自動執行流程步驟
-   - 自動化 ≠ 自動修復問題
-   - 自動化 ≠ 跳過詢問步驟
+1. **Understand the command scope**
+   - Automation = auto-execute process steps
+   - Automation ≠ auto-fix problems
+   - Automation ≠ skip asking steps
 
-2. **遇到問題時停止**
-   - 檢測到問題時立即停止
-   - 報告問題並詢問
-   - 等待用戶指示
+2. **Stop when problems are encountered**
+   - Stop immediately when a problem is detected
+   - Report problem and ask
+   - Wait for user instructions
 
-3. **繼續流程的條件**
-   - 所有問題已解決（用戶同意修復並完成）
-   - 用戶明確指示繼續
-   - 用戶選擇跳過某些問題（需警告）
+3. **Conditions for continuing the flow**
+   - All problems have been resolved (user agreed to fix and it's done)
+   - User explicitly instructs to continue
+   - User chose to skip certain problems (warning required)
 
-## 範例場景
+## Example Scenarios
 
-### 場景 1：執行 cr-single-ticket 時檢測到違規
+### Scenario 1: Violation detected while executing cr-single-ticket
 
-**錯誤做法**：
+**Wrong approach**:
 ```
-檢測到違規 → 自動修復 → 繼續 commit
-```
-
-**正確做法**：
-```
-檢測到違規 → 停止 commit 流程 → 在 chat 中列出違規 → 提供 Apply 按鈕 → 等待用戶選擇 → 用戶套用後繼續
+Violation detected → Auto-fix → Continue commit
 ```
 
-### 場景 2：檢測到 lint 錯誤
-
-**錯誤做法**：
+**Correct approach**:
 ```
-檢測到 lint 錯誤 → 自動執行 pnpm run lint --fix → 繼續 commit
+Violation detected → Stop commit flow → List violations in chat → Provide Apply button → Wait for user selection → Continue after user applies
 ```
 
-**正確做法**：
-```
-檢測到 lint 錯誤 → 停止 commit 流程 → 在 chat 中報告錯誤 → 詢問：「是否需要我協助修正這些問題？」 → 等待用戶回應 → 用戶同意後修復 → 繼續
-```
+### Scenario 2: Lint error detected
 
-### 場景 3：檢測到架構違規
-
-**錯誤做法**：
+**Wrong approach**:
 ```
-檢測到 Provider 有 API 調用 → 自動重構 → 繼續 commit
+Lint error detected → Auto-execute pnpm run lint --fix → Continue commit
 ```
 
-**正確做法**：
+**Correct approach**:
 ```
-檢測到 Provider 有 API 調用 → 停止 commit 流程 → 在 chat 中報告違規 → 提供修正建議和 Apply 按鈕 → 等待用戶選擇 → 用戶套用後繼續
+Lint error detected → Stop commit flow → Report error in chat → Ask: "Would you like me to help fix these issues?" → Wait for user response → Fix after user agrees → Continue
 ```
 
-## 與其他規則的整合
+### Scenario 3: Architecture violation detected
 
-此規則與以下規則緊密相關，必須同時遵守：
+**Wrong approach**:
+```
+Provider has API call detected → Auto-refactor → Continue commit
+```
 
-1. **commit-and-mr-guidelines.mdc**：定義了 commit 流程中的代碼修改限制
-2. **auto-commit-and-mr.md**：定義了自動化指令的執行流程
+**Correct approach**:
+```
+Provider has API call detected → Stop commit flow → Report violation in chat → Provide fix suggestion and Apply button → Wait for user selection → Continue after user applies
+```
 
-**重要**：當這些規則之間有衝突時，**此規則的優先級最高**。即使用戶要求執行自動化指令，如果檢測到需要修改代碼的問題，也必須先停止並詢問。
+## Integration with Other Rules
 
-## 檢查清單
+This rule is closely related to the following rules, which must all be followed simultaneously:
 
-在執行任何任務時，AI 應該自問：
+1. **commit-and-mr-guidelines.mdc**: Defines code modification restrictions in the commit flow
+2. **auto-commit-and-mr.md**: Defines the automated command execution flow
 
-**🚨 行動前檢查（必須在第一個工具調用之前完成）**：
-- [ ] 🔴 我是否已在 chat 中**輸出規範確認聲明**？（若否，立即停止並輸出）
-- [ ] 我是否已確認並閱讀過相關的底層規範？
-- [ ] 我是否已在規範確認聲明中列出規範重點摘要？
-- [ ] 我是否已檢查 Agent 版本是否為最新？
-- [ ] 若版本落後，我是否已執行 oracle 腳本同步最新版本？
-- [ ] 🔴 **我是否已檢查並確認所有前置條件都符合？**（如：分支類型、變更狀態等）
-- [ ] 🔴 若前置條件不符，我是否已停止並詢問用戶？
-- [ ] 🔴 我是否已完成上述所有步驟後，才開始執行第一個工具調用？
-- [ ] 🔴 **我是否真正理解規範內容，而不只是輸出聲明？**（聲明 ≠ 執行）
+**Important**: When there are conflicts between these rules, **this rule's priority is highest**. Even if the user requests executing an automated command, if a problem requiring code modification is detected, it must be stopped and the user asked first.
 
-**執行中檢查**：
-- [ ] 我是否檢測到任何需要修改代碼的問題？
-- [ ] 如果是，我是否已經停止任務並詢問用戶？
-- [ ] 我是否假設了用戶的意圖？
-- [ ] 我是否混淆了「檢查」和「修復」？
-- [ ] 我是否為了完成任務而跳過了詢問步驟？
-- [ ] 我是否正確理解了自動化指令的範圍？
-- [ ] 若為結構調整，我是否保留了所有原始邏輯？
-- [ ] 若為結構調整，我是否已驗證改動前後邏輯完全一致？
-- [ ] 若有多種可行方案，我是否已列出所有方案並標示最佳方案？
-- [ ] 我是否已在 chat 中回報改動影響範圍與情境？
-- [ ] 若執行 Git 操作，我是否已記錄變更清單？
-- [ ] 若執行 Git 操作，我是否已驗證變更完整性？
-- [ ] 若 Git 操作失敗，我是否停止而非嘗試自動清理？
-- [ ] 若需要修改 `.cursor/` 目錄下的檔案，我是否已輸出檢查聲明並等待用戶授權？
-- [ ] 若是「明顯的錯誤修正」，我是否仍然遵守「先詢問」的原則？
-- [ ] 若腳本執行失敗，我是否停止任務並報告錯誤，而非嘗試修改腳本？
-- [ ] 我是否將「腳本執行錯誤」視為需要報告的狀況，而非需要自動修復的問題？
+## Checklist
 
-**如果以上任何一項的答案是「是」或「不確定」，必須立即停止並重新評估。**
+When executing any task, the AI should self-ask:
 
-## 總結
+**🚨 Pre-action checks (must be completed before the first tool call)**:
+- [ ] 🔴 Have I **output the rule confirmation declaration** in chat? (If not, stop immediately and output it)
+- [ ] Have I confirmed and read the relevant underlying rules?
+- [ ] Have I listed the key rule summary in the rule confirmation declaration?
+- [ ] Have I checked whether the Agent version is the latest?
+- [ ] If the version is behind, have I run the oracle script to sync to the latest version?
+- [ ] 🔴 **Have I checked and confirmed all preconditions are met?** (e.g., branch type, change status, etc.)
+- [ ] 🔴 If preconditions are not met, have I stopped and asked the user?
+- [ ] 🔴 Have I completed all the above steps before starting the first tool call?
+- [ ] 🔴 **Do I truly understand the rule content, not just output the declaration?** (Declaration ≠ Execution)
 
-**核心原則**：
-1. **先詢問再修改** > 完成任務
-2. **檢查 ≠ 修復**，必須嚴格區分
-3. **遇到問題立即停止**，設定明確停止點
-4. **不假設用戶意圖**，必須明確詢問
-5. **自動化 ≠ 自動修復**，理解指令範圍
-6. **結構調整只移動不修改**，保留原始邏輯並驗證一致性
-7. **多方案先列出再選擇**，標示最佳方案供用戶決定
-8. **每次改動必須回報**，說明影響範圍與情境
-9. **Git 操作必須驗證**，確保用戶變更不遺失
-10. **自我檢視三階段**，行動前確認規範與版本、行動後核對品質
-11. **規則衝突須先停止**，說明衝突與風險後等待用戶決定，本規則為最高準則
-12. **違規必須自動校正**，發現缺漏步驟時必須立即補齊，不可忽略
-13. **聲明 ≠ 執行**，輸出規範確認聲明後必須真正按照規範執行，不可流於形式
-14. **前置條件必須檢查**，執行 command 前必須確認當前狀態符合執行條件
+**During execution checks**:
+- [ ] Have I detected any problem requiring code modification?
+- [ ] If yes, have I stopped the task and asked the user?
+- [ ] Have I assumed the user's intent?
+- [ ] Have I confused "check" with "fix"?
+- [ ] Have I skipped the asking step in order to complete the task?
+- [ ] Have I correctly understood the scope of automated commands?
+- [ ] For structural adjustments, have I preserved all original logic?
+- [ ] For structural adjustments, have I verified the logic is completely consistent before and after?
+- [ ] If there are multiple viable solutions, have I listed all solutions and marked the best one?
+- [ ] Have I reported the change impact scope and context in chat?
+- [ ] For Git operations, have I recorded the change list?
+- [ ] For Git operations, have I verified change integrity?
+- [ ] If a Git operation failed, have I stopped rather than attempting auto-cleanup?
+- [ ] If modifying a file under `.cursor/`, have I output the check declaration and waited for user authorization?
+- [ ] Even for "obvious bug fixes", have I still followed the "ask first" principle?
+- [ ] If a script execution failed, have I stopped the task and reported the error, rather than attempting to modify the script?
+- [ ] Have I treated "script execution error" as a situation to report, not a problem to auto-fix?
 
-**最高優先級**：遵守守則 > 完成任務 > 數據安全（用戶變更不可遺失）
+**If any of the above answers is "yes" or "uncertain", stop immediately and re-evaluate.**
 
-**決策標準**：當需要修改代碼時，無論任務目標為何，都必須先停止並詢問用戶。執行 Git 操作時，必須驗證變更完整性。執行任何任務時，必須完成行動前規範確認、版本檢查，以及行動後品質核對。當用戶指令與專案規則相悖時，必須先停止並說明衝突與風險，等待用戶明確決定。**若發現自己違反自我檢視原則，必須立即執行自動校正流程，補齊所有缺漏的步驟。執行 command 前必須檢查前置條件，若條件不符必須停止並詢問用戶。輸出規範確認聲明只是開始，必須真正按照規範內容執行每一步。**本規則（`ai-decision-making-priorities.mdc`）為最高準則，任何其他規則與本規則衝突時以本規則為準。
+## Summary
+
+**Core principles**:
+1. **Ask before modifying** > completing the task
+2. **Check ≠ fix** — must be strictly distinguished
+3. **Stop immediately on problems** — define explicit stop points
+4. **Do not assume user intent** — always ask explicitly
+5. **Automation ≠ auto-fix** — understand the command scope
+6. **Structural adjustments: move only, don't modify** — preserve original logic and verify consistency
+7. **Multiple solutions: list then select** — mark best solution for user decision
+8. **Report every change** — state impact scope and context
+9. **Git operations must be verified** — ensure user changes are not lost
+10. **Three-stage self-review** — confirm rules and version before action, review quality after action
+11. **Rule conflicts must pause** — explain conflicts and risks, wait for user decision; this rule is the highest
+12. **Violations must auto-correct** — when missing steps are found, immediately make up for them; cannot be ignored
+13. **Declaration ≠ execution** — after outputting the rule confirmation declaration, must truly execute each step per the rules; cannot be formalistic
+14. **Preconditions must be checked** — before executing a command, current state must meet execution conditions
+
+**Highest priority**: Follow guidelines > complete task > data safety (user changes must not be lost)
+
+**Decision standard**: When code modification is needed, regardless of task objective, stop immediately and ask the user. When executing Git operations, change integrity must be verified. When executing any task, pre-action rule confirmation, version check, and post-action quality review must all be completed. When user instructions conflict with project rules, stop first and explain the conflict and risks, then wait for explicit user decision. **If self-review principle is violated, the auto-correction flow must be immediately executed to make up for all missing steps. Before executing a command, preconditions must be checked; if conditions are not met, stop and ask the user. Outputting a rule confirmation declaration is just the start — every step must truly be executed according to the rule content.** This rule (`ai-decision-making-priorities.mdc`) is the highest rule; when any other rule conflicts with this rule, this rule takes precedence.
