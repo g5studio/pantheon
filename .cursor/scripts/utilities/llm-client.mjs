@@ -17,6 +17,40 @@ function safeJsonParse(text) {
   }
 }
 
+const DEFAULT_CUSTOM_OPENAI_API_URL =
+  "http://service-hub-ai.balinese-python.ts.net/v1";
+
+function normalizeApiDomain(raw) {
+  if (typeof raw !== "string") return "";
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  return trimmed.replace(/\/+$/, "");
+}
+
+function resolveChatCompletionsUrl({
+  url,
+  customOpenAiApiUrl,
+  legacyApiDomain,
+}) {
+  if (typeof url === "string" && url.trim()) {
+    return url.trim();
+  }
+
+  const explicitDomain = normalizeApiDomain(
+    customOpenAiApiUrl || legacyApiDomain || "",
+  );
+  const envDomain = normalizeApiDomain(
+    process.env.CUSTOM_OPENAI_API_URL || "",
+  );
+  const defaultDomain = DEFAULT_CUSTOM_OPENAI_API_URL;
+  const baseDomain = explicitDomain || envDomain || defaultDomain;
+
+  if (baseDomain.endsWith("/chat/completions")) {
+    return baseDomain;
+  }
+  return `${baseDomain}/chat/completions`;
+}
+
 function normalizeMessagesForOperatorProxy(messages) {
   const list = Array.isArray(messages) ? messages : [];
 
@@ -154,10 +188,13 @@ export async function callOpenAiChatCompletions({
   model,
   messages,
   temperature = 0.2,
-  url = "https://api.openai.com/v1/chat/completions",
+  url = null,
+  customOpenAiApiUrl = null,
+  apiDomain = null,
   responseFormat = null,
   compassApiToken = null,
   compassOperatorProxyUrl = null,
+  forceCompassProxy = false,
 }) {
   const effectiveApiKey =
     typeof apiKey === "string" && apiKey.trim()
@@ -170,34 +207,34 @@ export async function callOpenAiChatCompletions({
     throw new Error("messages 必須是非空 array");
   }
 
-  // Fallback: if caller has no OPENAI_API_KEY, use Compass operator-proxy when COMPASS_API_TOKEN exists.
-  if (typeof effectiveApiKey !== "string" || !effectiveApiKey.trim()) {
+  if (forceCompassProxy) {
     const effectiveCompassApiToken =
       typeof compassApiToken === "string" && compassApiToken.trim()
         ? compassApiToken.trim()
         : (process.env.COMPASS_API_TOKEN || "").trim();
+    const { system, content } = normalizeMessagesForOperatorProxy(messages);
+    const compassResp = await callCompassOperatorProxy({
+      compassApiToken: effectiveCompassApiToken,
+      url: compassOperatorProxyUrl,
+      content,
+      system,
+      provider: "openai",
+      model,
+      responseFormat,
+    });
 
-    if (effectiveCompassApiToken) {
-      const { system, content } = normalizeMessagesForOperatorProxy(messages);
-      const compassResp = await callCompassOperatorProxy({
-        compassApiToken: effectiveCompassApiToken,
-        url: compassOperatorProxyUrl,
-        content,
-        system,
-        provider: "openai",
-        model,
-        responseFormat,
-      });
-
-      const result = typeof compassResp?.result === "string" ? compassResp.result : "";
-      return {
-        choices: [{ message: { content: result } }],
-        _provider: "compass",
-      };
-    }
-
-    throw new Error("缺少 OpenAI API key（請設定 OPENAI_API_KEY 或傳入 apiKey）");
+    const result = typeof compassResp?.result === "string" ? compassResp.result : "";
+    return {
+      choices: [{ message: { content: result } }],
+      _provider: "compass",
+    };
   }
+
+  const effectiveUrl = resolveChatCompletionsUrl({
+    url,
+    customOpenAiApiUrl,
+    legacyApiDomain: apiDomain,
+  });
 
   const body = {
     model,
@@ -208,18 +245,22 @@ export async function callOpenAiChatCompletions({
     body.response_format = responseFormat;
   }
 
-  const resp = await fetch(url, {
+  const headers = {
+    "Content-Type": "application/json",
+  };
+  if (effectiveApiKey) {
+    headers.Authorization = `Bearer ${effectiveApiKey}`;
+  }
+
+  const resp = await fetch(effectiveUrl, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${effectiveApiKey}`,
-    },
+    headers,
     body: JSON.stringify(body),
   });
 
   if (!resp.ok) {
     const txt = await resp.text().catch(() => "");
-    throw new Error(`OpenAI API 失敗: ${resp.status} ${txt}`.trim());
+    throw new Error(`LLM API 失敗: ${resp.status} ${txt}`.trim());
   }
 
   return await resp.json();
@@ -227,8 +268,11 @@ export async function callOpenAiChatCompletions({
 
 export async function callOpenAiJson({
   apiKey,
+  customOpenAiApiUrl = null,
+  apiDomain = null,
   compassApiToken = null,
   compassOperatorProxyUrl = null,
+  forceCompassProxy = false,
   model,
   system,
   input,
@@ -255,12 +299,15 @@ export async function callOpenAiJson({
 
   const data = await callOpenAiChatCompletions({
     apiKey,
+    customOpenAiApiUrl,
+    apiDomain,
     model,
     messages,
     temperature,
     responseFormat,
     compassApiToken,
     compassOperatorProxyUrl,
+    forceCompassProxy,
   });
 
   const content = data?.choices?.[0]?.message?.content;

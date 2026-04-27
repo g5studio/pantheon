@@ -72,9 +72,12 @@ node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs -- --
 
 - LLM 分析（至少一種；`--no-llm` 可跳過）
   - `OPENAI_API_KEY`（openai provider）
+  - `CUSTOM_OPENAI_API_URL`（openai-compatible API domain，預設：`http://service-hub-ai.balinese-python.ts.net/v1`）
   - `ADAPT_LLM_MODEL`（可選，未指定時預設使用 `gpt-5.2`）
 
-> 若未設置 `OPENAI_API_KEY`，`adapt` 會**自動降級為 `--no-llm` 模式**（只更新 `sources/meta/cache`，不會報錯）。
+> 若未設置 `OPENAI_API_KEY`，`adapt` 會改走 `CUSTOM_OPENAI_API_URL`（若未設定則使用預設 domain）。
+>
+> 需要完全跳過 LLM 時，請明確使用 `--no-llm`。
 >
 > **git-flow 推導**：無論是否呼叫 LLM，`adapt` 都會從本地 git 收集分支與 merge 模式（`git branch -a`、`git log --grep="Merge branch"` 等），並寫入 `git-flow` 區塊。有 LLM 時由 LLM 分析推導；無 LLM 時以規則推導（`inferGitFlowFromData`）。
 >
