@@ -413,12 +413,22 @@ async function suggestLabelsWithLlm({
 }) {
   const envLocal = loadEnvLocal();
   const apiKey = process.env.OPENAI_API_KEY || envLocal.OPENAI_API_KEY || null;
+  const customOpenAiApiUrl =
+    process.env.CUSTOM_OPENAI_API_URL ||
+    envLocal.CUSTOM_OPENAI_API_URL ||
+    "http://service-hub-ai.balinese-python.ts.net/v1";
   const compassApiToken =
     process.env.COMPASS_API_TOKEN || envLocal.COMPASS_API_TOKEN || null;
   const compassOperatorProxyUrl =
     process.env.COMPASS_OPERATOR_PROXY_URL ||
     envLocal.COMPASS_OPERATOR_PROXY_URL ||
     null;
+  const llmProvider = String(
+    process.env.LABEL_LLM_PROVIDER || envLocal.LABEL_LLM_PROVIDER || "",
+  )
+    .trim()
+    .toLowerCase();
+  const forceCompassProxy = llmProvider === "compass";
 
   const explicitModel =
     typeof envLocal.LABEL_LLM_MODEL === "string" ? envLocal.LABEL_LLM_MODEL : null;
@@ -468,8 +478,10 @@ async function suggestLabelsWithLlm({
   console.log(`🤖 正在請 LLM 建議 labels... (model=${model})`);
   const resp = await callOpenAiJson({
     apiKey,
+    customOpenAiApiUrl,
     compassApiToken,
     compassOperatorProxyUrl,
+    forceCompassProxy,
     model,
     system,
     input,
