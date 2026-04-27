@@ -332,4 +332,5 @@ AI: 💬 正在將報告留言到 Jira 單內...
 - [start-task.md](mdc:.cursor/commands/operator/start-task.md)：start-task 流程規範
 - [operation-modes.mdc](mdc:.cursor/rules/operator/start-task/operation-modes.mdc)：行為模式規範（謹慎模式）
 - [reverse-engineering-execution.mdc](mdc:.cursor/rules/operator/reverse-engineering-execution.mdc)：reverse-engineering 專屬執行規範（留言前確認、留言後等同謹慎模式）
+- [@troubleshooting-guide.mdc (1-199)](mdc:.cursor/rules/troubleshooting-guide.mdc)：錯誤處理 SOP（所有既定程序遇到問題時，必須第一時間先依此指南排查）
 

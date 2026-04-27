@@ -250,4 +250,5 @@ AI: [執行 cr single-ticket 流程]
 
 - [ai-decision-making-priorities.mdc](mdc:.cursor/rules/ai-decision-making-priorities.mdc)：所有修改必須先詢問用戶
 - [commit-and-mr-guidelines.mdc](mdc:.cursor/rules/cr/commit-and-mr-guidelines.mdc)：commit 和 MR 相關規範
+- [@troubleshooting-guide.mdc (1-199)](mdc:.cursor/rules/troubleshooting-guide.mdc)：錯誤處理 SOP（所有既定程序遇到問題時，必須第一時間先依此指南排查）
 
