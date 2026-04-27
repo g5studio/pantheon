@@ -230,37 +230,12 @@ export async function callOpenAiChatCompletions({
       responseFormat,
     });
 
-<<<<<<< HEAD
-    if (effectiveCompassApiToken) {
-      const { system, content } = normalizeMessagesForOperatorProxy(messages);
-      const compassResp = await callCompassOperatorProxy({
-        compassApiToken: effectiveCompassApiToken,
-        url: compassOperatorProxyUrl,
-        content,
-        system,
-        provider: "openai",
-        model,
-        responseFormat,
-      });
-
-      const result =
-        typeof compassResp?.result === "string" ? compassResp.result : "";
-      return {
-        choices: [{ message: { content: result } }],
-        _provider: "compass",
-      };
-    }
-
-    throw new Error(
-      "缺少 OpenAI API key（請設定 OPENAI_API_KEY 或傳入 apiKey）",
-    );
-=======
-    const result = typeof compassResp?.result === "string" ? compassResp.result : "";
+    const result =
+      typeof compassResp?.result === "string" ? compassResp.result : "";
     return {
       choices: [{ message: { content: result } }],
       _provider: "compass",
     };
->>>>>>> 6b375c815a7cd94a006b65489639cd8bad3ced8a
   }
 
   const effectiveUrl = resolveChatCompletionsUrl({
