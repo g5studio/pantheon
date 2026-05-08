@@ -4,7 +4,7 @@
  * Pantheon script runner (path-resilient wrapper)
  *
  * Purpose:
- * - Avoid "script not found" issues in mounted (.pantheon) / symlinked environments.
+ * - Avoid "script not found" issues in mounted (.pantheon) / installed-copy environments.
  * - Resolve script path from multiple known roots, then execute with Node.
  *
  * Usage:
@@ -22,7 +22,7 @@
  */
 
 import { spawnSync } from "child_process";
-import { existsSync } from "fs";
+import { existsSync, readdirSync } from "fs";
 import { isAbsolute, join, normalize } from "path";
 import { getProjectRoot } from "./env-loader.mjs";
 
@@ -71,6 +71,14 @@ function normalizeScriptSpecifier(raw) {
   return normalized;
 }
 
+function listInstalledScriptCandidates(rootDir, rel) {
+  if (!existsSync(rootDir)) return [];
+
+  return readdirSync(rootDir, { withFileTypes: true })
+    .filter((dirent) => dirent.isDirectory())
+    .map((dirent) => join(rootDir, dirent.name, rel));
+}
+
 function buildCandidatePaths(projectRoot, scriptSpecifier) {
   const rel = normalizeScriptSpecifier(scriptSpecifier);
   if (!rel) return [];
@@ -83,8 +91,9 @@ function buildCandidatePaths(projectRoot, scriptSpecifier) {
     join(projectRoot, ".pantheon", ".cursor", "scripts", rel),
     // Pantheon repo itself
     join(projectRoot, ".cursor", "scripts", rel),
-    // Some workspaces aggregate via symlink folder
-    join(projectRoot, ".cursor", "scripts", "prometheus", rel),
+    // Installed Pantheon copies in target projects
+    ...listInstalledScriptCandidates(join(projectRoot, ".cursor", "scripts"), rel),
+    ...listInstalledScriptCandidates(join(projectRoot, ".agent", "scripts"), rel),
   ];
 }
 
