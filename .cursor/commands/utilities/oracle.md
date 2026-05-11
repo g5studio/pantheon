@@ -56,7 +56,7 @@ node .pantheon/.cursor/scripts/utilities/oracle.mjs
 
 ### 5. 更新 .gitignore
 
-自動將 `.pantheon/`、`.cursor/.../<install-name>/` 與 `.agent/.../<install-name>/` 加入專案 `.gitignore`，避免 Pantheon 安裝產物被提交到目標專案；ignore 範圍只涵蓋 Pantheon installed copy，不會忽略 `.cursor` 或 `.agent` 內其他專案自有項目。
+自動將 `.pantheon/`、`.cursor/.env.local`、`.cursor/.../<install-name>/` 與 `.agent/.../<install-name>/` 加入專案 `.gitignore`，避免 Pantheon 安裝產物與本地環境變數被提交到目標專案；ignore 範圍只涵蓋 Pantheon installed copy 與 `.cursor/.env.local`，不會忽略 `.cursor` 或 `.agent` 內其他專案自有項目。
 
 ### 6. 檢查並建立環境變數配置檔
 
@@ -152,7 +152,7 @@ AI:
 - ✅ 此指令可重複執行，會自動更新 pantheon 到最新版本
 - ✅ 不會影響 `.cursor` 或 `.agent` 目錄中的其他檔案（如專案特有的腳本）
 - ✅ `.env.local` 只會在不存在時建立，不會覆蓋既有配置
-- ✅ 會自動維護 `.gitignore`，只包含 `.cursor/*/<install-name>/` 與 `.agent/*/<install-name>/` 這類 Pantheon 安裝路徑
+- ✅ 會自動維護 `.gitignore`，包含 `.cursor/.env.local`、`.cursor/*/<install-name>/` 與 `.agent/*/<install-name>/` 這類 Pantheon 本地安裝路徑
 - ⚠️ 首次設置後請務必編輯 `.cursor/.env.local` 填入實際配置值
 - ✅ pantheon 根據用戶初始化時設置的分支進行更新
 

@@ -77,7 +77,7 @@ npm run pantheon:oracle
 1. Clone Pantheon 到 `.pantheon/` 目錄
 2. 將 Pantheon 的 `commands`、`scripts`、`skills` 複製安裝到 `.cursor/*/{deities}/` 與 `.agent/*/{deities}/` 下
 3. 將 `.cursor/rules/{deities}/` 安裝到目標專案，保留 Cursor 規則能力
-4. 自動將 `.pantheon/`、`.cursor/.../{deities}/`、`.agent/.../{deities}/` 加入目標專案 `.gitignore`
+4. 自動將 `.pantheon/`、`.cursor/.env.local`、`.cursor/.../{deities}/`、`.agent/.../{deities}/` 加入目標專案 `.gitignore`
 5. 自動建立 `.cursor/.env.local` 環境變數配置檔（從模板）
 
 `pantheon:oracle` 執行後會：

@@ -140,6 +140,7 @@ function updateGitignore(cwd, installFolderName) {
   const gitignorePath = join(cwd, ".gitignore");
   const entries = [
     ".pantheon/",
+    ".cursor/.env.local",
     `.cursor/commands/${installFolderName}/`,
     `.cursor/rules/${installFolderName}/`,
     `.cursor/scripts/${installFolderName}/`,
