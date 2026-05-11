@@ -5,7 +5,7 @@
  *
  * Materialize Pantheon bootstrap guidance into the target project so the agent
  * can still read Pantheon usage instructions even when mounted paths or
- * symlinked content are not discoverable.
+ * generated installed content are not discoverable.
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";

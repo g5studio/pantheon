@@ -8,30 +8,31 @@ This rule explains the path handling when the Pantheon project is mounted into a
 
 ## Background
 
-The Pantheon project is designed to be mounted into other projects via **git clone** and synchronized via **symbolic links**. This architecture means that all file paths inside Pantheon will have different actual locations in the target project.
+The Pantheon project is designed to be mounted into other projects via **git clone** and installed into local tooling folders by copying files. This architecture keeps `.pantheon/` as the source of truth and materializes generated copies under the target project's `.cursor/` and `.agent/` folders.
 
 ## Path Mapping Rules
 
 ### Path Structure After Mounting
 
-When Pantheon is mounted into another project, all files are located under the `.pantheon/` folder:
+When Pantheon is mounted into another project, the source files are located under the `.pantheon/` folder and `oracle` installs generated copies into the target project:
 
-| Pantheon internal path | Actual path after mounting |
-|---|---|
-| `.cursor/rules/` | `.pantheon/.cursor/rules/` |
-| `.cursor/scripts/` | `.pantheon/.cursor/scripts/` |
-| `.cursor/commands/` | `.pantheon/.cursor/commands/` |
-| `.cursor/version.json` | `.pantheon/.cursor/version.json` |
+| Pantheon internal path | Source path after mounting | Installed target paths |
+|---|---|---|
+| `.cursor/rules/` | `.pantheon/.cursor/rules/` | `.cursor/rules/<install-name>/` |
+| `.cursor/scripts/` | `.pantheon/.cursor/scripts/` | `.cursor/scripts/<install-name>/`, `.agent/scripts/<install-name>/` |
+| `.cursor/commands/` | `.pantheon/.cursor/commands/` | `.cursor/commands/<install-name>/`, `.agent/commands/<install-name>/` |
+| `.cursor/skills/` | `.pantheon/.cursor/skills/` | `.cursor/skills/<install-name>/`, `.agent/skills/<install-name>/` |
+| `.cursor/version.json` | `.pantheon/.cursor/version.json` | Not copied by default |
 
 ### Example Path Reference
 
-| Type | Pantheon internal path | Actual path in target project |
+| Type | Pantheon source path | Installed path in target project |
 |---|---|---|
-| Notification script | `.cursor/scripts/notification/notify-cursor-rules-failed.mjs` | `.pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs` |
-| Commit script | `.cursor/scripts/cr/agent-commit.mjs` | `.pantheon/.cursor/scripts/cr/agent-commit.mjs` |
-| MR script | `.cursor/scripts/cr/create-mr.mjs` | `.pantheon/.cursor/scripts/cr/create-mr.mjs` |
-| Jira script | `.cursor/scripts/jira/read-jira-ticket.mjs` | `.pantheon/.cursor/scripts/jira/read-jira-ticket.mjs` |
-| Version update script | `.cursor/scripts/utilities/bump-version.mjs` | `.pantheon/.cursor/scripts/utilities/bump-version.mjs` |
+| Notification script | `.pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs` | `.cursor/scripts/<install-name>/notification/notify-cursor-rules-failed.mjs`, `.agent/scripts/<install-name>/notification/notify-cursor-rules-failed.mjs` |
+| Commit script | `.pantheon/.cursor/scripts/cr/agent-commit.mjs` | `.cursor/scripts/<install-name>/cr/agent-commit.mjs`, `.agent/scripts/<install-name>/cr/agent-commit.mjs` |
+| MR script | `.pantheon/.cursor/scripts/cr/create-mr.mjs` | `.cursor/scripts/<install-name>/cr/create-mr.mjs`, `.agent/scripts/<install-name>/cr/create-mr.mjs` |
+| Jira script | `.pantheon/.cursor/scripts/jira/read-jira-ticket.mjs` | `.cursor/scripts/<install-name>/jira/read-jira-ticket.mjs`, `.agent/scripts/<install-name>/jira/read-jira-ticket.mjs` |
+| Version update script | `.pantheon/.cursor/scripts/utilities/bump-version.mjs` | `.cursor/scripts/<install-name>/utilities/bump-version.mjs`, `.agent/scripts/<install-name>/utilities/bump-version.mjs` |
 
 ## Script Execution Rules
 
@@ -39,7 +40,7 @@ When Pantheon is mounted into another project, all files are located under the `
 
 ## Important: Do Not Rely on "Search Results" to Determine Whether a Script Exists
 
-When Pantheon is mounted into another project, it is common to also use **symbolic links** for synchronization. In some workspaces, search tools (e.g., Glob) may return **empty results** for `.pantheon/` or symlink directories, even though the files actually exist and can be seen with `ls`.
+When Pantheon is mounted into another project, generated folders under `.cursor/*/<install-name>/` and `.agent/*/<install-name>/` may be ignored by Git or tooling indexes. In some workspaces, search tools (e.g., Glob) may return **empty results** for `.pantheon/` or generated installation directories, even though the files actually exist and can be seen with `ls`.
 
 Therefore:
 - **Do NOT** use "searching for script filenames" to "discover" / "locate" Pantheon scripts
@@ -53,23 +54,28 @@ Before executing a script, the AI **MUST** check paths in the following order:
 1. **Prefer the `.pantheon/.cursor/scripts/` path (based on whether the file exists)**
    - If the script file exists: use `.pantheon/.cursor/scripts/...`
 
-2. **Fallback to `.cursor/scripts/` path (Pantheon project itself)**
+2. **Fallback to `.cursor/scripts/` path (Pantheon project itself or direct local copy)**
    - If the script file exists: use `.cursor/scripts/...`
 
-3. **Secondary fallback: `.cursor/scripts/prometheus/` path (some projects aggregate via symlinks)**
-   - If the script file exists: use `.cursor/scripts/prometheus/...`
+3. **Secondary fallback: `.cursor/scripts/<install-name>/` path (installed copy)**
+   - If the script file exists: use `.cursor/scripts/<install-name>/...`
+
+4. **Tooling fallback: `.agent/scripts/<install-name>/` path (installed copy for `.agent` consumers)**
+   - If the script file exists: use `.agent/scripts/<install-name>/...`
 
 ### Path Check Example
 
 ```bash
 # Determine path based on whether the file exists
-# (avoids misjudging from a folder existing without full content, or symlink/search limitations)
+# (avoids misjudging from a folder existing without full content or search limitations)
 if [ -f ".pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs" ]; then
   SCRIPT_PATH=".pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs"
 elif [ -f ".cursor/scripts/notification/notify-cursor-rules-failed.mjs" ]; then
   SCRIPT_PATH=".cursor/scripts/notification/notify-cursor-rules-failed.mjs"
 elif [ -f ".cursor/scripts/prometheus/notification/notify-cursor-rules-failed.mjs" ]; then
   SCRIPT_PATH=".cursor/scripts/prometheus/notification/notify-cursor-rules-failed.mjs"
+elif [ -f ".agent/scripts/prometheus/notification/notify-cursor-rules-failed.mjs" ]; then
+  SCRIPT_PATH=".agent/scripts/prometheus/notification/notify-cursor-rules-failed.mjs"
 else
   echo "❌ Cannot find notify-cursor-rules-failed.mjs. Please verify the Pantheon mount path is correct." 1>&2
   exit 1
@@ -87,6 +93,7 @@ node "$SCRIPT_PATH" "$@"
 1. **First check whether the `.pantheon/` folder exists**
 2. **Determine the path to use based on the check result**
 3. **Execute the script using the correct full path**
+4. **Do not edit generated installed copies** under `.cursor/*/<install-name>/` or `.agent/*/<install-name>/`; change Pantheon source instead
 
 ### Execution Examples
 
@@ -108,37 +115,38 @@ node .pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs "flui
 
 Here is a quick reference for commonly used script paths:
 
-| Script purpose | Pantheon path | Mounted path |
+| Script purpose | Pantheon source path | Installed paths |
 |---|---|---|
 | **Notification** | | |
-| System notification | `.cursor/scripts/notification/notify-cursor-rules-failed.mjs` | `.pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs` |
+| System notification | `.pantheon/.cursor/scripts/notification/notify-cursor-rules-failed.mjs` | `.cursor/scripts/<install-name>/notification/notify-cursor-rules-failed.mjs`, `.agent/scripts/<install-name>/notification/notify-cursor-rules-failed.mjs` |
 | **Commit & MR** | | |
-| Agent Commit | `.cursor/scripts/cr/agent-commit.mjs` | `.pantheon/.cursor/scripts/cr/agent-commit.mjs` |
-| Create MR | `.cursor/scripts/cr/create-mr.mjs` | `.pantheon/.cursor/scripts/cr/create-mr.mjs` |
-| Auto Commit & MR | `.cursor/scripts/cr/auto-commit-and-mr.mjs` | `.pantheon/.cursor/scripts/cr/auto-commit-and-mr.mjs` |
+| Agent Commit | `.pantheon/.cursor/scripts/cr/agent-commit.mjs` | `.cursor/scripts/<install-name>/cr/agent-commit.mjs`, `.agent/scripts/<install-name>/cr/agent-commit.mjs` |
+| Create MR | `.pantheon/.cursor/scripts/cr/create-mr.mjs` | `.cursor/scripts/<install-name>/cr/create-mr.mjs`, `.agent/scripts/<install-name>/cr/create-mr.mjs` |
+| Auto Commit & MR | `.pantheon/.cursor/scripts/cr/auto-commit-and-mr.mjs` | `.cursor/scripts/<install-name>/cr/auto-commit-and-mr.mjs`, `.agent/scripts/<install-name>/cr/auto-commit-and-mr.mjs` |
 | **Jira** | | |
-| Read Jira Ticket | `.cursor/scripts/jira/read-jira-ticket.mjs` | `.pantheon/.cursor/scripts/jira/read-jira-ticket.mjs` |
-| Read Confluence | `.cursor/scripts/jira/read-confluence-page.mjs` | `.pantheon/.cursor/scripts/jira/read-confluence-page.mjs` |
-| Update Confluence | `.cursor/scripts/jira/update-confluence-page.mjs` | `.pantheon/.cursor/scripts/jira/update-confluence-page.mjs` |
+| Read Jira Ticket | `.pantheon/.cursor/scripts/jira/read-jira-ticket.mjs` | `.cursor/scripts/<install-name>/jira/read-jira-ticket.mjs`, `.agent/scripts/<install-name>/jira/read-jira-ticket.mjs` |
+| Read Confluence | `.pantheon/.cursor/scripts/jira/read-confluence-page.mjs` | `.cursor/scripts/<install-name>/jira/read-confluence-page.mjs`, `.agent/scripts/<install-name>/jira/read-confluence-page.mjs` |
+| Update Confluence | `.pantheon/.cursor/scripts/jira/update-confluence-page.mjs` | `.cursor/scripts/<install-name>/jira/update-confluence-page.mjs`, `.agent/scripts/<install-name>/jira/update-confluence-page.mjs` |
 | **Utilities** | | |
-| Version update | `.cursor/scripts/utilities/bump-version.mjs` | `.pantheon/.cursor/scripts/utilities/bump-version.mjs` |
-| Parameter detection | `.cursor/scripts/utilities/parameter-detector.mjs` | `.pantheon/.cursor/scripts/utilities/parameter-detector.mjs` |
+| Version update | `.pantheon/.cursor/scripts/utilities/bump-version.mjs` | `.cursor/scripts/<install-name>/utilities/bump-version.mjs`, `.agent/scripts/<install-name>/utilities/bump-version.mjs` |
+| Parameter detection | `.pantheon/.cursor/scripts/utilities/parameter-detector.mjs` | `.cursor/scripts/<install-name>/utilities/parameter-detector.mjs`, `.agent/scripts/<install-name>/utilities/parameter-detector.mjs` |
 
 ## Rule and Command File Paths
 
-Rule (`.mdc`) and command (`.md`) files follow the same path rules:
+Rule (`.mdc`), command (`.md`), and skill (`SKILL.md`) files follow the same path rules:
 
-| Type | Pantheon path | Mounted path |
+| Type | Pantheon source path | Installed paths |
 |---|---|---|
-| Rule files | `.cursor/rules/*.mdc` | `.pantheon/.cursor/rules/*.mdc` |
-| Command files | `.cursor/commands/*.md` | `.pantheon/.cursor/commands/*.md` |
+| Rule files | `.pantheon/.cursor/rules/*.mdc` | `.cursor/rules/<install-name>/*.mdc` |
+| Command files | `.pantheon/.cursor/commands/*.md` | `.cursor/commands/<install-name>/*.md`, `.agent/commands/<install-name>/*.md` |
+| Skill files | `.pantheon/.cursor/skills/*/SKILL.md` | `.cursor/skills/<install-name>/*/SKILL.md`, `.agent/skills/<install-name>/*/SKILL.md` |
 
 ## Notes
 
 1. **Path check must be performed before each execution**: Do not assume paths; always verify each time
 2. **Error handling**: If neither path has the script, report an error and stop execution
 3. **Relative vs. absolute paths**: Recommend using paths relative to the project root
-4. **Symbolic links**: The target project may use symbolic links for file sync; keep this in mind when resolving paths
+4. **Generated copies**: The target project may contain generated Pantheon copies under `.cursor/*/<install-name>/` and `.agent/*/<install-name>/`; do not edit them directly
 
 ## Error Troubleshooting
 
@@ -146,7 +154,7 @@ If you encounter a "file not found" error when executing a script, check:
 
 1. Whether the correct path prefix (`.pantheon/` or no prefix) was used
 2. Whether the `.pantheon/` folder exists
-3. Whether the symbolic link was correctly created
+3. Whether `oracle` installed the generated copy into `.cursor` or `.agent`
 4. Whether the script file actually exists at the expected path
 
 ### Recommended Diagnostic Commands (Does Not Rely on Search)
@@ -156,9 +164,11 @@ If you encounter a "file not found" error when executing a script, check:
 ls -la ".pantheon/.cursor/scripts/jira" 2>/dev/null || true
 ls -la ".cursor/scripts/jira" 2>/dev/null || true
 ls -la ".cursor/scripts/prometheus/jira" 2>/dev/null || true
+ls -la ".agent/scripts/prometheus/jira" 2>/dev/null || true
 
 # Directly check if the file exists (most reliable)
 test -f ".pantheon/.cursor/scripts/jira/read-jira-ticket.mjs" && echo "found: .pantheon" || true
 test -f ".cursor/scripts/jira/read-jira-ticket.mjs" && echo "found: .cursor" || true
-test -f ".cursor/scripts/prometheus/jira/read-jira-ticket.mjs" && echo "found: prometheus symlink" || true
+test -f ".cursor/scripts/prometheus/jira/read-jira-ticket.mjs" && echo "found: .cursor installed copy" || true
+test -f ".agent/scripts/prometheus/jira/read-jira-ticket.mjs" && echo "found: .agent installed copy" || true
 ```

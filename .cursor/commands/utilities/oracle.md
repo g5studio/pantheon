@@ -1,10 +1,10 @@
 ---
-description: 將 pantheon 的 .cursor 內容同步到專案中，自動建立符號連結
+description: 將 pantheon 的 commands/scripts/skills 複製安裝到專案中
 ---
 
 # Oracle - Pantheon Cursor 同步指令
 
-此指令會自動將 `.pantheon/.cursor` 的內容透過符號連結同步到專案的 `.cursor` 目錄中，並拉取用戶初始化時設置的分支最新內容。
+此指令會自動將 `.pantheon/.cursor` 的內容複製安裝到專案的 `.cursor/*/<install-name>/` 與 `.agent/*/<install-name>/` 目錄中，並拉取用戶初始化時設置的分支最新內容。
 
 ## 執行方式
 
@@ -30,25 +30,39 @@ node .pantheon/.cursor/scripts/utilities/oracle.mjs
 - 若有本地變更，自動重置
 - 執行 `git fetch` 和 `git pull` 拉取最新內容
 
-### 3. 建立 .cursor 目錄結構
+### 3. 建立 .cursor / .agent 目錄結構
 
 建立以下目錄（如果不存在）：
 - `.cursor/commands/`
 - `.cursor/rules/`
 - `.cursor/scripts/`
+- `.cursor/skills/`
+- `.agent/commands/`
+- `.agent/scripts/`
+- `.agent/skills/`
 
-### 4. 建立 prometheus 符號連結
+### 4. 複製安裝 Pantheon 內容
 
-在每個目錄中建立 `prometheus` 符號連結，指向 `.pantheon/.cursor` 對應的目錄：
-- `.cursor/commands/prometheus` -> `../../.pantheon/.cursor/commands`
-- `.cursor/rules/prometheus` -> `../../.pantheon/.cursor/rules`
-- `.cursor/scripts/prometheus` -> `../../.pantheon/.cursor/scripts`
+將 `.pantheon/.cursor` 對應內容複製到專案本地安裝目錄：
+- `.cursor/commands/<install-name>`
+- `.cursor/rules/<install-name>`
+- `.cursor/scripts/<install-name>`
+- `.cursor/skills/<install-name>`
+- `.agent/commands/<install-name>`
+- `.agent/scripts/<install-name>`
+- `.agent/skills/<install-name>`
 
-### 5. 檢查並建立環境變數配置檔
+每次執行都會重建上述安裝目錄；請不要在這些目錄中手動修改檔案，否則下一次 `oracle` 會覆蓋。
+
+### 5. 更新 .gitignore
+
+自動將 `.pantheon/`、`.cursor/.env.local`、`.cursor/.../<install-name>/` 與 `.agent/.../<install-name>/` 加入專案 `.gitignore`，避免 Pantheon 安裝產物與本地環境變數被提交到目標專案；ignore 範圍只涵蓋 Pantheon installed copy 與 `.cursor/.env.local`，不會忽略 `.cursor` 或 `.agent` 內其他專案自有項目。
+
+### 6. 檢查並建立環境變數配置檔
 
 檢查 `.cursor/.env.local` 是否存在，若不存在則以 pantheon 的 `.env.example` 為模板建立。
 
-### 6. 輸出結果
+### 7. 輸出結果
 
 顯示同步結果摘要：
 
@@ -58,17 +72,26 @@ node .pantheon/.cursor/scripts/utilities/oracle.mjs
 目錄結構：
 .cursor/
 ├── commands/
-│   └── prometheus/ -> .pantheon/.cursor/commands
+│   └── <install-name>/
 ├── rules/
-│   └── prometheus/ -> .pantheon/.cursor/rules
+│   └── <install-name>/
 ├── scripts/
-│   └── prometheus/ -> .pantheon/.cursor/scripts
+│   └── <install-name>/
+├── skills/
+│   └── <install-name>/
 └── .env.local
+.agent/
+├── commands/
+│   └── <install-name>/
+├── scripts/
+│   └── <install-name>/
+└── skills/
+    └── <install-name>/
 
 可用的指令：
-- commands/prometheus/cr/
-- commands/prometheus/utilities/
-- commands/prometheus/agent-operator/
+- commands/<install-name>/cr/
+- commands/<install-name>/utilities/
+- commands/<install-name>/agent-operator/
 ```
 
 ## 使用範例
@@ -82,11 +105,12 @@ AI:
 
 輸出:
 1. 檢查 .pantheon → 存在
-2. 拉取 pantheon 當前分支 (prometheus) 最新內容
-3. 建立 .cursor/commands, .cursor/rules, .cursor/scripts 目錄
-4. 建立 prometheus 符號連結
-5. .env.local 不存在，建立模板檔案
-6. 輸出結果，並提示用戶完善 .env.local 配置
+2. 拉取 pantheon 當前分支最新內容
+3. 建立 .cursor 與 .agent 安裝目錄
+4. 複製安裝 Pantheon 內容
+5. 更新 .gitignore
+6. .env.local 不存在，建立模板檔案
+7. 輸出結果，並提示用戶完善 .env.local 配置
 ```
 
 **範例 2: 更新 pantheon 到最新版本**
@@ -100,9 +124,10 @@ AI:
 1. 檢查 .pantheon → 存在
 2. 拉取 pantheon 當前分支最新內容 → 已更新
 3. 目錄已存在，跳過建立
-4. 移除舊的符號連結，建立新的
-5. .env.local 已存在，跳過建立
-6. 輸出結果
+4. 重建 Pantheon 安裝內容
+5. .gitignore 已包含 Pantheon 安裝產物
+6. .env.local 已存在，跳過建立
+7. 輸出結果
 ```
 
 **範例 3: pantheon 已是最新版本**
@@ -115,17 +140,19 @@ AI:
 輸出:
 1. 檢查 .pantheon → 存在
 2. 拉取 pantheon 當前分支最新內容 → 已是最新版本
-3. 重新建立符號連結
-4. 輸出結果
+3. 重建 Pantheon 安裝內容
+4. 更新或確認 .gitignore
+5. 輸出結果
 ```
 
 ## 注意事項
 
 - ⚠️ 此指令需要專案已經包含 `.pantheon` 資料夾（透過 `pantheon:descend` 安裝）
-- ⚠️ 如果 `.cursor/commands/prometheus` 等已存在且不是符號連結，請先手動移除
+- ⚠️ `.cursor/*/<install-name>` 與 `.agent/*/<install-name>` 是可重建安裝產物，不應手動修改
 - ✅ 此指令可重複執行，會自動更新 pantheon 到最新版本
-- ✅ 不會影響 `.cursor` 目錄中的其他檔案（如專案特有的腳本）
+- ✅ 不會影響 `.cursor` 或 `.agent` 目錄中的其他檔案（如專案特有的腳本）
 - ✅ `.env.local` 只會在不存在時建立，不會覆蓋既有配置
+- ✅ 會自動維護 `.gitignore`，包含 `.cursor/.env.local`、`.cursor/*/<install-name>/` 與 `.agent/*/<install-name>/` 這類 Pantheon 本地安裝路徑
 - ⚠️ 首次設置後請務必編輯 `.cursor/.env.local` 填入實際配置值
 - ✅ pantheon 根據用戶初始化時設置的分支進行更新
 

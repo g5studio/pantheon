@@ -17,7 +17,7 @@ description: 生成/更新 repo 知識庫 JSON（labels / coding-standard / git-
 
 - `.cursor/skills/pantheon-mounted-workflow/SKILL.md`
 
-此 skill 用於讓 AI 在 mounted `.pantheon/` 或 symlink 內容偶爾不可見時，仍能從目標專案本地理解 Pantheon 的正確運作方式。
+此 skill 用於讓 AI 在 mounted `.pantheon/` 或 generated install 內容偶爾不可見時，仍能從目標專案本地理解 Pantheon 的正確運作方式。
 
 ---
 
