@@ -42,13 +42,15 @@ The AI should automatically detect links in the user's message:
 
 ```bash
 # ✅ Strongly recommended: use "path check + fallback" approach
-# (avoids search returning empty for .pantheon + symlink directories)
+# (avoids search returning empty for .pantheon + generated install directories)
 if [ -f ".pantheon/.cursor/scripts/jira/read-confluence-page.mjs" ]; then
   SCRIPT_PATH=".pantheon/.cursor/scripts/jira/read-confluence-page.mjs"
 elif [ -f ".cursor/scripts/jira/read-confluence-page.mjs" ]; then
   SCRIPT_PATH=".cursor/scripts/jira/read-confluence-page.mjs"
 elif [ -f ".cursor/scripts/prometheus/jira/read-confluence-page.mjs" ]; then
   SCRIPT_PATH=".cursor/scripts/prometheus/jira/read-confluence-page.mjs"
+elif [ -f ".agent/scripts/prometheus/jira/read-confluence-page.mjs" ]; then
+  SCRIPT_PATH=".agent/scripts/prometheus/jira/read-confluence-page.mjs"
 else
   echo "❌ Cannot find read-confluence-page.mjs. Please verify the Pantheon mount path is correct." 1>&2
   exit 1
@@ -61,13 +63,15 @@ node "$SCRIPT_PATH" "<confluence-url>"
 
 ```bash
 # ✅ Strongly recommended: use "path check + fallback" approach
-# (avoids search returning empty for .pantheon + symlink directories)
+# (avoids search returning empty for .pantheon + generated install directories)
 if [ -f ".pantheon/.cursor/scripts/jira/read-jira-ticket.mjs" ]; then
   SCRIPT_PATH=".pantheon/.cursor/scripts/jira/read-jira-ticket.mjs"
 elif [ -f ".cursor/scripts/jira/read-jira-ticket.mjs" ]; then
   SCRIPT_PATH=".cursor/scripts/jira/read-jira-ticket.mjs"
 elif [ -f ".cursor/scripts/prometheus/jira/read-jira-ticket.mjs" ]; then
   SCRIPT_PATH=".cursor/scripts/prometheus/jira/read-jira-ticket.mjs"
+elif [ -f ".agent/scripts/prometheus/jira/read-jira-ticket.mjs" ]; then
+  SCRIPT_PATH=".agent/scripts/prometheus/jira/read-jira-ticket.mjs"
 else
   echo "❌ Cannot find read-jira-ticket.mjs. Please verify the Pantheon mount path is correct." 1>&2
   exit 1
@@ -87,7 +91,7 @@ node "$SCRIPT_PATH" "<ticket-id-or-url>"
 
 ## Important Reminder (Avoid Misjudging "Script Not Found")
 
-**CRITICAL**: In scenarios where Pantheon is mounted as a submodule under `.pantheon/` and the project additionally synchronizes scripts via **symbolic links**, some workspaces' search capabilities (e.g., Glob) may return **0 results** for `.pantheon/` or symlink directories.
+**CRITICAL**: In scenarios where Pantheon is mounted under `.pantheon/` and the project additionally installs generated copies into `.cursor` or `.agent`, some workspaces' search capabilities (e.g., Glob) may return **0 results** for `.pantheon/` or generated install directories.
 
 Therefore:
 - **Do NOT** use "searching for the script file" as the basis for "whether the script exists"

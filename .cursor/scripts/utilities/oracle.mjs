@@ -3,7 +3,7 @@
 /**
  * Oracle - Pantheon Cursor 同步腳本
  *
- * 將 .pantheon/.cursor 的內容透過符號連結同步到專案的 .cursor 目錄中
+ * 將 .pantheon/.cursor 的內容複製安裝到專案的 .cursor 與 .agent 目錄中
  *
  * 使用方式:
  *   node .cursor/scripts/utilities/oracle.mjs
@@ -11,13 +11,16 @@
  */
 
 import {
+  cpSync,
   existsSync,
   lstatSync,
   mkdirSync,
-  symlinkSync,
+  readFileSync,
+  rmSync,
   unlinkSync,
   copyFileSync,
   readdirSync,
+  writeFileSync,
 } from "fs";
 import { execSync } from "child_process";
 import { join } from "path";
@@ -39,6 +42,37 @@ const log = {
   info: (msg) => console.log(`${colors.cyan}🔄 ${msg}${colors.reset}`),
   dim: (msg) => console.log(`${colors.dim}   ${msg}${colors.reset}`),
 };
+
+const GITIGNORE_SECTION_HEADER = "# Pantheon installed tooling";
+
+function removePantheonGitignoreSection(content) {
+  const lines = content.split(/\r?\n/);
+  const result = [];
+  let inPantheonSection = false;
+  let removed = false;
+
+  for (const line of lines) {
+    if (line.trim() === GITIGNORE_SECTION_HEADER) {
+      inPantheonSection = true;
+      removed = true;
+      continue;
+    }
+
+    if (inPantheonSection) {
+      if (line.trim() === "") {
+        inPantheonSection = false;
+      }
+      continue;
+    }
+
+    result.push(line);
+  }
+
+  return {
+    content: result.join("\n").replace(/\n{3,}$/g, "\n\n"),
+    removed,
+  };
+}
 
 /**
  * 執行 shell 命令
@@ -67,6 +101,83 @@ function isSymlink(path) {
   } catch {
     return false;
   }
+}
+
+/**
+ * 移除舊的同步目標，包含過去版本建立的 symlink。
+ */
+function removeSyncTarget(path) {
+  if (isSymlink(path)) {
+    unlinkSync(path);
+    return;
+  }
+
+  if (existsSync(path)) {
+    rmSync(path, { recursive: true, force: true });
+  }
+}
+
+/**
+ * 將 Pantheon 來源目錄複製到目標專案。
+ */
+function copyDirectory(source, target, cwd) {
+  if (!existsSync(source)) {
+    log.warning(`來源不存在，跳過: ${source.replace(cwd, ".")}`);
+    return false;
+  }
+
+  removeSyncTarget(target);
+  mkdirSync(join(target, ".."), { recursive: true });
+  cpSync(source, target, { recursive: true });
+  log.dim(`${source.replace(cwd, ".")} -> ${target.replace(cwd, ".")}`);
+  return true;
+}
+
+/**
+ * 將 Pantheon 安裝產物加入目標專案 .gitignore。
+ */
+function updateGitignore(cwd, installFolderName) {
+  const gitignorePath = join(cwd, ".gitignore");
+  const entries = [
+    ".pantheon/",
+    ".cursor/.env.local",
+    `.cursor/commands/${installFolderName}/`,
+    `.cursor/rules/${installFolderName}/`,
+    `.cursor/scripts/${installFolderName}/`,
+    `.cursor/skills/${installFolderName}/`,
+    `.agent/commands/${installFolderName}/`,
+    `.agent/scripts/${installFolderName}/`,
+    `.agent/skills/${installFolderName}/`,
+  ];
+
+  const existing = existsSync(gitignorePath)
+    ? readFileSync(gitignorePath, "utf-8")
+    : "";
+  const normalized = removePantheonGitignoreSection(existing);
+  const remainingLines = new Set(
+    normalized.content
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean),
+  );
+  const sectionEntries = entries.filter((entry) => !remainingLines.has(entry));
+
+  if (!normalized.removed && sectionEntries.length === 0) {
+    log.success(".gitignore 已包含 Pantheon 安裝產物");
+    return;
+  }
+
+  const baseContent = normalized.content.replace(/\n*$/g, "");
+  const prefix = baseContent ? "\n\n" : "";
+  const section = [
+    GITIGNORE_SECTION_HEADER,
+    ...sectionEntries,
+    "",
+  ].join("\n");
+
+  writeFileSync(gitignorePath, `${baseContent}${prefix}${section}`);
+  log.success("已更新 .gitignore");
+  sectionEntries.forEach((entry) => log.dim(`保留: ${entry}`));
 }
 
 /**
@@ -101,14 +212,13 @@ async function main() {
   log.info("正在拉取 pantheon 最新內容...");
 
   const pantheonDir = join(cwd, ".pantheon");
-  let deityName = "prometheus"; // 預設值
+  let installFolderName = "prometheus"; // 預設安裝名稱，會以 .pantheon 當前分支覆蓋
 
   try {
     const currentBranch = exec("git rev-parse --abbrev-ref HEAD", {
       cwd: pantheonDir,
     });
-    // 使用分支名稱作為 deity 資料夾名稱
-    deityName = currentBranch;
+    installFolderName = currentBranch;
     log.dim(`pantheon 當前分支: ${currentBranch}`);
 
     // 檢查 pantheon 是否有本地變更
@@ -168,6 +278,10 @@ async function main() {
     join(cwd, ".cursor", "commands"),
     join(cwd, ".cursor", "rules"),
     join(cwd, ".cursor", "scripts"),
+    join(cwd, ".cursor", "skills"),
+    join(cwd, ".agent", "commands"),
+    join(cwd, ".agent", "scripts"),
+    join(cwd, ".agent", "skills"),
   ];
 
   for (const dir of directories) {
@@ -178,48 +292,60 @@ async function main() {
   }
 
   // ========================================
-  // 4. 建立 deity 符號連結
+  // 4. 複製安裝 Pantheon 內容
   // ========================================
   console.log("");
-  console.log(`🔗 建立 ${deityName} 符號連結...`);
+  console.log(`📦 安裝 ${installFolderName} Pantheon 內容...`);
 
-  const linkConfigs = [
+  const installConfigs = [
     {
-      link: join(cwd, ".cursor", "commands", deityName),
-      target: "../../.pantheon/.cursor/commands",
+      source: join(cwd, ".pantheon", ".cursor", "commands"),
+      target: join(cwd, ".cursor", "commands", installFolderName),
     },
     {
-      link: join(cwd, ".cursor", "rules", deityName),
-      target: "../../.pantheon/.cursor/rules",
+      source: join(cwd, ".pantheon", ".cursor", "rules"),
+      target: join(cwd, ".cursor", "rules", installFolderName),
     },
     {
-      link: join(cwd, ".cursor", "scripts", deityName),
-      target: "../../.pantheon/.cursor/scripts",
+      source: join(cwd, ".pantheon", ".cursor", "scripts"),
+      target: join(cwd, ".cursor", "scripts", installFolderName),
+    },
+    {
+      source: join(cwd, ".pantheon", ".cursor", "skills"),
+      target: join(cwd, ".cursor", "skills", installFolderName),
+    },
+    {
+      source: join(cwd, ".pantheon", ".cursor", "commands"),
+      target: join(cwd, ".agent", "commands", installFolderName),
+    },
+    {
+      source: join(cwd, ".pantheon", ".cursor", "scripts"),
+      target: join(cwd, ".agent", "scripts", installFolderName),
+    },
+    {
+      source: join(cwd, ".pantheon", ".cursor", "skills"),
+      target: join(cwd, ".agent", "skills", installFolderName),
     },
   ];
 
-  for (const config of linkConfigs) {
-    // 移除舊的連結（如果存在）
-    if (existsSync(config.link) || isSymlink(config.link)) {
-      try {
-        unlinkSync(config.link);
-      } catch {
-        // 忽略錯誤
-      }
-    }
-
-    // 建立新的符號連結
+  for (const config of installConfigs) {
     try {
-      symlinkSync(config.target, config.link);
-      log.dim(`${config.link.replace(cwd, ".")} -> ${config.target}`);
+      copyDirectory(config.source, config.target, cwd);
     } catch (error) {
-      log.error(`建立符號連結失敗: ${config.link.replace(cwd, ".")}`);
+      log.error(`安裝失敗: ${config.target.replace(cwd, ".")}`);
       log.dim(error.message);
     }
   }
 
   // ========================================
-  // 5. 檢查並建立環境變數配置檔
+  // 5. 更新 .gitignore
+  // ========================================
+  console.log("");
+  console.log("🧹 更新 .gitignore...");
+  updateGitignore(cwd, installFolderName);
+
+  // ========================================
+  // 6. 檢查並建立環境變數配置檔
   // ========================================
   console.log("");
   const envLocalPath = join(cwd, ".cursor", ".env.local");
@@ -240,7 +366,7 @@ async function main() {
   }
 
   // ========================================
-  // 6. 輸出結果
+  // 7. 輸出結果
   // ========================================
   console.log("");
   console.log("==========================================");
@@ -250,22 +376,31 @@ async function main() {
   console.log("目錄結構：");
   console.log(".cursor/");
   console.log("├── commands/");
-  console.log(`│   └── ${deityName}/ -> .pantheon/.cursor/commands`);
+  console.log(`│   └── ${installFolderName}/`);
   console.log("├── rules/");
-  console.log(`│   └── ${deityName}/ -> .pantheon/.cursor/rules`);
+  console.log(`│   └── ${installFolderName}/`);
   console.log("├── scripts/");
-  console.log(`│   └── ${deityName}/ -> .pantheon/.cursor/scripts`);
+  console.log(`│   └── ${installFolderName}/`);
+  console.log("├── skills/");
+  console.log(`│   └── ${installFolderName}/`);
   console.log("└── .env.local");
+  console.log(".agent/");
+  console.log("├── commands/");
+  console.log(`│   └── ${installFolderName}/`);
+  console.log("├── scripts/");
+  console.log(`│   └── ${installFolderName}/`);
+  console.log("└── skills/");
+  console.log(`    └── ${installFolderName}/`);
   console.log("");
 
   // 列出可用的指令
   console.log("可用的指令：");
-  const commandsPath = join(cwd, ".cursor", "commands", deityName);
+  const commandsPath = join(cwd, ".cursor", "commands", installFolderName);
   if (existsSync(commandsPath)) {
     try {
       const dirs = readdirSync(commandsPath, { withFileTypes: true })
         .filter((dirent) => dirent.isDirectory())
-        .map((dirent) => `- commands/${deityName}/${dirent.name}/`);
+        .map((dirent) => `- commands/${installFolderName}/${dirent.name}/`);
 
       if (dirs.length > 0) {
         console.log(dirs.join("\n"));

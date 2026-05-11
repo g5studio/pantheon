@@ -8,7 +8,7 @@
 import { execSync, spawnSync } from "child_process";
 import { join, isAbsolute } from "path";
 import readline from "readline";
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync, readdirSync } from "fs";
 import {
   getProjectRoot,
   loadEnvLocal,
@@ -31,6 +31,16 @@ import {
 
 // 使用 env-loader 提供的 projectRoot
 const projectRoot = getProjectRoot();
+
+function listInstalledRunnerCandidates(rootDir) {
+  if (!existsSync(rootDir)) return [];
+
+  return readdirSync(rootDir, { withFileTypes: true })
+    .filter((dirent) => dirent.isDirectory())
+    .map((dirent) =>
+      join(rootDir, dirent.name, "utilities", "run-pantheon-script.mjs"),
+    );
+}
 
 function exec(command, options = {}) {
   try {
@@ -2312,21 +2322,9 @@ async function main() {
         "utilities",
         "run-pantheon-script.mjs",
       ),
-      join(
-        projectRoot,
-        ".cursor",
-        "scripts",
-        "utilities",
-        "run-pantheon-script.mjs",
-      ),
-      join(
-        projectRoot,
-        ".cursor",
-        "scripts",
-        "prometheus",
-        "utilities",
-        "run-pantheon-script.mjs",
-      ),
+      join(projectRoot, ".cursor", "scripts", "utilities", "run-pantheon-script.mjs"),
+      ...listInstalledRunnerCandidates(join(projectRoot, ".cursor", "scripts")),
+      ...listInstalledRunnerCandidates(join(projectRoot, ".agent", "scripts")),
     ];
     const runnerPath = runnerCandidates.find((p) => existsSync(p));
     if (!runnerPath) {

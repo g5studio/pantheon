@@ -79,7 +79,8 @@ Resolve Pantheon script locations in this order:
 
 1. `.pantheon/.cursor/scripts/...`
 2. `.cursor/scripts/...`
-3. `.cursor/scripts/prometheus/...`
+3. `.cursor/scripts/<install-name>/...`
+4. `.agent/scripts/<install-name>/...`
 
 Treat Pantheon as a local tooling layer unless the repo clearly shows it affects runtime or CI.
 
