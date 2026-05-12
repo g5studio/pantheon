@@ -432,6 +432,131 @@ function normalizeExternalMarkdownArg(input) {
   return content;
 }
 
+function normalizeIssueTypeName(rawIssueType) {
+  if (!rawIssueType) return null;
+
+  const value = String(rawIssueType).trim().toLowerCase();
+  if (!value) return null;
+
+  const bugLike = ["bug", "缺陷", "錯誤", "error", "hotfix"];
+  if (bugLike.some((keyword) => value.includes(keyword))) {
+    return "bug";
+  }
+
+  const requestLike = [
+    "request",
+    "story",
+    "task",
+    "feature",
+    "需求",
+    "enhancement",
+    "improvement",
+  ];
+  if (requestLike.some((keyword) => value.includes(keyword))) {
+    return "request";
+  }
+
+  return null;
+}
+
+function extractIssueTypeFromReport(reportMarkdown) {
+  if (!reportMarkdown) return null;
+
+  const report = String(reportMarkdown);
+  const typeRowMatch = report.match(
+    /\|\s*\*{0,2}\s*(?:類型|type)\s*\*{0,2}\s*\|\s*([^|\n]+)\|/i,
+  );
+  if (typeRowMatch?.[1]) {
+    return typeRowMatch[1].trim();
+  }
+
+  const hasBugSignals =
+    /(^|\n)#{1,6}\s*[^\n]*(影響範圍|根本原因|改動前後邏輯差異)/m.test(report);
+  if (hasBugSignals) {
+    return "bug";
+  }
+
+  const hasRequestSignals =
+    /(^|\n)#{1,6}\s*[^\n]*(預期效果|需求覆蓋率|潛在影響風險報告)/m.test(report);
+  if (hasRequestSignals) {
+    return "request";
+  }
+
+  return null;
+}
+
+function validateDevelopmentReportSections(reportMarkdown, issueTypeHint) {
+  const report = String(reportMarkdown || "");
+
+  const sectionRules = [
+    {
+      section: "關聯單資訊",
+      patterns: [/(^|\n)#{1,6}\s*[^\n]*關聯單資訊/m],
+      requiredFor: "all",
+    },
+    {
+      section: "變更摘要",
+      patterns: [/(^|\n)#{1,6}\s*[^\n]*變更摘要/m],
+      requiredFor: "all",
+    },
+    {
+      section: "風險評估",
+      patterns: [/(^|\n)#{1,6}\s*[^\n]*風險評估/m],
+      requiredFor: "all",
+    },
+    {
+      section: "影響範圍",
+      patterns: [/(^|\n)#{1,6}\s*[^\n]*影響範圍/m],
+      requiredFor: "bug",
+    },
+    {
+      section: "根本原因",
+      patterns: [/(^|\n)#{1,6}\s*[^\n]*根本原因/m],
+      requiredFor: "bug",
+    },
+    {
+      section: "造成問題的單號",
+      patterns: [/(^|\n)#{1,6}\s*[^\n]*造成問題的單號/m],
+      requiredFor: "bug",
+    },
+    {
+      section: "改動前後邏輯差異",
+      patterns: [/(^|\n)#{1,6}\s*[^\n]*改動前後邏輯差異/m],
+      requiredFor: "bug",
+    },
+    {
+      section: "預期效果",
+      patterns: [/(^|\n)#{1,6}\s*[^\n]*預期效果/m],
+      requiredFor: "request",
+    },
+    {
+      section: "需求覆蓋率",
+      patterns: [/(^|\n)#{1,6}\s*[^\n]*需求覆蓋率/m],
+      requiredFor: "request",
+    },
+    {
+      section: "潛在影響風險報告",
+      patterns: [/(^|\n)#{1,6}\s*[^\n]*潛在影響風險報告/m],
+      requiredFor: "request",
+    },
+  ];
+
+  const missingSections = sectionRules
+    .filter((rule) => {
+      if (rule.requiredFor === "all") return true;
+      return issueTypeHint && rule.requiredFor === issueTypeHint;
+    })
+    .filter(
+      (rule) => !rule.patterns.some((pattern) => pattern.test(report)),
+    )
+    .map((rule) => rule.section);
+
+  return {
+    isValid: missingSections.length === 0,
+    missingSections,
+  };
+}
+
 const REPORT_START = "<!-- PANTHEON_DEVELOPMENT_REPORT_START -->";
 const REPORT_END = "<!-- PANTHEON_DEVELOPMENT_REPORT_END -->";
 
@@ -561,6 +686,29 @@ async function main() {
   if (!externalReport || !externalReport.trim()) {
     console.error("\n❌ update-mr 需要提供 --development-report\n");
     console.error("💡 必須確保傳入的 markdown 不跑版（避免字面 \\\\n）\n");
+    process.exit(1);
+  }
+
+  const startTaskInfo = readStartTaskInfo();
+  const reportIssueType = extractIssueTypeFromReport(externalReport);
+  const resolvedIssueType =
+    normalizeIssueTypeName(reportIssueType) ||
+    normalizeIssueTypeName(startTaskInfo?.issueType);
+
+  const reportValidation = validateDevelopmentReportSections(
+    externalReport,
+    resolvedIssueType,
+  );
+  if (!reportValidation.isValid) {
+    const typeLabel = resolvedIssueType
+      ? resolvedIssueType.toUpperCase()
+      : "UNKNOWN";
+    console.error("\n❌ development-report 缺少必要區塊，已停止更新 MR\n");
+    console.error(`📋 偵測到的報告類型: ${typeLabel}`);
+    console.error(
+      `🧩 缺少區塊: ${reportValidation.missingSections.join("、")}\n`,
+    );
+    console.error("💡 請補齊對應段落後重新執行 update-mr。\n");
     process.exit(1);
   }
 
