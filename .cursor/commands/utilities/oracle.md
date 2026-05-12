@@ -4,7 +4,7 @@ description: 將 pantheon 的 commands/scripts/skills 複製安裝到專案中
 
 # Oracle - Pantheon Cursor 同步指令
 
-此指令會自動將 `.pantheon/.cursor` 的內容複製安裝到專案的 `.cursor/*/<install-name>/` 與 `.agent/*/<install-name>/` 目錄中，並拉取用戶初始化時設置的分支最新內容。
+此指令會自動將 `.pantheon/.cursor` 的內容複製安裝到專案的 `.cursor/*/<install-name>/` 與 `.agents/*/<install-name>/` 目錄中，並拉取用戶初始化時設置的分支最新內容。
 
 ## 執行方式
 
@@ -30,16 +30,16 @@ node .pantheon/.cursor/scripts/utilities/oracle.mjs
 - 若有本地變更，自動重置
 - 執行 `git fetch` 和 `git pull` 拉取最新內容
 
-### 3. 建立 .cursor / .agent 目錄結構
+### 3. 建立 .cursor / .agents 目錄結構
 
 建立以下目錄（如果不存在）：
 - `.cursor/commands/`
 - `.cursor/rules/`
 - `.cursor/scripts/`
 - `.cursor/skills/`
-- `.agent/commands/`
-- `.agent/scripts/`
-- `.agent/skills/`
+- `.agents/commands/`
+- `.agents/scripts/`
+- `.agents/skills/`
 
 ### 4. 複製安裝 Pantheon 內容
 
@@ -48,15 +48,15 @@ node .pantheon/.cursor/scripts/utilities/oracle.mjs
 - `.cursor/rules/<install-name>`
 - `.cursor/scripts/<install-name>`
 - `.cursor/skills/<install-name>`
-- `.agent/commands/<install-name>`
-- `.agent/scripts/<install-name>`
-- `.agent/skills/<install-name>`
+- `.agents/commands/<install-name>`
+- `.agents/scripts/<install-name>`
+- `.agents/skills/<install-name>`
 
 每次執行都會重建上述安裝目錄；請不要在這些目錄中手動修改檔案，否則下一次 `oracle` 會覆蓋。
 
 ### 5. 更新 .gitignore
 
-自動將 `.pantheon/`、`.cursor/.env.local`、`.cursor/.../<install-name>/` 與 `.agent/.../<install-name>/` 加入專案 `.gitignore`，避免 Pantheon 安裝產物與本地環境變數被提交到目標專案；ignore 範圍只涵蓋 Pantheon installed copy 與 `.cursor/.env.local`，不會忽略 `.cursor` 或 `.agent` 內其他專案自有項目。
+自動將 `.pantheon/`、`.cursor/.env.local`、`.cursor/.../<install-name>/` 與 `.agents/.../<install-name>/` 加入專案 `.gitignore`，避免 Pantheon 安裝產物與本地環境變數被提交到目標專案；ignore 範圍只涵蓋 Pantheon installed copy 與 `.cursor/.env.local`，不會忽略 `.cursor` 或 `.agents` 內其他專案自有項目。
 
 ### 6. 檢查並建立環境變數配置檔
 
@@ -80,7 +80,7 @@ node .pantheon/.cursor/scripts/utilities/oracle.mjs
 ├── skills/
 │   └── <install-name>/
 └── .env.local
-.agent/
+.agents/
 ├── commands/
 │   └── <install-name>/
 ├── scripts/
@@ -106,7 +106,7 @@ AI:
 輸出:
 1. 檢查 .pantheon → 存在
 2. 拉取 pantheon 當前分支最新內容
-3. 建立 .cursor 與 .agent 安裝目錄
+3. 建立 .cursor 與 .agents 安裝目錄
 4. 複製安裝 Pantheon 內容
 5. 更新 .gitignore
 6. .env.local 不存在，建立模板檔案
@@ -148,11 +148,11 @@ AI:
 ## 注意事項
 
 - ⚠️ 此指令需要專案已經包含 `.pantheon` 資料夾（透過 `pantheon:descend` 安裝）
-- ⚠️ `.cursor/*/<install-name>` 與 `.agent/*/<install-name>` 是可重建安裝產物，不應手動修改
+- ⚠️ `.cursor/*/<install-name>` 與 `.agents/*/<install-name>` 是可重建安裝產物，不應手動修改
 - ✅ 此指令可重複執行，會自動更新 pantheon 到最新版本
-- ✅ 不會影響 `.cursor` 或 `.agent` 目錄中的其他檔案（如專案特有的腳本）
+- ✅ 不會影響 `.cursor` 或 `.agents` 目錄中的其他檔案（如專案特有的腳本）
 - ✅ `.env.local` 只會在不存在時建立，不會覆蓋既有配置
-- ✅ 會自動維護 `.gitignore`，包含 `.cursor/.env.local`、`.cursor/*/<install-name>/` 與 `.agent/*/<install-name>/` 這類 Pantheon 本地安裝路徑
+- ✅ 會自動維護 `.gitignore`，包含 `.cursor/.env.local`、`.cursor/*/<install-name>/` 與 `.agents/*/<install-name>/` 這類 Pantheon 本地安裝路徑
 - ⚠️ 首次設置後請務必編輯 `.cursor/.env.local` 填入實際配置值
 - ✅ pantheon 根據用戶初始化時設置的分支進行更新
 

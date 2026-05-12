@@ -3,7 +3,7 @@
 /**
  * Oracle - Pantheon Cursor 同步腳本
  *
- * 將 .pantheon/.cursor 的內容複製安裝到專案的 .cursor 與 .agent 目錄中
+ * 將 .pantheon/.cursor 的內容複製安裝到專案的 .cursor 與 .agents 目錄中
  *
  * 使用方式:
  *   node .cursor/scripts/utilities/oracle.mjs
@@ -145,9 +145,9 @@ function updateGitignore(cwd, installFolderName) {
     `.cursor/rules/${installFolderName}/`,
     `.cursor/scripts/${installFolderName}/`,
     `.cursor/skills/${installFolderName}/`,
-    `.agent/commands/${installFolderName}/`,
-    `.agent/scripts/${installFolderName}/`,
-    `.agent/skills/${installFolderName}/`,
+    `.agents/commands/${installFolderName}/`,
+    `.agents/scripts/${installFolderName}/`,
+    `.agents/skills/${installFolderName}/`,
   ];
 
   const existing = existsSync(gitignorePath)
@@ -279,9 +279,9 @@ async function main() {
     join(cwd, ".cursor", "rules"),
     join(cwd, ".cursor", "scripts"),
     join(cwd, ".cursor", "skills"),
-    join(cwd, ".agent", "commands"),
-    join(cwd, ".agent", "scripts"),
-    join(cwd, ".agent", "skills"),
+    join(cwd, ".agents", "commands"),
+    join(cwd, ".agents", "scripts"),
+    join(cwd, ".agents", "skills"),
   ];
 
   for (const dir of directories) {
@@ -316,15 +316,15 @@ async function main() {
     },
     {
       source: join(cwd, ".pantheon", ".cursor", "commands"),
-      target: join(cwd, ".agent", "commands", installFolderName),
+      target: join(cwd, ".agents", "commands", installFolderName),
     },
     {
       source: join(cwd, ".pantheon", ".cursor", "scripts"),
-      target: join(cwd, ".agent", "scripts", installFolderName),
+      target: join(cwd, ".agents", "scripts", installFolderName),
     },
     {
       source: join(cwd, ".pantheon", ".cursor", "skills"),
-      target: join(cwd, ".agent", "skills", installFolderName),
+      target: join(cwd, ".agents", "skills", installFolderName),
     },
   ];
 
@@ -384,7 +384,7 @@ async function main() {
   console.log("├── skills/");
   console.log(`│   └── ${installFolderName}/`);
   console.log("└── .env.local");
-  console.log(".agent/");
+  console.log(".agents/");
   console.log("├── commands/");
   console.log(`│   └── ${installFolderName}/`);
   console.log("├── scripts/");
