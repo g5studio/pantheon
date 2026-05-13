@@ -22,7 +22,7 @@ Typical responsibilities:
 - Shared `.cursor/commands`
 - Shared `.cursor/scripts`
 - Shared `.cursor/skills`
-- Shared `.agent/commands`, `.agent/scripts`, and `.agent/skills`
+- Shared `.agents/commands`, `.agents/scripts`, and `.agents/skills` (and some repos use `.agent/*` as legacy path)
 - Shared local workflow helpers such as MR, Jira, version, or project automation scripts
 
 Do not assume Pantheon affects CI, build output, or production runtime unless the repo clearly shows that.
@@ -57,12 +57,15 @@ When running or reading Pantheon-provided files, resolve paths in this order:
 1. `.pantheon/.cursor/...`
 2. `.cursor/...`
 3. `.cursor/scripts/<install-name>/...`, `.cursor/rules/<install-name>/...`, `.cursor/commands/<install-name>/...`, or `.cursor/skills/<install-name>/...` when the repo uses installed Pantheon copies
-4. `.agent/scripts/<install-name>/...`, `.agent/commands/<install-name>/...`, or `.agent/skills/<install-name>/...` when the tool expects `.agent`
+4. `.agents/scripts/<install-name>/...`, `.agents/commands/<install-name>/...`, or `.agents/skills/<install-name>/...`
+5. `.agent/scripts/<install-name>/...`, `.agent/commands/<install-name>/...`, or `.agent/skills/<install-name>/...` (legacy fallback)
 
-For this bootstrap skill, prefer the local materialized copy first:
+For this bootstrap skill, prefer the local materialized copies first:
 
 1. `.cursor/skills/pantheon-mounted-workflow/SKILL.md`
-2. `.pantheon/.cursor/skills/pantheon-mounted-workflow/SKILL.md`
+2. `.agents/skills/pantheon-mounted-workflow/SKILL.md`
+3. `.agent/skills/pantheon-mounted-workflow/SKILL.md` (if present)
+4. `.pantheon/.cursor/skills/pantheon-mounted-workflow/SKILL.md`
 
 If the mounted repo includes `run-pantheon-script.mjs`, prefer it when the script path may vary across mounted and non-mounted environments.
 
@@ -100,7 +103,7 @@ When investigating Pantheon usage in an unfamiliar repo, start from:
 - `.pantheon/version.json`
 - `.pantheon/.cursor/scripts/utilities/oracle.mjs`
 - `.pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs` if present
-- Any local `.cursor/scripts/<install-name>/*` or `.agent/scripts/<install-name>/*` installed by Pantheon
+- Any local `.cursor/scripts/<install-name>/*`, `.agents/scripts/<install-name>/*`, or `.agent/scripts/<install-name>/*` installed by Pantheon
 
 ## Common Mistakes
 
