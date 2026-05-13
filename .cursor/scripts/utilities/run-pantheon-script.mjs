@@ -93,6 +93,7 @@ function buildCandidatePaths(projectRoot, scriptSpecifier) {
     join(projectRoot, ".cursor", "scripts", rel),
     // Installed Pantheon copies in target projects
     ...listInstalledScriptCandidates(join(projectRoot, ".cursor", "scripts"), rel),
+    ...listInstalledScriptCandidates(join(projectRoot, ".agents", "scripts"), rel),
     ...listInstalledScriptCandidates(join(projectRoot, ".agent", "scripts"), rel),
   ];
 }

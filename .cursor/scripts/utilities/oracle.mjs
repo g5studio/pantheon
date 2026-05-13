@@ -3,7 +3,7 @@
 /**
  * Oracle - Pantheon Cursor 同步腳本
  *
- * 將 .pantheon/.cursor 的內容複製安裝到專案的 .cursor 與 .agent 目錄中
+ * 將 .pantheon/.cursor 的內容複製安裝到專案的 .cursor 與 .agents 目錄中
  *
  * 使用方式:
  *   node .cursor/scripts/utilities/oracle.mjs
@@ -23,7 +23,7 @@ import {
   writeFileSync,
 } from "fs";
 import { execSync } from "child_process";
-import { join } from "path";
+import { dirname, join } from "path";
 
 // 顏色輸出
 const colors = {
@@ -44,6 +44,12 @@ const log = {
 };
 
 const GITIGNORE_SECTION_HEADER = "# Pantheon installed tooling";
+const BOOTSTRAP_SKILL_RELATIVE = join(
+  "skills",
+  "pantheon-mounted-workflow",
+  "SKILL.md",
+);
+const BOOTSTRAP_SKILL_MANAGED_MARKER = "managed-by-pantheon-adapt";
 
 function removePantheonGitignoreSection(content) {
   const lines = content.split(/\r?\n/);
@@ -133,6 +139,77 @@ function copyDirectory(source, target, cwd) {
   return true;
 }
 
+function findBootstrapSkillSource(cwd, installFolderName) {
+  const candidates = [
+    join(cwd, ".pantheon", ".cursor", BOOTSTRAP_SKILL_RELATIVE),
+    join(cwd, ".cursor", "skills", installFolderName, "pantheon-mounted-workflow", "SKILL.md"),
+    join(cwd, ".agents", "skills", installFolderName, "pantheon-mounted-workflow", "SKILL.md"),
+    join(cwd, ".agent", "skills", installFolderName, "pantheon-mounted-workflow", "SKILL.md"),
+    join(cwd, ".cursor", BOOTSTRAP_SKILL_RELATIVE),
+  ];
+  return candidates.find((path) => existsSync(path)) || null;
+}
+
+function materializeBootstrapSkill(cwd, installFolderName) {
+  const sourcePath = findBootstrapSkillSource(cwd, installFolderName);
+  if (!sourcePath) {
+    log.warning("找不到 pantheon-mounted-workflow/SKILL.md，跳過 bootstrap 落地");
+    return;
+  }
+
+  const sourceContent = readFileSync(sourcePath, "utf-8");
+  const targetPaths = [
+    join(cwd, ".cursor", BOOTSTRAP_SKILL_RELATIVE),
+    join(cwd, ".agents", BOOTSTRAP_SKILL_RELATIVE),
+  ];
+
+  // 相容舊專案的 .agent 結構（僅在既有 .agent 目錄時才同步）
+  if (existsSync(join(cwd, ".agent"))) {
+    targetPaths.push(join(cwd, ".agent", BOOTSTRAP_SKILL_RELATIVE));
+  }
+
+  let updated = 0;
+  let skipped = 0;
+
+  for (const targetPath of targetPaths) {
+    if (targetPath === sourcePath) {
+      log.dim(`source 與目標相同，跳過: ${targetPath.replace(cwd, ".")}`);
+      continue;
+    }
+
+    if (existsSync(targetPath)) {
+      const targetContent = readFileSync(targetPath, "utf-8");
+
+      if (
+        !targetContent.includes(BOOTSTRAP_SKILL_MANAGED_MARKER) &&
+        targetContent !== sourceContent
+      ) {
+        log.warning(`偵測到自訂 bootstrap skill，跳過覆蓋: ${targetPath.replace(cwd, ".")}`);
+        skipped += 1;
+        continue;
+      }
+
+      if (targetContent === sourceContent) {
+        log.dim(`bootstrap skill 已是最新: ${targetPath.replace(cwd, ".")}`);
+        continue;
+      }
+    }
+
+    mkdirSync(dirname(targetPath), { recursive: true });
+    writeFileSync(targetPath, sourceContent, "utf-8");
+    updated += 1;
+    log.dim(`bootstrap skill: ${sourcePath.replace(cwd, ".")} -> ${targetPath.replace(cwd, ".")}`);
+  }
+
+  if (updated > 0) {
+    log.success(`已落地 bootstrap skill（${updated} 個目標）`);
+  } else if (skipped > 0) {
+    log.warning("bootstrap skill 未更新（存在自訂內容）");
+  } else {
+    log.success("bootstrap skill 已是最新");
+  }
+}
+
 /**
  * 將 Pantheon 安裝產物加入目標專案 .gitignore。
  */
@@ -141,13 +218,16 @@ function updateGitignore(cwd, installFolderName) {
   const entries = [
     ".pantheon/",
     ".cursor/.env.local",
+    ".cursor/skills/pantheon-mounted-workflow/",
     `.cursor/commands/${installFolderName}/`,
     `.cursor/rules/${installFolderName}/`,
     `.cursor/scripts/${installFolderName}/`,
     `.cursor/skills/${installFolderName}/`,
-    `.agent/commands/${installFolderName}/`,
-    `.agent/scripts/${installFolderName}/`,
-    `.agent/skills/${installFolderName}/`,
+    ".agents/skills/pantheon-mounted-workflow/",
+    ".agent/skills/pantheon-mounted-workflow/",
+    `.agents/commands/${installFolderName}/`,
+    `.agents/scripts/${installFolderName}/`,
+    `.agents/skills/${installFolderName}/`,
   ];
 
   const existing = existsSync(gitignorePath)
@@ -279,9 +359,9 @@ async function main() {
     join(cwd, ".cursor", "rules"),
     join(cwd, ".cursor", "scripts"),
     join(cwd, ".cursor", "skills"),
-    join(cwd, ".agent", "commands"),
-    join(cwd, ".agent", "scripts"),
-    join(cwd, ".agent", "skills"),
+    join(cwd, ".agents", "commands"),
+    join(cwd, ".agents", "scripts"),
+    join(cwd, ".agents", "skills"),
   ];
 
   for (const dir of directories) {
@@ -316,15 +396,15 @@ async function main() {
     },
     {
       source: join(cwd, ".pantheon", ".cursor", "commands"),
-      target: join(cwd, ".agent", "commands", installFolderName),
+      target: join(cwd, ".agents", "commands", installFolderName),
     },
     {
       source: join(cwd, ".pantheon", ".cursor", "scripts"),
-      target: join(cwd, ".agent", "scripts", installFolderName),
+      target: join(cwd, ".agents", "scripts", installFolderName),
     },
     {
       source: join(cwd, ".pantheon", ".cursor", "skills"),
-      target: join(cwd, ".agent", "skills", installFolderName),
+      target: join(cwd, ".agents", "skills", installFolderName),
     },
   ];
 
@@ -338,14 +418,21 @@ async function main() {
   }
 
   // ========================================
-  // 5. 更新 .gitignore
+  // 5. 落地 bootstrap skill（確保目標專案可讀）
+  // ========================================
+  console.log("");
+  console.log("🧠 落地 Pantheon bootstrap skill...");
+  materializeBootstrapSkill(cwd, installFolderName);
+
+  // ========================================
+  // 6. 更新 .gitignore
   // ========================================
   console.log("");
   console.log("🧹 更新 .gitignore...");
   updateGitignore(cwd, installFolderName);
 
   // ========================================
-  // 6. 檢查並建立環境變數配置檔
+  // 7. 檢查並建立環境變數配置檔
   // ========================================
   console.log("");
   const envLocalPath = join(cwd, ".cursor", ".env.local");
@@ -366,7 +453,7 @@ async function main() {
   }
 
   // ========================================
-  // 7. 輸出結果
+  // 8. 輸出結果
   // ========================================
   console.log("");
   console.log("==========================================");
@@ -384,7 +471,7 @@ async function main() {
   console.log("├── skills/");
   console.log(`│   └── ${installFolderName}/`);
   console.log("└── .env.local");
-  console.log(".agent/");
+  console.log(".agents/");
   console.log("├── commands/");
   console.log(`│   └── ${installFolderName}/`);
   console.log("├── scripts/");
