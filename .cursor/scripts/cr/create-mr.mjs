@@ -655,10 +655,7 @@ async function checkJiraTicketExists(ticket) {
       }
     }
 
-    const data = await response.json().catch(() => null);
-    const issueType = data?.fields?.issuetype?.name || null;
-
-    return { exists: true, error: null, issueType };
+    return { exists: true, error: null };
   } catch (error) {
     return { exists: false, error: error.message };
   }
@@ -1015,7 +1012,7 @@ async function upsertAiReviewMarkerNoteWithToken(
     mrIid,
     100,
   );
-  const body = appendAgentSignature(buildAiReviewMarkerBody(headSha));
+  const body = buildAiReviewMarkerBody(headSha);
   const existing = notes.find(
     (n) =>
       typeof n.body === "string" && n.body.includes(AI_REVIEW_MARKER_PREFIX),
@@ -1071,7 +1068,7 @@ async function upsertAiReviewMarkerNoteWithGlab(projectPath, mrIid, headSha) {
   const notes = glabApiJson(
     `projects/${projectPath}/merge_requests/${mrIid}/notes?per_page=100&sort=desc&order_by=updated_at`,
   );
-  const body = appendAgentSignature(buildAiReviewMarkerBody(headSha));
+  const body = buildAiReviewMarkerBody(headSha);
   const list = Array.isArray(notes) ? notes : [];
   const existing = list.find(
     (n) =>
@@ -1332,7 +1329,10 @@ async function inferTargetBranchFromAdaptAndJira(ticket) {
   }
 
   // 一般：使用 git-flow.defaultBranch 或 mrTargets 首項
-  const defaultBranch = typeof gitFlow.defaultBranch === "string" ? gitFlow.defaultBranch.trim() : null;
+  const defaultBranch =
+    typeof gitFlow.defaultBranch === "string"
+      ? gitFlow.defaultBranch.trim()
+      : null;
   if (defaultBranch) return defaultBranch;
 
   const mrTargets = Array.isArray(gitFlow.mrTargets) ? gitFlow.mrTargets : [];
@@ -1705,132 +1705,6 @@ function normalizeExternalMarkdownArg(input) {
   return content;
 }
 
-function normalizeIssueTypeName(rawIssueType) {
-  if (!rawIssueType) return null;
-
-  const value = String(rawIssueType).trim().toLowerCase();
-  if (!value) return null;
-
-  const bugLike = ["bug", "缺陷", "錯誤", "error", "hotfix"];
-  if (bugLike.some((keyword) => value.includes(keyword))) {
-    return "bug";
-  }
-
-  const requestLike = [
-    "request",
-    "story",
-    "task",
-    "feature",
-    "需求",
-    "enhancement",
-    "improvement",
-  ];
-  if (requestLike.some((keyword) => value.includes(keyword))) {
-    return "request";
-  }
-
-  return null;
-}
-
-function extractIssueTypeFromReport(reportMarkdown) {
-  if (!reportMarkdown) return null;
-
-  const report = String(reportMarkdown);
-
-  const typeRowMatch = report.match(
-    /\|\s*\*{0,2}\s*(?:類型|type)\s*\*{0,2}\s*\|\s*([^|\n]+)\|/i,
-  );
-  if (typeRowMatch?.[1]) {
-    return typeRowMatch[1].trim();
-  }
-
-  const hasBugSignals =
-    /(^|\n)#{1,6}\s*[^\n]*(影響範圍|根本原因|改動前後邏輯差異)/m.test(report);
-  if (hasBugSignals) {
-    return "bug";
-  }
-
-  const hasRequestSignals =
-    /(^|\n)#{1,6}\s*[^\n]*(預期效果|需求覆蓋率|潛在影響風險報告)/m.test(report);
-  if (hasRequestSignals) {
-    return "request";
-  }
-
-  return null;
-}
-
-function validateDevelopmentReportSections(reportMarkdown, issueTypeHint) {
-  const report = String(reportMarkdown || "");
-
-  const sectionRules = [
-    {
-      section: "關聯單資訊",
-      patterns: [/(^|\n)#{1,6}\s*[^\n]*關聯單資訊/m],
-      requiredFor: "all",
-    },
-    {
-      section: "變更摘要",
-      patterns: [/(^|\n)#{1,6}\s*[^\n]*變更摘要/m],
-      requiredFor: "all",
-    },
-    {
-      section: "風險評估",
-      patterns: [/(^|\n)#{1,6}\s*[^\n]*風險評估/m],
-      requiredFor: "all",
-    },
-    {
-      section: "影響範圍",
-      patterns: [/(^|\n)#{1,6}\s*[^\n]*影響範圍/m],
-      requiredFor: "bug",
-    },
-    {
-      section: "根本原因",
-      patterns: [/(^|\n)#{1,6}\s*[^\n]*根本原因/m],
-      requiredFor: "bug",
-    },
-    {
-      section: "造成問題的單號",
-      patterns: [/(^|\n)#{1,6}\s*[^\n]*造成問題的單號/m],
-      requiredFor: "bug",
-    },
-    {
-      section: "改動前後邏輯差異",
-      patterns: [/(^|\n)#{1,6}\s*[^\n]*改動前後邏輯差異/m],
-      requiredFor: "bug",
-    },
-    {
-      section: "預期效果",
-      patterns: [/(^|\n)#{1,6}\s*[^\n]*預期效果/m],
-      requiredFor: "request",
-    },
-    {
-      section: "需求覆蓋率",
-      patterns: [/(^|\n)#{1,6}\s*[^\n]*需求覆蓋率/m],
-      requiredFor: "request",
-    },
-    {
-      section: "潛在影響風險報告",
-      patterns: [/(^|\n)#{1,6}\s*[^\n]*潛在影響風險報告/m],
-      requiredFor: "request",
-    },
-  ];
-
-  const missingSections = sectionRules
-    .filter((rule) => {
-      if (rule.requiredFor === "all") return true;
-      return issueTypeHint && rule.requiredFor === issueTypeHint;
-    })
-    .filter(
-      (rule) => !rule.patterns.some((pattern) => pattern.test(report)),
-    )
-    .map((rule) => rule.section);
-
-  return {
-    isValid: missingSections.length === 0,
-    missingSections,
-  };
-}
-
 async function main() {
   const args = process.argv.slice(2);
   const updateIfExists = args.includes("--update-if-exists");
@@ -1901,11 +1775,15 @@ async function main() {
 
   // 目標分支優先順序：用戶指定 -> adapt 推演 -> 預設 main
   if (!userExplicitlySetTarget) {
-    const ticketForInference = currentBranch.match(/[A-Z0-9]+-\d+/)?.[0] || "N/A";
-    const inferredTarget = await inferTargetBranchFromAdaptAndJira(ticketForInference);
+    const ticketForInference =
+      currentBranch.match(/[A-Z0-9]+-\d+/)?.[0] || "N/A";
+    const inferredTarget =
+      await inferTargetBranchFromAdaptAndJira(ticketForInference);
     if (inferredTarget) {
       targetBranch = inferredTarget;
-      console.log(`🌿 依 adapt.json git-flow + Jira 推演 target branch: ${targetBranch}\n`);
+      console.log(
+        `🌿 依 adapt.json git-flow + Jira 推演 target branch: ${targetBranch}\n`,
+      );
     }
   }
 
@@ -2034,7 +1912,6 @@ async function main() {
   const commitMessageFull = getLastCommitMessage();
   const commitMessage = getLastCommitSubject();
   let ticket = currentBranch.match(/FE-\d+|IN-\d+/)?.[0] || "N/A";
-  let jiraIssueType = null;
 
   // 驗證 Jira ticket
   if (ticket !== "N/A" && isFeatureBranch(currentBranch)) {
@@ -2059,7 +1936,6 @@ async function main() {
         process.exit(1);
       } else {
         console.log(`✅ 單號 ${correctTicket} 驗證成功\n`);
-        jiraIssueType = correctTicketCheck.issueType || jiraIssueType;
       }
 
       const oldBranch = currentBranch;
@@ -2083,7 +1959,6 @@ async function main() {
       }
     } else {
       console.log(`✅ 單號 ${ticket} 驗證成功\n`);
-      jiraIssueType = ticketCheck.issueType || jiraIssueType;
     }
   }
 
@@ -2164,32 +2039,7 @@ async function main() {
   }
 
   // 讀取 start-task 的計劃（用於後續的 labels 判斷）
-  const startTaskInfo = readStartTaskInfo();
-  const reportIssueType = extractIssueTypeFromReport(externalDevelopmentReport);
-  const resolvedIssueType =
-    normalizeIssueTypeName(reportIssueType) ||
-    normalizeIssueTypeName(jiraIssueType) ||
-    normalizeIssueTypeName(startTaskInfo?.issueType);
-
-  if (externalDevelopmentReport) {
-    const reportValidation = validateDevelopmentReportSections(
-      externalDevelopmentReport,
-      resolvedIssueType,
-    );
-
-    if (!reportValidation.isValid) {
-      const typeLabel = resolvedIssueType
-        ? resolvedIssueType.toUpperCase()
-        : "UNKNOWN";
-      console.error("\n❌ development-report 缺少必要區塊，已停止建立 MR\n");
-      console.error(`📋 偵測到的報告類型: ${typeLabel}`);
-      console.error(
-        `🧩 缺少區塊: ${reportValidation.missingSections.join("、")}\n`,
-      );
-      console.error("💡 請補齊對應段落後重新執行 create-mr。\n");
-      process.exit(1);
-    }
-  }
+  const startTaskInfo = readStartTaskInfo(ticket);
 
   // 處理開發計劃：優先使用外部傳入，否則使用 start-task 的計劃
   if (externalDevelopmentPlan) {
@@ -2444,20 +2294,24 @@ async function main() {
           '   - node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs cr/update-mr.mjs -- --development-report="<markdown>"\n',
       );
       console.error(
-        '   或加上：--update-if-exists（自動改走 update-mr 流程）\n',
+        "   或加上：--update-if-exists（自動改走 update-mr 流程）\n",
       );
       process.exit(1);
     }
 
     if (!externalDevelopmentReport || !externalDevelopmentReport.trim()) {
-      console.error("\n❌ 使用 --update-if-exists 需要提供 --development-report\n");
+      console.error(
+        "\n❌ 使用 --update-if-exists 需要提供 --development-report\n",
+      );
       console.error(
         "💡 因為更新既有 MR 必須帶開發報告（用於補齊/更新 description），避免覆蓋原內容\n",
       );
       process.exit(1);
     }
 
-    console.log(`\n🔁 已存在 MR（!${existingMRId}），將改用 update-mr 更新...\n`);
+    console.log(
+      `\n🔁 已存在 MR（!${existingMRId}），將改用 update-mr 更新...\n`,
+    );
 
     const runnerCandidates = [
       join(
@@ -2474,7 +2328,9 @@ async function main() {
     ];
     const runnerPath = runnerCandidates.find((p) => existsSync(p));
     if (!runnerPath) {
-      console.error("\n❌ 找不到 run-pantheon-script.mjs，無法執行 update-mr\n");
+      console.error(
+        "\n❌ 找不到 run-pantheon-script.mjs，無法執行 update-mr\n",
+      );
       runnerCandidates.forEach((p) => console.error(`   - ${p}`));
       process.exit(1);
     }
@@ -2501,9 +2357,9 @@ async function main() {
       process.execPath,
       [runnerPath, "cr/update-mr.mjs", "--", ...forwardArgs],
       {
-      cwd: projectRoot,
-      encoding: "utf-8",
-      stdio: "inherit",
+        cwd: projectRoot,
+        encoding: "utf-8",
+        stdio: "inherit",
       },
     );
 
