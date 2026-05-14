@@ -148,7 +148,7 @@ export function resolveLlmModel({
   explicitModel,
   envLocal,
   envKeys = [],
-  defaultModel = "gpt-5.2",
+  defaultModel = "gpt-5.4-nano",
 }) {
   if (typeof explicitModel === "string" && explicitModel.trim()) return explicitModel.trim();
 
