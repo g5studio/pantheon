@@ -845,8 +845,6 @@ async function main() {
   }
 
   // start-task 流程保底：若檢測到 start-task context，強制補 AI label（再走白名單過濾）
-  const branchTicket = currentBranch.match(/[A-Z0-9]+-\d+/)?.[0] || null;
-  const startTaskInfo = readStartTaskInfo(branchTicket);
   const requestedLabelsWithStartTaskFallback = [...requestedLabels];
   if (startTaskInfo && !requestedLabelsWithStartTaskFallback.includes("AI")) {
     requestedLabelsWithStartTaskFallback.push("AI");
