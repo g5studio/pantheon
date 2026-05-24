@@ -15,6 +15,8 @@
     "update-jira": "node .cursor/scripts/utilities/run-pantheon-script.mjs jira/update-jira.mjs",
     "transition-jira-ticket": "node .cursor/scripts/utilities/run-pantheon-script.mjs jira/transition-jira-ticket.mjs",
     "add-jira-comment": "node .cursor/scripts/utilities/run-pantheon-script.mjs jira/add-jira-comment.mjs",
+    "left-tag-info": "node .cursor/scripts/utilities/run-pantheon-script.mjs jira/left-tag-info.mjs",
+    "stg-deployment-info": "node .cursor/scripts/utilities/run-pantheon-script.mjs jira/stg-deployment-info.mjs",
     "update-confluence-page": "node .cursor/scripts/utilities/run-pantheon-script.mjs jira/update-confluence-page.mjs",
     "mr-comment": "node .cursor/scripts/utilities/run-pantheon-script.mjs gitlab/mr-comment.mjs",
     "bump-version": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/bump-version.mjs",

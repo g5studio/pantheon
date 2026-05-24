@@ -26,12 +26,12 @@ release-5.34.25:https://gitlab.service-hub.tech/frontend/fluid-two/-/tags/releas
 1. **互動式詢問**：
    - 輸入 Jira task 清單（例如：IN-123, FE-456, IN-789）
    - 輸入 tag 與 URL 對應（每行一個，格式：tag:url）
-2. 執行 `.cursor/scripts/jira/left-tag-info.mjs` 腳本
+2. 執行 `left-tag-info.mjs` 腳本（優先使用 `run-pantheon-script`）
 3. 腳本會自動：
    - 連線到 Jira（使用 `.env.local` 中的配置）
    - 解析 task 清單和 tag 對應
    - **驗證 tag 與 URL 的對應關係**（檢查 URL 格式和 tag 名稱是否匹配）
-   - 如果發現 tag 與 URL 不匹配，**顯示錯誤訊息並停止**
+   - 如果發現 tag 與 URL 不匹配，**暫停流程並詢問用戶修正、跳過或取消**
    - 依序為每個 task 添加包含 tag 超連結的評論
    - 顯示操作結果摘要
 
@@ -40,19 +40,25 @@ release-5.34.25:https://gitlab.service-hub.tech/frontend/fluid-two/-/tags/releas
 ### 互動式模式
 
 ```bash
-node .cursor/scripts/jira/left-tag-info.mjs
+pnpm run left-tag-info
+```
+
+或直接執行：
+
+```bash
+node .cursor/scripts/utilities/run-pantheon-script.mjs jira/left-tag-info.mjs
 ```
 
 ### 命令行模式
 
 ```bash
 # 使用 URL
-node .cursor/scripts/jira/left-tag-info.mjs \
+pnpm run left-tag-info -- \
   --task-url "https://innotech.atlassian.net/browse/IN-100005" \
   --tag-url "https://gitlab.service-hub.tech/frontend/fluid-two/-/tags/sit-5.35.0-z"
 
 # 使用直接參數
-node .cursor/scripts/jira/left-tag-info.mjs \
+pnpm run left-tag-info -- \
   --tasks "IN-100005, FE-1234" \
   --tags "release-5.34.24:https://gitlab.service-hub.tech/frontend/fluid-two/-/tags/release-5.34.24" \
   --yes
@@ -104,7 +110,14 @@ release-5.34.25:https://gitlab.service-hub.tech/frontend/fluid-two/-/tags/releas
 1. **URL 格式驗證**：檢查 URL 是否為有效格式
 2. **Tag 名稱匹配驗證**：檢查 URL 中是否包含 tag 名稱（不區分大小寫）
 
-如果驗證失敗，腳本會顯示錯誤訊息並停止執行。
+如果驗證失敗，腳本會：
+- **暫停流程**並顯示錯誤訊息
+- 提供三個選項：
+  1. **輸入正確的 tag 名稱和 URL**：修正後再次驗證
+  2. **跳過此 tag**：跳過該 tag，繼續處理其他 tag
+  3. **取消整個操作**：取消所有操作
+
+修正後的 tag 會再次驗證，確保所有 tag 都正確後才會繼續執行。
 
 ## 命令行參數
 
@@ -123,4 +136,5 @@ release-5.34.25:https://gitlab.service-hub.tech/frontend/fluid-two/-/tags/releas
 - 如果某個 task 添加評論失敗，會顯示錯誤訊息但繼續處理其他 task
 - 操作前會顯示確認提示，需要輸入 `y` 才會執行（除非使用 `--yes` 參數）
 - 所有操作都會顯示成功/失敗的統計資訊
+- **驗證失敗時會暫停流程，等待用戶確認或修正 tag 和 URL**
 

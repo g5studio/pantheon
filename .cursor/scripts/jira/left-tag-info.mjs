@@ -421,6 +421,104 @@ async function promptUserInput(rl) {
   return { taskList, tagMapping };
 }
 
+// 暫停流程並詢問用戶確認或修正 tag 和 URL
+async function promptTagCorrection(rl, tag, url, errorMsg) {
+  console.log("\n" + "=".repeat(50));
+  console.log("⚠️  發現 tag 與 URL 不匹配");
+  console.log("=".repeat(50));
+  console.log(`Tag: ${tag}`);
+  console.log(`URL: ${url}`);
+  console.log(`錯誤: ${errorMsg}`);
+  console.log("\n請選擇操作：");
+  console.log("1. 輸入正確的 tag 名稱和 URL");
+  console.log("2. 跳過此 tag（輸入 'skip'）");
+  console.log("3. 取消整個操作（輸入 'cancel'）");
+
+  while (true) {
+    const choice = (await prompt(rl, "\n請選擇 (1/2/3): ")).trim();
+
+    if (choice === "1") {
+      const newTag = (await prompt(rl, "\n請輸入正確的 tag 名稱：\nTag: ")).trim();
+      const newUrl = (await prompt(rl, "請輸入正確的 URL：\nURL: ")).trim();
+
+      if (newTag && newUrl) {
+        const result = validateTagUrl(newTag, newUrl);
+        if (result.valid) {
+          console.log(`✓ 驗證通過: ${newTag} -> ${newUrl}`);
+          return { tag: newTag, url: newUrl };
+        }
+
+        console.log(`✗ 驗證失敗: ${result.error}`);
+        const retry = (await prompt(rl, "是否重新輸入？(y/n): "))
+          .trim()
+          .toLowerCase();
+        if (retry !== "y") {
+          return null;
+        }
+      } else {
+        console.log("✗ tag 名稱和 URL 不能為空");
+        const retry = (await prompt(rl, "是否重新輸入？(y/n): "))
+          .trim()
+          .toLowerCase();
+        if (retry !== "y") {
+          return null;
+        }
+      }
+      continue;
+    }
+
+    if (choice === "2" || choice.toLowerCase() === "skip") {
+      return null;
+    }
+
+    if (choice === "3" || choice.toLowerCase() === "cancel") {
+      throw new Error("用戶取消操作");
+    }
+
+    console.log("無效的選擇，請輸入 1、2 或 3");
+  }
+}
+
+// 處理驗證失敗的 tag，允許修正或跳過
+async function resolveInvalidTags(rl, tagMapping, invalidTags) {
+  const correctedMapping = {};
+  const skippedTags = [];
+
+  for (const { tag, url, error } of invalidTags) {
+    const corrected = await promptTagCorrection(rl, tag, url, error);
+    if (corrected) {
+      correctedMapping[corrected.tag] = corrected.url;
+      if (corrected.tag !== tag) {
+        skippedTags.push(tag);
+      }
+      console.log(`✓ 已更新: ${tag} -> ${corrected.tag}`);
+    } else {
+      skippedTags.push(tag);
+      console.log(`⊘ 已跳過: ${tag}`);
+    }
+  }
+
+  for (const tag of skippedTags) {
+    delete tagMapping[tag];
+  }
+
+  Object.assign(tagMapping, correctedMapping);
+
+  if (Object.keys(tagMapping).length === 0) {
+    throw new Error("所有 tag 都已跳過，操作已取消");
+  }
+
+  console.log("\n重新驗證修正後的 tag...");
+  const validation = validateAllTags(tagMapping);
+  if (!validation.valid) {
+    console.log("\n⚠️  仍有 tag 驗證失敗，請檢查後重試");
+    for (const { tag, error } of validation.invalidTags) {
+      console.log(`  - ${tag}: ${error}`);
+    }
+    throw new Error("Tag 驗證失敗，請檢查後重試");
+  }
+}
+
 // 主函數
 async function main() {
   const args = parseArgs();
@@ -484,10 +582,10 @@ async function main() {
       console.log(
         `\n⚠️  發現 ${validation.invalidTags.length} 個 tag 與 URL 不匹配`
       );
-      for (const { tag, url, error } of validation.invalidTags) {
-        console.log(`  - ${tag}: ${error}`);
+      if (!rl) {
+        rl = createReadlineInterface();
       }
-      throw new Error("Tag 驗證失敗，請檢查後重試");
+      await resolveInvalidTags(rl, tagMapping, validation.invalidTags);
     }
 
     console.log("✓ 所有 tag 驗證通過");
