@@ -5,7 +5,7 @@
  *
  * Materialize Pantheon bootstrap guidance into the target project so the agent
  * can still read Pantheon usage instructions even when mounted paths or
- * symlinked content are not discoverable.
+ * generated installed content are not discoverable.
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
@@ -35,6 +35,21 @@ function getSourcePath() {
   return candidates.find((candidate) => existsSync(candidate)) || null;
 }
 
+function getTargetPaths() {
+  const targets = [
+    join(projectRoot, ".cursor", "skills", BOOTSTRAP_SKILL.name, "SKILL.md"),
+    join(projectRoot, ".agents", "skills", BOOTSTRAP_SKILL.name, "SKILL.md"),
+  ];
+
+  // Compatibility: some projects still use ".agent" folder.
+  const singularAgentPath = join(projectRoot, ".agent");
+  if (existsSync(singularAgentPath)) {
+    targets.push(join(projectRoot, ".agent", "skills", BOOTSTRAP_SKILL.name, "SKILL.md"));
+  }
+
+  return targets;
+}
+
 function main() {
   const sourcePath = getSourcePath();
   if (!sourcePath) {
@@ -42,33 +57,47 @@ function main() {
     return;
   }
 
-  const targetPath = join(projectRoot, ".cursor", "skills", BOOTSTRAP_SKILL.name, "SKILL.md");
-  if (sourcePath === targetPath) {
-    console.log(`ℹ️  已在本地 source repo 中：${targetPath}`);
-    return;
-  }
-
   const sourceContent = readFileSync(sourcePath, "utf-8");
+  const targets = getTargetPaths();
 
-  if (existsSync(targetPath)) {
-    const targetContent = readFileSync(targetPath, "utf-8");
+  let updatedCount = 0;
+  let skippedCount = 0;
 
-    if (!targetContent.includes(BOOTSTRAP_SKILL.managedMarker) && targetContent !== sourceContent) {
-      console.log(
-        `⚠️  偵測到既有自訂 skill：${targetPath}，為避免覆蓋使用者內容，本次跳過更新`,
-      );
-      return;
+  for (const targetPath of targets) {
+    if (sourcePath === targetPath) {
+      console.log(`ℹ️  source 與目標相同，跳過：${targetPath}`);
+      continue;
     }
 
-    if (targetContent === sourceContent) {
-      console.log(`ℹ️  Pantheon bootstrap skill 已是最新：${targetPath}`);
-      return;
+    if (existsSync(targetPath)) {
+      const targetContent = readFileSync(targetPath, "utf-8");
+
+      if (
+        !targetContent.includes(BOOTSTRAP_SKILL.managedMarker) &&
+        targetContent !== sourceContent
+      ) {
+        console.log(
+          `⚠️  偵測到既有自訂 skill：${targetPath}，為避免覆蓋使用者內容，本次跳過更新`,
+        );
+        skippedCount += 1;
+        continue;
+      }
+
+      if (targetContent === sourceContent) {
+        console.log(`ℹ️  Pantheon bootstrap skill 已是最新：${targetPath}`);
+        continue;
+      }
     }
+
+    ensureDirForFile(targetPath);
+    writeFileSync(targetPath, sourceContent, "utf-8");
+    updatedCount += 1;
+    console.log(`🧠 已落地 Pantheon bootstrap skill：${targetPath}`);
   }
 
-  ensureDirForFile(targetPath);
-  writeFileSync(targetPath, sourceContent, "utf-8");
-  console.log(`🧠 已落地 Pantheon bootstrap skill：${targetPath}`);
+  if (updatedCount === 0 && skippedCount === 0) {
+    console.log("ℹ️  沒有需要更新的 bootstrap skill 目標");
+  }
 }
 
 main();

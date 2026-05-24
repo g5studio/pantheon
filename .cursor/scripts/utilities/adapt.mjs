@@ -1133,11 +1133,15 @@ async function main() {
   const compassApiToken = process.env.COMPASS_API_TOKEN || env.COMPASS_API_TOKEN || null;
   const compassOperatorProxyUrl =
     process.env.COMPASS_OPERATOR_PROXY_URL || env.COMPASS_OPERATOR_PROXY_URL || null;
+  const customOpenAiApiUrl =
+    process.env.CUSTOM_OPENAI_API_URL ||
+    env.CUSTOM_OPENAI_API_URL ||
+    "http://service-hub-ai.balinese-python.ts.net/v1";
 
   // Provider selection policy:
   // - Prefer OpenAI when OPENAI_API_KEY exists
-  // - If no OPENAI_API_KEY but COMPASS_API_TOKEN exists, fallback to Compass operator-proxy
-  // - If neither exists, degrade to no-llm automatically (do NOT fail)
+  // - If no OPENAI_API_KEY, default to OpenAI-compatible API domain
+  // - Keep compass as explicit opt-in only
   let provider = null;
   let degradedReason = null;
 
@@ -1146,32 +1150,26 @@ async function main() {
     if (want === "openai") {
       if (openaiKey) {
         provider = "openai";
-      } else if (compassApiToken) {
-        provider = "compass";
-        degradedReason =
-          "指定 openai provider 但缺少 OPENAI_API_KEY，將改走 Compass operator-proxy";
       } else {
-        degradedReason = "指定 openai provider 但缺少 OPENAI_API_KEY";
+        provider = "api-domain";
+        degradedReason =
+          "指定 openai provider 但缺少 OPENAI_API_KEY，將改走 CUSTOM_OPENAI_API_URL";
       }
+    } else if (want === "api-domain" || want === "openai-domain" || want === "domain") {
+      provider = "api-domain";
     } else if (want === "compass") {
-      if (compassApiToken) provider = "compass";
-      else degradedReason = "指定 compass provider 但缺少 COMPASS_API_TOKEN";
+      if (compassApiToken) {
+        provider = "compass";
+      } else {
+        provider = openaiKey ? "openai" : "api-domain";
+        degradedReason = "指定 compass provider 但缺少 COMPASS_API_TOKEN";
+      }
     } else {
-      degradedReason = `未知 llm provider：${explicitProvider}`;
+      provider = openaiKey ? "openai" : "api-domain";
+      degradedReason = `未知 llm provider：${explicitProvider}，改用 ${provider}`;
     }
   } else {
-    provider = openaiKey ? "openai" : compassApiToken ? "compass" : null;
-  }
-
-  if (!provider) {
-    console.log(
-      "\n⏭️  未配置 OPENAI_API_KEY 且缺少 COMPASS_API_TOKEN，將自動以 --no-llm 模式執行（只更新 sources/meta/cache）\n"
-    );
-    base.cache.inputHash = inputHash;
-    base.cache.note = "llm skipped: no api key";
-    writeKnowledge(filePath, base);
-    console.log(`✅ 已更新：${filePath}\n`);
-    return;
+    provider = openaiKey ? "openai" : "api-domain";
   }
 
   const model =
@@ -1193,8 +1191,10 @@ async function main() {
   const llmOutput = await attemptLlmJsonCall({
     callArgs: {
       apiKey: provider === "openai" ? openaiKey : null,
-      compassApiToken,
-      compassOperatorProxyUrl,
+      customOpenAiApiUrl: provider === "api-domain" ? customOpenAiApiUrl : null,
+      compassApiToken: provider === "compass" ? compassApiToken : null,
+      compassOperatorProxyUrl: provider === "compass" ? compassOperatorProxyUrl : null,
+      forceCompassProxy: provider === "compass",
       model,
       system: getAdaptSystemPrompt(),
       input: inputPayload,
@@ -1252,8 +1252,10 @@ async function main() {
     const repairResp = await attemptLlmJsonCall({
       callArgs: {
         apiKey: provider === "openai" ? openaiKey : null,
-        compassApiToken,
-        compassOperatorProxyUrl,
+        customOpenAiApiUrl: provider === "api-domain" ? customOpenAiApiUrl : null,
+        compassApiToken: provider === "compass" ? compassApiToken : null,
+        compassOperatorProxyUrl: provider === "compass" ? compassOperatorProxyUrl : null,
+        forceCompassProxy: provider === "compass",
         model,
         system: getAdaptLabelRepairSystemPrompt(),
         input: {
@@ -1284,8 +1286,10 @@ async function main() {
     const repairResp = await attemptLlmJsonCall({
       callArgs: {
         apiKey: provider === "openai" ? openaiKey : null,
-        compassApiToken,
-        compassOperatorProxyUrl,
+        customOpenAiApiUrl: provider === "api-domain" ? customOpenAiApiUrl : null,
+        compassApiToken: provider === "compass" ? compassApiToken : null,
+        compassOperatorProxyUrl: provider === "compass" ? compassOperatorProxyUrl : null,
+        forceCompassProxy: provider === "compass",
         model,
         system: getAdaptCodingStandardRepairSystemPrompt(),
         input: {
@@ -1309,8 +1313,10 @@ async function main() {
     const repairResp = await attemptLlmJsonCall({
       callArgs: {
         apiKey: provider === "openai" ? openaiKey : null,
-        compassApiToken,
-        compassOperatorProxyUrl,
+        customOpenAiApiUrl: provider === "api-domain" ? customOpenAiApiUrl : null,
+        compassApiToken: provider === "compass" ? compassApiToken : null,
+        compassOperatorProxyUrl: provider === "compass" ? compassOperatorProxyUrl : null,
+        forceCompassProxy: provider === "compass",
         model,
         system: getAdaptGitFlowRepairSystemPrompt(),
         input: {

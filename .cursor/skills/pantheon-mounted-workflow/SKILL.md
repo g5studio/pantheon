@@ -21,6 +21,8 @@ Typical responsibilities:
 - Shared `.cursor/rules`
 - Shared `.cursor/commands`
 - Shared `.cursor/scripts`
+- Shared `.cursor/skills`
+- Shared `.agents/commands`, `.agents/scripts`, and `.agents/skills` (and some repos use `.agent/*` as legacy path)
 - Shared local workflow helpers such as MR, Jira, version, or project automation scripts
 
 Do not assume Pantheon affects CI, build output, or production runtime unless the repo clearly shows that.
@@ -40,11 +42,11 @@ Before using Pantheon-related behavior:
 `pantheon:descend` usually does two things:
 
 1. Clone the Pantheon repo into `.pantheon/`
-2. Run `oracle.mjs` to sync Cursor assets into the current project
+2. Run `oracle.mjs` to copy install Pantheon assets into installed-copy folders named after the selected Pantheon branch/deity
 
-`pantheon:oracle` usually assumes `.pantheon/` already exists and only performs the sync/update step.
+`pantheon:oracle` usually assumes `.pantheon/` already exists and only performs the update/copy install step.
 
-`adapt` is the repo-localization step. Its command flow writes `adapt.json` into the project root and then runs `generate-pantheon-guideline.mjs` to materialize bootstrap Pantheon knowledge directly into the target project so the agent can still read it even when mounted paths or symlinks are not discoverable.
+`adapt` is the repo-localization step. Its command flow writes `adapt.json` into the project root and then runs `generate-pantheon-guideline.mjs` to materialize bootstrap Pantheon knowledge directly into the target project.
 
 Important: some Pantheon setups reset local changes inside `.pantheon/` before pulling updates. Treat `.pantheon/` as an external mounted repo, not a safe place for uncommitted local edits.
 
@@ -54,12 +56,16 @@ When running or reading Pantheon-provided files, resolve paths in this order:
 
 1. `.pantheon/.cursor/...`
 2. `.cursor/...`
-3. `.cursor/scripts/prometheus/...`, `.cursor/rules/prometheus/...`, or `.cursor/commands/prometheus/...` when the repo aggregates via symlink
+3. `.cursor/scripts/<install-name>/...`, `.cursor/rules/<install-name>/...`, `.cursor/commands/<install-name>/...`, or `.cursor/skills/<install-name>/...` when the repo uses installed Pantheon copies
+4. `.agents/scripts/<install-name>/...`, `.agents/commands/<install-name>/...`, or `.agents/skills/<install-name>/...`
+5. `.agent/scripts/<install-name>/...`, `.agent/commands/<install-name>/...`, or `.agent/skills/<install-name>/...` (legacy fallback)
 
-For this bootstrap skill, prefer the local materialized copy first:
+For this bootstrap skill, prefer the local materialized copies first:
 
 1. `.cursor/skills/pantheon-mounted-workflow/SKILL.md`
-2. `.pantheon/.cursor/skills/pantheon-mounted-workflow/SKILL.md`
+2. `.agents/skills/pantheon-mounted-workflow/SKILL.md`
+3. `.agent/skills/pantheon-mounted-workflow/SKILL.md` (if present)
+4. `.pantheon/.cursor/skills/pantheon-mounted-workflow/SKILL.md`
 
 If the mounted repo includes `run-pantheon-script.mjs`, prefer it when the script path may vary across mounted and non-mounted environments.
 
@@ -67,7 +73,7 @@ If the mounted repo includes `run-pantheon-script.mjs`, prefer it when the scrip
 
 Do not rely only on search results to conclude a Pantheon file does or does not exist.
 
-Mounted `.pantheon/` directories and symlinked folders can be missed by some search/indexing flows. If the user already gave a likely path, read it directly. If a path is uncertain, check known Pantheon locations in the fallback order above.
+Mounted `.pantheon/` directories and generated installation folders can be missed by some search/indexing flows. If the user already gave a likely path, read it directly. If a path is uncertain, check known Pantheon locations in the fallback order above.
 
 ## How To Operate Correctly
 
@@ -75,9 +81,9 @@ When the user asks to use Pantheon in a mounted project:
 
 1. Explain Pantheon’s role in this repo: tooling layer vs runtime feature.
 2. Identify the mount entry points in `package.json`.
-3. Identify what `oracle.mjs` syncs into `.cursor/`.
+3. Identify what `oracle.mjs` installs into `.cursor/` and `.agent/`.
 4. Check whether `adapt.json` exists and treat it as repo-localized Pantheon knowledge.
-5. Use Pantheon scripts via the correct mounted path.
+5. Use Pantheon scripts via the correct mounted or installed path.
 6. Mention any safety risks such as local reset behavior inside `.pantheon/`.
 
 When the user asks how this project uses Pantheon, summarize:
@@ -97,12 +103,12 @@ When investigating Pantheon usage in an unfamiliar repo, start from:
 - `.pantheon/version.json`
 - `.pantheon/.cursor/scripts/utilities/oracle.mjs`
 - `.pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs` if present
-- Any local `.cursor/scripts/*` that import from a Pantheon symlink path
+- Any local `.cursor/scripts/<install-name>/*`, `.agents/scripts/<install-name>/*`, or `.agent/scripts/<install-name>/*` installed by Pantheon
 
 ## Common Mistakes
 
 1. Treating Pantheon as application runtime without evidence
 2. Assuming search misses mean the file is absent
-3. Using a symlink path first when `.pantheon/.cursor/...` exists
+3. Editing generated `.cursor/*/<install-name>` or `.agent/*/<install-name>` copies instead of the Pantheon source
 4. Editing `.pantheon/` casually without realizing `oracle` may reset it
 5. Ignoring `adapt.json` even though the project already finished repo localization

@@ -8,7 +8,7 @@
 import { execSync, spawnSync } from "child_process";
 import { join, isAbsolute } from "path";
 import readline from "readline";
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync, readdirSync } from "fs";
 import {
   getProjectRoot,
   loadEnvLocal,
@@ -31,6 +31,16 @@ import {
 
 // 使用 env-loader 提供的 projectRoot
 const projectRoot = getProjectRoot();
+
+function listInstalledRunnerCandidates(rootDir) {
+  if (!existsSync(rootDir)) return [];
+
+  return readdirSync(rootDir, { withFileTypes: true })
+    .filter((dirent) => dirent.isDirectory())
+    .map((dirent) =>
+      join(rootDir, dirent.name, "utilities", "run-pantheon-script.mjs"),
+    );
+}
 
 function exec(command, options = {}) {
   try {
@@ -1002,7 +1012,7 @@ async function upsertAiReviewMarkerNoteWithToken(
     mrIid,
     100,
   );
-  const body = appendAgentSignature(buildAiReviewMarkerBody(headSha));
+  const body = buildAiReviewMarkerBody(headSha);
   const existing = notes.find(
     (n) =>
       typeof n.body === "string" && n.body.includes(AI_REVIEW_MARKER_PREFIX),
@@ -1058,7 +1068,7 @@ async function upsertAiReviewMarkerNoteWithGlab(projectPath, mrIid, headSha) {
   const notes = glabApiJson(
     `projects/${projectPath}/merge_requests/${mrIid}/notes?per_page=100&sort=desc&order_by=updated_at`,
   );
-  const body = appendAgentSignature(buildAiReviewMarkerBody(headSha));
+  const body = buildAiReviewMarkerBody(headSha);
   const list = Array.isArray(notes) ? notes : [];
   const existing = list.find(
     (n) =>
@@ -1319,7 +1329,10 @@ async function inferTargetBranchFromAdaptAndJira(ticket) {
   }
 
   // 一般：使用 git-flow.defaultBranch 或 mrTargets 首項
-  const defaultBranch = typeof gitFlow.defaultBranch === "string" ? gitFlow.defaultBranch.trim() : null;
+  const defaultBranch =
+    typeof gitFlow.defaultBranch === "string"
+      ? gitFlow.defaultBranch.trim()
+      : null;
   if (defaultBranch) return defaultBranch;
 
   const mrTargets = Array.isArray(gitFlow.mrTargets) ? gitFlow.mrTargets : [];
@@ -1762,11 +1775,15 @@ async function main() {
 
   // 目標分支優先順序：用戶指定 -> adapt 推演 -> 預設 main
   if (!userExplicitlySetTarget) {
-    const ticketForInference = currentBranch.match(/[A-Z0-9]+-\d+/)?.[0] || "N/A";
-    const inferredTarget = await inferTargetBranchFromAdaptAndJira(ticketForInference);
+    const ticketForInference =
+      currentBranch.match(/[A-Z0-9]+-\d+/)?.[0] || "N/A";
+    const inferredTarget =
+      await inferTargetBranchFromAdaptAndJira(ticketForInference);
     if (inferredTarget) {
       targetBranch = inferredTarget;
-      console.log(`🌿 依 adapt.json git-flow + Jira 推演 target branch: ${targetBranch}\n`);
+      console.log(
+        `🌿 依 adapt.json git-flow + Jira 推演 target branch: ${targetBranch}\n`,
+      );
     }
   }
 
@@ -2022,7 +2039,7 @@ async function main() {
   }
 
   // 讀取 start-task 的計劃（用於後續的 labels 判斷）
-  const startTaskInfo = readStartTaskInfo();
+  const startTaskInfo = readStartTaskInfo(ticket);
 
   // 處理開發計劃：優先使用外部傳入，否則使用 start-task 的計劃
   if (externalDevelopmentPlan) {
@@ -2277,20 +2294,24 @@ async function main() {
           '   - node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs cr/update-mr.mjs -- --development-report="<markdown>"\n',
       );
       console.error(
-        '   或加上：--update-if-exists（自動改走 update-mr 流程）\n',
+        "   或加上：--update-if-exists（自動改走 update-mr 流程）\n",
       );
       process.exit(1);
     }
 
     if (!externalDevelopmentReport || !externalDevelopmentReport.trim()) {
-      console.error("\n❌ 使用 --update-if-exists 需要提供 --development-report\n");
+      console.error(
+        "\n❌ 使用 --update-if-exists 需要提供 --development-report\n",
+      );
       console.error(
         "💡 因為更新既有 MR 必須帶開發報告（用於補齊/更新 description），避免覆蓋原內容\n",
       );
       process.exit(1);
     }
 
-    console.log(`\n🔁 已存在 MR（!${existingMRId}），將改用 update-mr 更新...\n`);
+    console.log(
+      `\n🔁 已存在 MR（!${existingMRId}），將改用 update-mr 更新...\n`,
+    );
 
     const runnerCandidates = [
       join(
@@ -2302,18 +2323,14 @@ async function main() {
         "run-pantheon-script.mjs",
       ),
       join(projectRoot, ".cursor", "scripts", "utilities", "run-pantheon-script.mjs"),
-      join(
-        projectRoot,
-        ".cursor",
-        "scripts",
-        "prometheus",
-        "utilities",
-        "run-pantheon-script.mjs",
-      ),
+      ...listInstalledRunnerCandidates(join(projectRoot, ".cursor", "scripts")),
+      ...listInstalledRunnerCandidates(join(projectRoot, ".agent", "scripts")),
     ];
     const runnerPath = runnerCandidates.find((p) => existsSync(p));
     if (!runnerPath) {
-      console.error("\n❌ 找不到 run-pantheon-script.mjs，無法執行 update-mr\n");
+      console.error(
+        "\n❌ 找不到 run-pantheon-script.mjs，無法執行 update-mr\n",
+      );
       runnerCandidates.forEach((p) => console.error(`   - ${p}`));
       process.exit(1);
     }
@@ -2340,9 +2357,9 @@ async function main() {
       process.execPath,
       [runnerPath, "cr/update-mr.mjs", "--", ...forwardArgs],
       {
-      cwd: projectRoot,
-      encoding: "utf-8",
-      stdio: "inherit",
+        cwd: projectRoot,
+        encoding: "utf-8",
+        stdio: "inherit",
       },
     );
 
