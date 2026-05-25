@@ -96,12 +96,9 @@ release-5.34.25:https://gitlab.service-hub.tech/frontend/fluid-two/-/tags/releas
 
 ## 評論格式
 
-在 Jira 中，評論使用 Jira 標記語言，超連結格式為：`[text|url]`
+透過 Jira REST API v3 新增評論時，body 必須使用 **ADF（Atlassian Document Format）**，超連結需以 `link` mark 表示（Wiki 語法 `[text|url]` 放在純文字中不會被解析為連結）。
 
-例如，tag `release-5.34.24` 和 URL `https://gitlab.service-hub.tech/frontend/fluid-two/-/tags/release-5.34.24` 會生成：
-```
-[release-5.34.24|https://gitlab.service-hub.tech/frontend/fluid-two/-/tags/release-5.34.24]
-```
+例如，tag `release-5.34.24` 會在 Jira 顯示為可點擊文字，連結至 `https://gitlab.service-hub.tech/frontend/fluid-two/-/tags/release-5.34.24`。
 
 ## Tag 驗證功能
 

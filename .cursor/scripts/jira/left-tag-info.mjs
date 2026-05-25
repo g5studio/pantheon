@@ -203,14 +203,33 @@ function validateAllTags(tagMapping) {
   };
 }
 
-// 格式化評論內容（Jira 標記語言的超連結格式）
-function formatComment(tag, tagUrl) {
-  // Jira 超連結格式：[text|url]
-  return `[${tag}|${tagUrl}]`;
+// 建立含超連結的 ADF 評論 body（Jira REST API v3 需使用 link mark，Wiki [text|url] 不會被解析）
+function buildTagLinkCommentBody(tag, tagUrl) {
+  return {
+    type: "doc",
+    version: 1,
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          {
+            type: "text",
+            text: tag,
+            marks: [
+              {
+                type: "link",
+                attrs: { href: tagUrl },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
 }
 
 // 添加評論到 Jira issue
-async function addComment(issueKey, commentBody, auth) {
+async function addComment(issueKey, tag, tagUrl, auth) {
   const url = `${BASE_URL}/rest/api/3/issue/${issueKey}/comment`;
 
   const response = await fetch(url, {
@@ -221,21 +240,7 @@ async function addComment(issueKey, commentBody, auth) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      body: {
-        type: "doc",
-        version: 1,
-        content: [
-          {
-            type: "paragraph",
-            content: [
-              {
-                type: "text",
-                text: commentBody,
-              },
-            ],
-          },
-        ],
-      },
+      body: buildTagLinkCommentBody(tag, tagUrl),
     }),
   });
 
@@ -624,8 +629,7 @@ async function main() {
     for (const task of taskList) {
       for (const [tag, tagUrl] of Object.entries(tagMapping)) {
         try {
-          const commentBody = formatComment(tag, tagUrl);
-          await addComment(task, commentBody, auth);
+          await addComment(task, tag, tagUrl, auth);
           console.log(`✓ 已在 ${task} 中添加 tag 評論: ${tag}`);
           successCount++;
         } catch (error) {
