@@ -10,8 +10,9 @@ This rule defines the formatting standards for AI responses in chat, including l
 This rule applies to **all** AI responses in chat whenever they mention:
 - **MR (Merge Request)**: Any reference to a GitLab MR
 - **Jira Ticket**: Any reference to a Jira ticket number
+- **Data flow / logic flow**: Any explanation of how data, state, or control moves through the system
 
-**Regardless of whether it is a task execution report, problem discussion, status update, or any other conversational context, this rule must be followed.**
+**Regardless of whether it is a task execution report, problem discussion, status update, code investigation, or any other conversational context, this rule must be followed.**
 
 ## Core Principle
 
@@ -86,6 +87,208 @@ The following situations **may** use non-table format:
 1. **Single item**: Only one item; no need for a table
 2. **Non-structured descriptions**: Content is narrative text with no clear field structure
 3. **Complex nested data**: Data structure is too complex and a table would be harder to read
+
+## Data Flow Presentation Standards
+
+**CRITICAL**: When explaining **data flows**, **logic flows**, **rendering pipelines**, **request/response chains**, or any multi-step path of "input → processing → output" to the user, the AI **MUST** use the **flowchart + table combined format** as the standard presentation. Do **not** rely on long prose or bullet lists alone.
+
+### Applicable Scenarios (Must Use This Format)
+
+The following situations **MUST** use flowchart + table combined presentation:
+
+- **Data flow explanation**: How data moves from source (API, store, props) to UI or downstream consumers
+- **Display / rendering logic**: How a field, column, or component decides what to show
+- **Request–response flow**: Frontend → API → backend → response → state update
+- **State / event chain**: User action → handler → reducer/context → re-render
+- **Conditional branching logic**: Priority rules, fallback chains, feature flags
+- **Cross-module call chain**: Which file/function calls which, in what order
+- **Root-cause analysis involving multiple layers**: Why different inputs produce different outputs
+
+### Mandatory Response Structure
+
+When presenting a data flow, responses **MUST** follow this section order:
+
+| Order | Section | Required | Purpose |
+|-------|---------|----------|---------|
+| 1 | **Brief conclusion** | ✅ Required | 1–3 sentences: direct answer to the user's question |
+| 2 | **Structure / overview table** | ✅ Required | Map UI blocks, pipeline stages, or layers (what each part is) |
+| 3 | **Core logic table** | ✅ Required when rules exist | Priority, condition, source, outcome (e.g. lookup order, fallbacks) |
+| 4 | **Flowchart (Mermaid)** | ✅ Required | Visualize the full path from entry to result |
+| 5 | **Comparison / scenario table** | When multiple outcomes exist | Explain why different inputs yield different results |
+| 6 | **Related files table** | Recommended | File path + responsibility |
+
+**Prohibited actions**:
+- ❌ Explaining a multi-step flow using only paragraphs or bullet lists without a flowchart
+- ❌ Providing a flowchart without supporting tables (overview and/or logic table)
+- ❌ Omitting the brief conclusion and forcing the user to infer the answer from details
+- ❌ Listing functions/files in prose when a table would be clearer
+
+### Section Templates
+
+#### 1. Brief Conclusion
+
+Start with a direct answer before details:
+
+```
+## 結論（或 ## Conclusion）
+
+[One to three sentences: what the flow does, and the direct answer to the user's question.]
+```
+
+#### 2. Structure / Overview Table
+
+Use when explaining UI layout, pipeline stages, or architectural layers:
+
+```
+| 區塊 / Stage | 顯示內容 / Output | 來源 / Source |
+|--------------|-------------------|---------------|
+| 第 1 行 | 聯賽名稱 + 開賽時間 | `tournamentName`, `getKickoffEndDisplayText` |
+| 第 2 行 | 主客隊 + 比分 | `getMatch`, `detail.inplay` |
+| 第 3 行 | 投注選項 @ 賠率 | `handleMarketDetail` |
+```
+
+Column names may be adapted (e.g. `Step`, `Function`, `Input`, `Output`) as long as the structure is clear.
+
+#### 3. Core Logic Table
+
+Use for priority chains, mapping rules, conditions, or fallbacks:
+
+```
+| 優先級 | 來源 | 說明 |
+|--------|------|------|
+| 1 | `mkInfo.betOn[betOn]` | CDN 靜態映射 |
+| 2 | `gamePlayerData[sid][playerId]` | 球員名稱 API |
+| 3 | `betOnInfo.k` | 原始值 fallback |
+```
+
+For comparisons across scenarios:
+
+```
+| 情境 | 條件 | 結果 |
+|------|------|------|
+| 有 CDN 映射 | `betOn = "d0"` 且 market 有 `betOn` 設定 | 顯示「無進球」 |
+| 無 CDN 映射 | `betOn = "d0"` 且 market 的 `betOn` 為 null | 顯示原始值 `d0` |
+```
+
+#### 4. Flowchart (Mermaid)
+
+**MUST** include a Mermaid diagram for the overall flow. Use `flowchart TD` or `flowchart LR` as appropriate.
+
+Example (render as a Mermaid code block in the actual response):
+
+    flowchart TD
+      A[gameContent.detail] --> B[parseGameContent]
+      B --> C[parseNotBetComboContent]
+      C --> D[handleMarketDetail]
+      D --> E[getMarketInfo]
+      E --> F{mkInfo.betOn 有映射?}
+      F -->|有| G[顯示 display 文案]
+      F -->|無| H{gamePlayerData 有球員名?}
+      H -->|有| I[顯示球員名]
+      H -->|無| J[顯示 betOn 原始值]
+      G --> K["selName @ odds + 盤口"]
+      I --> K
+      J --> K
+
+Flowchart requirements:
+- **Entry node**: Where data or control enters (props, API, user action)
+- **Decision nodes**: Branching conditions (`{}` diamonds)
+- **Process nodes**: Key functions or transformation steps
+- **Exit node**: Final output (UI text, state, API response)
+- **Edge labels**: Use when the branch reason is not obvious from the node name
+- Keep node labels concise; put function/file names in backticks or plain text
+
+#### 5. Related Files Table
+
+```
+| 檔案 | 職責 |
+|------|------|
+| `src/.../sport.js` | 內容欄渲染、`getMarketInfo` |
+| `src/.../index.js` | 載入盤口設定、球員名稱 API |
+```
+
+### Language
+
+- Match the user's preferred language (Chinese or English) for section headings and table content
+- Mermaid node text may use the same language as the response
+- Code identifiers (function names, file paths, field names) stay as in source code
+
+### Minimal vs Full Example
+
+**Simple flow** (3 steps or fewer): Still require **conclusion + overview table + flowchart**. Logic table optional if there is no branching.
+
+**Complex flow** (branching, fallbacks, multiple layers): Use the **full structure** (all six sections as applicable).
+
+### Correct vs Incorrect Example
+
+```
+✅ Correct (flowchart + tables):
+
+## 結論
+紅框處由 handleMarketDetail 渲染，文字來自 getMarketInfo 的 selName。
+
+| 區塊 | 顯示內容 | 來源 |
+|------|----------|------|
+| 第 3 行 | 投注選項 @ 賠率 | handleMarketDetail |
+
+| 優先級 | 來源 | 說明 |
+|--------|------|------|
+| 1 | mkInfo.betOn[betOn] | CDN 靜態映射 |
+| 2 | gamePlayerData | 球員名稱 API |
+
+[Mermaid flowchart here]
+
+❌ Wrong (prose only):
+
+首先會從 gameContent 取出 detail，然後呼叫 parseGameContent，
+再進入 parseNotBetComboContent，裡面會呼叫 handleMarketDetail，
+handleMarketDetail 又會呼叫 getMarketInfo……
+（長段落、無表格、無流程圖）
+```
+
+### Posting Data Flow Explanations to Jira Comments
+
+**CRITICAL**: When the user asks the agent to post a data-flow explanation (including flowcharts) to a Jira ticket comment, **MUST** use `add-jira-comment` with **`--render-flowchart`**.
+
+| Step | Action | Required |
+|------|--------|----------|
+| 1 | Prepare comment with conclusion + tables + ` ```mermaid ... ``` ` block(s) | ✅ |
+| 2 | Run `pnpm run add-jira-comment -- --ticket=<TICKET> --render-flowchart` | ✅ |
+| 3 | Prefer `--comment-file=<path>` for long comments with flowcharts | Recommended |
+| 4 | Report the returned `commentUrl` to the user as a hyperlink | ✅ |
+
+**Command examples**:
+
+```bash
+# Pantheon repo
+pnpm run add-jira-comment -- --ticket=FE-8250 --comment-file=./comment.md --render-flowchart
+
+# Mounted project (when script not in host package.json)
+node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs jira/add-jira-comment.mjs --ticket=FE-8250 --comment-file=./comment.md --render-flowchart
+```
+
+**Comment file structure** (same as chat presentation):
+
+    ## 調整摘要
+    （1–3 句結論）
+
+    | 區塊 | 說明 |
+    |------|------|
+    | ... | ... |
+
+    ```mermaid
+    flowchart TD
+      A[輸入] --> B[處理] --> C[輸出]
+    ```
+
+**Prohibited actions when posting flowcharts to Jira**:
+- ❌ Posting Mermaid source only without `--render-flowchart` when the user expects a visible diagram
+- ❌ Using direct Jira API instead of `add-jira-comment` when the script is available
+- ❌ Omitting supporting tables and only posting the flowchart
+
+**Fallback behavior** (handled by script):
+- If mermaid.ink rendering fails, the script falls back to an ADF `codeBlock` with Mermaid source
+- The JSON output includes `flowcharts[]` with `fallback` and `warning` fields for agent reporting
 
 ## Jira Ticket Link Format
 
@@ -446,6 +649,9 @@ I violated the "Task Completion System Notification" rule in the last response:
 - [ ] Multiple links separated by commas or appropriate separators
 - [ ] URL format is correct (Jira uses `innotech.atlassian.net`, MR uses `gitlab.service-hub.tech`)
 - [ ] Summary, comparison, and check-type reports use table format
+- [ ] Data flow / logic flow explanations use **flowchart + table combined format** (conclusion → overview table → logic table if needed → Mermaid flowchart → related files)
+- [ ] Data flow explanations are not prose-only or bullet-list-only without a flowchart
+- [ ] Jira comments with flowcharts use `add-jira-comment --render-flowchart` (not plain Mermaid text only)
 
 ### 🚨 Notification Check (Highest Priority)
 

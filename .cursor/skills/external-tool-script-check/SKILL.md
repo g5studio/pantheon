@@ -86,7 +86,7 @@ Examples:
 
 - Jira read -> `read-jira-ticket`
 - Jira create -> `create-jira-ticket`
-- Jira update / transition / comment -> `update-jira`, `transition-jira-ticket`, `add-jira-comment`
+- Jira update / transition / comment -> `update-jira`, `transition-jira-ticket`, `add-jira-comment` (use `--render-flowchart` when posting Mermaid flowcharts)
 
 ## External Platform Mapping (Default)
 
