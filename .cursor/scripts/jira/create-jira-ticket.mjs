@@ -132,9 +132,22 @@ async function getCreateIssueTypes(projectKey) {
 }
 
 async function getCreateFieldMeta(projectKey, issueTypeId) {
-  return requestJira(
-    `/rest/api/3/issue/createmeta/${projectKey}/issuetypes/${issueTypeId}`
+  const data = await requestJira(
+    `/rest/api/3/issue/createmeta?projectKeys=${encodeURIComponent(
+      projectKey
+    )}&issuetypeIds=${encodeURIComponent(
+      issueTypeId
+    )}&expand=projects.issuetypes.fields`
   );
+
+  const issueTypeMeta = data.projects?.[0]?.issuetypes?.[0];
+  if (!issueTypeMeta?.fields) {
+    throw new Error(
+      `無法取得 ${projectKey} issue type ${issueTypeId} 的 create metadata`
+    );
+  }
+
+  return { fields: issueTypeMeta.fields };
 }
 
 async function resolveIssueType(projectKey, issueTypeName) {
@@ -157,6 +170,23 @@ async function resolveIssueType(projectKey, issueTypeName) {
   return matched;
 }
 
+function findFieldKey(fieldMeta, predicate) {
+  return (
+    Object.entries(fieldMeta).find(([, meta]) => predicate(meta))?.[0] || null
+  );
+}
+
+function findFieldKeyBySystem(fieldMeta, system) {
+  return findFieldKey(fieldMeta, (meta) => meta.schema?.system === system);
+}
+
+function findFieldKeyByCustom(fieldMeta, customType) {
+  return findFieldKey(
+    fieldMeta,
+    (meta) => meta.schema?.custom === customType
+  );
+}
+
 function parseArgs(args) {
   const result = {
     project: null,
@@ -164,6 +194,8 @@ function parseArgs(args) {
     description: null,
     issueType: "Request",
     epic: null,
+    parent: null,
+    linkType: "拆分为",
     assignee: null,
     priority: null,
     labels: null,
@@ -194,6 +226,12 @@ function parseArgs(args) {
       result.epic = arg.split("=").slice(1).join("=");
     } else if (arg === "--epic" || arg === "--epic-link") {
       result.epic = args[++i];
+    } else if (arg.startsWith("--parent=")) {
+      result.parent = arg.split("=").slice(1).join("=");
+    } else if (arg === "--parent") {
+      result.parent = args[++i];
+    } else if (arg.startsWith("--link-type=")) {
+      result.linkType = arg.split("=").slice(1).join("=");
     } else if (arg.startsWith("--assignee=")) {
       result.assignee = arg.split("=").slice(1).join("=");
     } else if (arg.startsWith("--priority=")) {
@@ -209,25 +247,85 @@ function parseArgs(args) {
 }
 
 function getEpicFieldKey(fieldMeta) {
-  if (fieldMeta.parent) {
-    return "parent";
-  }
-
-  const epicFieldEntry = Object.entries(fieldMeta).find(
-    ([, meta]) => meta.name?.toLowerCase() === "epic link"
+  return (
+    findFieldKeyByCustom(fieldMeta, "com.pyxis.greenhopper.jira:gh-epic-link") ||
+    findFieldKey(fieldMeta, (meta) =>
+      /epic\s*link|史诗链接/i.test(meta.name || "")
+    )
   );
-
-  return epicFieldEntry?.[0] || null;
 }
 
 function getMissingRequiredFields(fieldMeta, fields) {
-  const builtInFields = new Set(["project", "summary", "issuetype"]);
+  const handledSystems = new Set([
+    "project",
+    "summary",
+    "issuetype",
+    "reporter",
+  ]);
 
   return Object.entries(fieldMeta)
     .filter(([, meta]) => meta.required && !meta.hasDefaultValue)
-    .filter(([fieldKey]) => !builtInFields.has(fieldKey))
-    .filter(([fieldKey]) => fields[fieldKey] === undefined)
-    .map(([fieldKey, meta]) => meta.name || fieldKey);
+    .filter(([fieldKey, meta]) => {
+      const system = meta.schema?.system;
+      if (system && handledSystems.has(system)) {
+        return false;
+      }
+
+      return fields[fieldKey] === undefined;
+    })
+    .map(([, meta]) => meta.name || meta.schema?.system || "unknown");
+}
+
+async function getIssueLinkTypes() {
+  const data = await requestJira("/rest/api/3/issueLinkType");
+  return data.issueLinkTypes || [];
+}
+
+async function createIssueLink(sourceTicket, targetTicket, linkTypeName) {
+  const linkTypes = await getIssueLinkTypes();
+  const linkType = linkTypes.find(
+    (type) =>
+      type.name.toLowerCase() === linkTypeName.toLowerCase() ||
+      type.inward.toLowerCase() === linkTypeName.toLowerCase() ||
+      type.outward.toLowerCase() === linkTypeName.toLowerCase()
+  );
+
+  if (!linkType) {
+    const availableTypes = linkTypes
+      .map((type) => `"${type.name}" (${type.inward} / ${type.outward})`)
+      .join(", ");
+    throw new Error(
+      `找不到 Link 類型 "${linkTypeName}"。可用類型: ${availableTypes}`
+    );
+  }
+
+  const isInward = linkType.inward.toLowerCase() === linkTypeName.toLowerCase();
+
+  await requestJira("/rest/api/3/issueLink", {
+    method: "POST",
+    body: JSON.stringify({
+      type: { name: linkType.name },
+      inwardIssue: { key: isInward ? sourceTicket : targetTicket },
+      outwardIssue: { key: isInward ? targetTicket : sourceTicket },
+    }),
+  });
+
+  return {
+    type: linkType.name,
+    direction: isInward ? "inward" : "outward",
+    source: sourceTicket,
+    target: targetTicket,
+  };
+}
+
+function normalizeTicketKey(ticketOrUrl) {
+  const ticket = parseJiraUrl(ticketOrUrl) || ticketOrUrl.toUpperCase();
+
+  if (!/^[A-Z0-9]+-\d+$/.test(ticket)) {
+    throw new Error(`無效的 Jira ticket 格式: ${ticketOrUrl}`);
+  }
+
+  return ticket;
 }
 
 async function buildCreateFields(options, createMeta, issueType) {
@@ -238,11 +336,13 @@ async function buildCreateFields(options, createMeta, issueType) {
     issuetype: { id: issueType.id },
   };
 
-  if (options.description && fieldMeta.description) {
+  const descriptionFieldKey = findFieldKeyBySystem(fieldMeta, "description");
+  if (options.description && descriptionFieldKey) {
     fields.description = textToADF(options.description);
   }
 
-  if (options.assignee && fieldMeta.assignee) {
+  const assigneeFieldKey = findFieldKeyBySystem(fieldMeta, "assignee");
+  if (options.assignee && assigneeFieldKey) {
     const users = await searchUsers(options.assignee);
     if (!users.length) {
       throw new Error(`找不到用戶: ${options.assignee}`);
@@ -250,18 +350,21 @@ async function buildCreateFields(options, createMeta, issueType) {
     fields.assignee = { accountId: users[0].accountId };
   }
 
-  if (options.priority && fieldMeta.priority) {
+  const priorityFieldKey = findFieldKeyBySystem(fieldMeta, "priority");
+  if (options.priority && priorityFieldKey) {
     fields.priority = { name: options.priority };
   }
 
-  if (options.labels && fieldMeta.labels) {
+  const labelsFieldKey = findFieldKeyBySystem(fieldMeta, "labels");
+  if (options.labels && labelsFieldKey) {
     fields.labels = options.labels
       .split(",")
       .map((label) => label.trim())
       .filter(Boolean);
   }
 
-  if (options.components && fieldMeta.components) {
+  const componentsFieldKey = findFieldKeyBySystem(fieldMeta, "components");
+  if (options.components && componentsFieldKey) {
     fields.components = options.components
       .split(",")
       .map((component) => component.trim())
@@ -269,21 +372,28 @@ async function buildCreateFields(options, createMeta, issueType) {
       .map((name) => ({ name }));
   }
 
+  const parentFieldKey = findFieldKeyBySystem(fieldMeta, "parent");
+  const parentTarget = options.parent || options.epic;
+
+  if (parentTarget) {
+    const parentKey = normalizeTicketKey(parentTarget);
+
+    if (issueType.subtask && !parentFieldKey) {
+      throw new Error("Sub-task 需要 parent 欄位，但此 issue type 不支援 parent");
+    }
+
+    if (parentFieldKey) {
+      fields.parent = { key: parentKey };
+    }
+  } else if (issueType.subtask) {
+    throw new Error("建立 Sub-task 時必須指定 --parent=<父單 ticket>");
+  }
+
   if (options.epic) {
-    const epicKey = parseJiraUrl(options.epic) || options.epic.toUpperCase();
-
-    if (!/^[A-Z0-9]+-\d+$/.test(epicKey)) {
-      throw new Error(`無效的 Epic 格式: ${options.epic}`);
-    }
-
+    const epicKey = normalizeTicketKey(options.epic);
     const epicFieldKey = getEpicFieldKey(fieldMeta);
-    if (!epicFieldKey) {
-      throw new Error("此 issue type 不支援 parent / Epic Link 欄位");
-    }
 
-    if (epicFieldKey === "parent") {
-      fields.parent = { key: epicKey };
-    } else {
+    if (epicFieldKey) {
       fields[epicFieldKey] = epicKey;
     }
   }
@@ -297,19 +407,41 @@ async function buildCreateFields(options, createMeta, issueType) {
     );
   }
 
-  return fields;
+  return {
+    fields,
+    parentFieldKey,
+    epicFieldKey: options.epic ? getEpicFieldKey(fieldMeta) : null,
+  };
 }
 
 async function createJiraTicket(options) {
   const issueType = await resolveIssueType(options.project, options.issueType);
   const createMeta = await getCreateFieldMeta(options.project, issueType.id);
-  const fields = await buildCreateFields(options, createMeta, issueType);
+  const { fields, parentFieldKey, epicFieldKey } = await buildCreateFields(
+    options,
+    createMeta,
+    issueType
+  );
   const created = await requestJira("/rest/api/3/issue", {
     method: "POST",
     body: JSON.stringify({ fields }),
   });
 
   const { baseUrl } = createApiConfig();
+  const associationTarget = options.parent || options.epic;
+  let issueLink = null;
+
+  if (
+    associationTarget &&
+    !parentFieldKey &&
+    !epicFieldKey
+  ) {
+    issueLink = await createIssueLink(
+      normalizeTicketKey(associationTarget),
+      created.key,
+      options.linkType
+    );
+  }
 
   return {
     success: true,
@@ -319,7 +451,11 @@ async function createJiraTicket(options) {
     project: options.project,
     summary: options.summary,
     issueType: issueType.name,
-    epic: options.epic ? parseJiraUrl(options.epic) || options.epic : null,
+    parent: options.parent
+      ? normalizeTicketKey(options.parent)
+      : null,
+    epic: options.epic ? normalizeTicketKey(options.epic) : null,
+    issueLink,
     message: `已成功建立 Jira ticket: ${created.key}`,
   };
 }
@@ -338,8 +474,10 @@ function showHelp() {
 
 選填參數:
   --issue-type=<name>       Issue type，預設為 Request
-  --epic=<ticket>           指定要掛載的 Epic（例如 FE-7840）
+  --epic=<ticket>           掛到 Epic（會設定 parent + 史诗链接）
   --epic-link=<ticket>      --epic 的別名
+  --parent=<ticket>         指定父單（Sub-task 必填；Request 也可掛到 Epic/父單）
+  --link-type=<name>        無法直接設 parent/epic 時的 issue link 類型，預設「拆分为」
   --assignee=<user>         指定負責人
   --priority=<name>         指定優先級
   --labels="a,b"            設定 labels
@@ -347,6 +485,7 @@ function showHelp() {
   -h, --help                顯示此說明
 
 範例:
+  # 建立 Request 並掛到 Epic
   node create-jira-ticket.mjs \\
     --project=FE \\
     --issue-type=Request \\
@@ -354,8 +493,16 @@ function showHelp() {
     --description="需求背景\\n\\n目前缺少 Jira 開單能力" \\
     --epic=FE-7840
 
+  # 建立 Sub-task
+  node create-jira-ticket.mjs \\
+    --project=FE \\
+    --issue-type=Sub-task \\
+    --summary="實作 create-jira-ticket parent 支援" \\
+    --description="補上 parent 與 expanded createmeta" \\
+    --parent=FE-7893
+
 輸出:
-  成功時輸出 JSON，包含 ticket、url、issueType、epic。
+  成功時輸出 JSON，包含 ticket、url、issueType、parent、epic、issueLink。
   失敗時輸出 JSON error 訊息。
 `);
 }
@@ -382,6 +529,12 @@ async function main() {
   }
 }
 
-export { createJiraTicket };
+export {
+  createJiraTicket,
+  createIssueLink,
+  findFieldKeyBySystem,
+  getCreateFieldMeta,
+  normalizeTicketKey,
+};
 
 main();
