@@ -246,6 +246,50 @@ handleMarketDetail 又會呼叫 getMarketInfo……
 （長段落、無表格、無流程圖）
 ```
 
+### Posting Data Flow Explanations to Jira Comments
+
+**CRITICAL**: When the user asks the agent to post a data-flow explanation (including flowcharts) to a Jira ticket comment, **MUST** use `add-jira-comment` with **`--render-flowchart`**.
+
+| Step | Action | Required |
+|------|--------|----------|
+| 1 | Prepare comment with conclusion + tables + ` ```mermaid ... ``` ` block(s) | ✅ |
+| 2 | Run `pnpm run add-jira-comment -- --ticket=<TICKET> --render-flowchart` | ✅ |
+| 3 | Prefer `--comment-file=<path>` for long comments with flowcharts | Recommended |
+| 4 | Report the returned `commentUrl` to the user as a hyperlink | ✅ |
+
+**Command examples**:
+
+```bash
+# Pantheon repo
+pnpm run add-jira-comment -- --ticket=FE-8250 --comment-file=./comment.md --render-flowchart
+
+# Mounted project (when script not in host package.json)
+node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs jira/add-jira-comment.mjs --ticket=FE-8250 --comment-file=./comment.md --render-flowchart
+```
+
+**Comment file structure** (same as chat presentation):
+
+    ## 調整摘要
+    （1–3 句結論）
+
+    | 區塊 | 說明 |
+    |------|------|
+    | ... | ... |
+
+    ```mermaid
+    flowchart TD
+      A[輸入] --> B[處理] --> C[輸出]
+    ```
+
+**Prohibited actions when posting flowcharts to Jira**:
+- ❌ Posting Mermaid source only without `--render-flowchart` when the user expects a visible diagram
+- ❌ Using direct Jira API instead of `add-jira-comment` when the script is available
+- ❌ Omitting supporting tables and only posting the flowchart
+
+**Fallback behavior** (handled by script):
+- If mermaid.ink rendering fails, the script falls back to an ADF `codeBlock` with Mermaid source
+- The JSON output includes `flowcharts[]` with `fallback` and `warning` fields for agent reporting
+
 ## Jira Ticket Link Format
 
 ### URL Format
@@ -607,6 +651,7 @@ I violated the "Task Completion System Notification" rule in the last response:
 - [ ] Summary, comparison, and check-type reports use table format
 - [ ] Data flow / logic flow explanations use **flowchart + table combined format** (conclusion → overview table → logic table if needed → Mermaid flowchart → related files)
 - [ ] Data flow explanations are not prose-only or bullet-list-only without a flowchart
+- [ ] Jira comments with flowcharts use `add-jira-comment --render-flowchart` (not plain Mermaid text only)
 
 ### 🚨 Notification Check (Highest Priority)
 

@@ -3,16 +3,24 @@
 /**
  * 新增 Jira ticket 留言
  * 使用 Jira API token 透過 API 在 ticket 上新增評論
+ *
+ * 流程圖支援：
+ * - 使用 --render-flowchart 啟用
+ * - 留言中的 ```mermaid ... ``` 區塊會渲染為 Jira 內嵌圖片（mermaid.ink + ADF external media）
  */
 
+import { readFileSync } from "fs";
 import { getJiraConfig } from "../utilities/env-loader.mjs";
 import { appendAgentSignature } from "../utilities/agent-signature.mjs";
+import {
+  hasMermaidBlocks,
+  renderMermaidToAdfNodes,
+  splitCommentSegments,
+} from "./mermaid-flowchart.mjs";
 
 // 從 Jira URL 解析 ticket ID
 function parseJiraUrl(url) {
-  // 格式: https://innotech.atlassian.net/browse/{ticket} 或直接是 ticket ID
   if (!url.includes("/")) {
-    // 直接是 ticket ID
     return url.toUpperCase();
   }
 
@@ -21,7 +29,6 @@ function parseJiraUrl(url) {
     return match[1];
   }
 
-  // 嘗試直接匹配 ticket 格式
   const ticketMatch = url.match(/([A-Z0-9]+-\d+)/);
   if (ticketMatch) {
     return ticketMatch[1];
@@ -30,22 +37,11 @@ function parseJiraUrl(url) {
   return null;
 }
 
-/**
- * 將純文字轉換為 ADF (Atlassian Document Format) 格式
- * @param {string} text - 純文字內容
- * @returns {Object} ADF 格式的文件物件
- */
 function normalizePipeRowCells(line) {
-  // 支援以下格式：
-  // | a | b |
-  // a | b
-  // | a | b
-  // a | b |
   const trimmed = (line ?? "").trim();
   if (!trimmed.includes("|")) return null;
 
   const parts = trimmed.split("|").map((s) => s.trim());
-  // 移除因 leading/trailing pipe 造成的空白 cell
   if (parts.length > 0 && parts[0] === "") parts.shift();
   if (parts.length > 0 && parts[parts.length - 1] === "") parts.pop();
 
@@ -65,7 +61,6 @@ function isMarkdownTableSeparatorLine(line, expectedCols) {
 function makeAdfTextParagraph(text) {
   const trimmed = (text ?? "").trim();
   if (!trimmed) {
-    // 空 cell：用空段落，避免 ADF schema 不接受完全空 content
     return { type: "paragraph", content: [] };
   }
   return {
@@ -80,16 +75,13 @@ function markdownPipeTableToADF(paragraph) {
     .map((l) => l.trimEnd())
     .filter((l) => l.length > 0);
 
-  // 最小結構：header + separator
   if (lines.length < 2) return null;
 
   const headerCells = normalizePipeRowCells(lines[0]);
   if (!headerCells) return null;
 
-  // 第二行必須是 separator line
   if (!isMarkdownTableSeparatorLine(lines[1], headerCells.length)) return null;
 
-  // 後續每一行也必須是 table row（pipe row）
   const bodyRowCells = [];
   for (let i = 2; i < lines.length; i++) {
     const row = normalizePipeRowCells(lines[i]);
@@ -122,72 +114,153 @@ function markdownPipeTableToADF(paragraph) {
 
   return {
     type: "table",
-    // attrs 可省略；保留最小可用結構，避免不同 Jira schema 差異
     content: [headerRow, ...rows],
   };
 }
 
-function textToADF(text) {
-  // 將文字按換行符分割成段落
-  const paragraphs = text.split(/\n\n+/);
+function paragraphTextToAdfNode(paragraph) {
+  const tableNode = markdownPipeTableToADF(paragraph);
+  if (tableNode) {
+    return tableNode;
+  }
 
-  const content = paragraphs.map((paragraph) => {
-    // 1) 優先嘗試：Markdown pipe table → ADF table
-    const tableNode = markdownPipeTableToADF(paragraph);
-    if (tableNode) {
-      return tableNode;
-    }
+  const trimmedParagraph = (paragraph ?? "").trim();
+  if (!trimmedParagraph) {
+    return null;
+  }
 
-    // 處理段落內的換行（單個換行符）
-    const lines = paragraph.split(/\n/);
+  const lines = trimmedParagraph.split(/\n/);
 
-    if (lines.length === 1) {
-      // 單行段落
-      return {
-        type: "paragraph",
-        content: [
-          {
-            type: "text",
-            text: paragraph,
-          },
-        ],
-      };
-    }
-
-    // 多行段落，使用 hardBreak 處理換行
-    const lineContent = [];
-    lines.forEach((line, index) => {
-      if (index > 0) {
-        lineContent.push({ type: "hardBreak" });
-      }
-      if (line) {
-        lineContent.push({
-          type: "text",
-          text: line,
-        });
-      }
-    });
-
+  if (lines.length === 1) {
     return {
       type: "paragraph",
-      content: lineContent,
+      content: [
+        {
+          type: "text",
+          text: trimmedParagraph,
+        },
+      ],
     };
+  }
+
+  const lineContent = [];
+  lines.forEach((line, index) => {
+    if (index > 0) {
+      lineContent.push({ type: "hardBreak" });
+    }
+    if (line) {
+      lineContent.push({
+        type: "text",
+        text: line,
+      });
+    }
   });
 
   return {
-    version: 1,
-    type: "doc",
-    content: content,
+    type: "paragraph",
+    content: lineContent,
+  };
+}
+
+function buildTextSegmentAdfNodes(text) {
+  const paragraphs = (text ?? "").split(/\n\n+/);
+  const nodes = [];
+
+  paragraphs.forEach((paragraph) => {
+    const node = paragraphTextToAdfNode(paragraph);
+    if (node) {
+      nodes.push(node);
+    }
+  });
+
+  return nodes;
+}
+
+/**
+ * 將純文字轉換為 ADF content nodes
+ * @param {string} text
+ * @returns {Object[]}
+ */
+function convertPlainTextToAdfNodes(text) {
+  return buildTextSegmentAdfNodes(text);
+}
+
+/**
+ * 將留言轉換為 ADF 文件
+ * @param {string} text
+ * @param {Object} options
+ * @param {boolean} [options.renderFlowchart=false]
+ * @returns {Promise<{ doc: Object, flowcharts: Object[] }>}
+ */
+async function buildCommentAdf(text, options = {}) {
+  const renderFlowchart = Boolean(options.renderFlowchart);
+
+  if (!renderFlowchart) {
+    return {
+      doc: {
+        version: 1,
+        type: "doc",
+        content: convertPlainTextToAdfNodes(text),
+      },
+      flowcharts: [],
+    };
+  }
+
+  const segments = splitCommentSegments(text);
+  const content = [];
+  const flowcharts = [];
+  let flowchartIndex = 0;
+
+  for (const segment of segments) {
+    if (segment.type === "text") {
+      content.push(...buildTextSegmentAdfNodes(segment.content));
+      continue;
+    }
+
+    flowchartIndex += 1;
+    const rendered = await renderMermaidToAdfNodes(
+      segment.content,
+      flowchartIndex
+    );
+
+    content.push(...rendered.nodes);
+    flowcharts.push({
+      index: flowchartIndex,
+      imageUrl: rendered.imageUrl,
+      fallback: rendered.fallback,
+      warning: rendered.warning || null,
+    });
+  }
+
+  return {
+    doc: {
+      version: 1,
+      type: "doc",
+      content,
+    },
+    flowcharts,
   };
 }
 
 /**
+ * 將純文字轉換為 ADF (Atlassian Document Format) 格式
+ * @param {string} text
+ * @param {Object} [options]
+ * @returns {Promise<Object>|Object}
+ */
+async function textToADF(text, options = {}) {
+  const { doc } = await buildCommentAdf(text, options);
+  return doc;
+}
+
+/**
  * 在 Jira ticket 上新增評論
- * @param {string} ticketOrUrl - Jira ticket ID 或 URL
- * @param {string} comment - 評論內容（純文字）
- * @param {Object} options - 選項
- * @param {boolean} options.internal - 是否為內部評論（僅對 Jira Service Management 有效）
- * @returns {Object} 新增的評論資訊
+ * @param {string} ticketOrUrl
+ * @param {string} comment
+ * @param {Object} options
+ * @param {boolean} [options.internal=false]
+ * @param {boolean} [options.renderFlowchart=false]
+ * @returns {Promise<Object>}
  */
 async function addJiraComment(ticketOrUrl, comment, options = {}) {
   const config = getJiraConfig();
@@ -198,22 +271,26 @@ async function addJiraComment(ticketOrUrl, comment, options = {}) {
     ? config.baseUrl.slice(0, -1)
     : config.baseUrl;
 
-  // 解析 ticket ID
   const ticket = parseJiraUrl(ticketOrUrl) || ticketOrUrl.toUpperCase();
 
   if (!/^[A-Z0-9]+-\d+$/.test(ticket)) {
     throw new Error(`無效的 Jira ticket 格式: ${ticketOrUrl}`);
   }
 
-  // 使用 Jira REST API 新增評論
-  const apiUrl = `${baseUrl}/rest/api/3/issue/${ticket}/comment`;
+  if (options.renderFlowchart && !hasMermaidBlocks(comment)) {
+    throw new Error(
+      "已啟用 --render-flowchart，但留言內容未找到 ```mermaid ... ``` 區塊"
+    );
+  }
 
-  // 準備請求體
+  const signedComment = appendAgentSignature(comment);
+  const { doc, flowcharts } = await buildCommentAdf(signedComment, options);
+
+  const apiUrl = `${baseUrl}/rest/api/3/issue/${ticket}/comment`;
   const requestBody = {
-    body: textToADF(appendAgentSignature(comment)),
+    body: doc,
   };
 
-  // 如果指定為內部評論（Jira Service Management）
   if (options.internal) {
     requestBody.properties = [
       {
@@ -265,6 +342,8 @@ async function addJiraComment(ticketOrUrl, comment, options = {}) {
       commentUrl: `${baseUrl}/browse/${ticket}?focusedCommentId=${data.id}`,
       author: data.author?.displayName || "未知",
       created: data.created,
+      renderFlowchart: Boolean(options.renderFlowchart),
+      flowcharts,
       message: `已成功在 ${ticket} 新增評論`,
     };
   } catch (error) {
@@ -275,12 +354,17 @@ async function addJiraComment(ticketOrUrl, comment, options = {}) {
   }
 }
 
-// 解析命令列參數
+function readCommentFile(filePath) {
+  return readFileSync(filePath, "utf8");
+}
+
 function parseArgs(args) {
   const result = {
     ticket: null,
     comment: null,
+    commentFile: null,
     internal: false,
+    renderFlowchart: false,
     help: false,
   };
 
@@ -291,6 +375,12 @@ function parseArgs(args) {
       result.help = true;
     } else if (arg === "--internal" || arg === "-i") {
       result.internal = true;
+    } else if (arg === "--render-flowchart" || arg === "--flowchart") {
+      result.renderFlowchart = true;
+    } else if (arg.startsWith("--comment-file=")) {
+      result.commentFile = arg.substring("--comment-file=".length);
+    } else if (arg === "--comment-file" || arg === "-f") {
+      result.commentFile = args[++i];
     } else if (arg.startsWith("--comment=")) {
       result.comment = arg.substring("--comment=".length);
     } else if (arg.startsWith("--ticket=")) {
@@ -309,7 +399,6 @@ function parseArgs(args) {
   return result;
 }
 
-// 顯示使用說明
 function showHelp() {
   console.log(`
 📝 Jira 留言工具
@@ -317,54 +406,55 @@ function showHelp() {
 使用方法:
   node add-jira-comment.mjs <ticket> <comment>
   node add-jira-comment.mjs --ticket=<ticket> --comment=<comment>
+  node add-jira-comment.mjs --ticket=<ticket> --comment-file=<path> --render-flowchart
 
 參數:
   <ticket>              Jira ticket ID 或 URL（如 FE-1234）
   <comment>             評論內容
 
 選項:
-  -t, --ticket=<value>  指定 Jira ticket
-  -c, --comment=<value> 指定評論內容
-  -i, --internal        設為內部評論（僅 Jira Service Management 有效）
-  -h, --help            顯示此說明
+  -t, --ticket=<value>       指定 Jira ticket
+  -c, --comment=<value>      指定評論內容
+  -f, --comment-file=<path>  從檔案讀取評論內容（適合含 Mermaid 流程圖的長留言）
+  --render-flowchart         將留言中的 \`\`\`mermaid ... \`\`\` 渲染為 Jira 內嵌流程圖
+  --flowchart                --render-flowchart 別名
+  -i, --internal             設為內部評論（僅 Jira Service Management 有效）
+  -h, --help                 顯示此說明
 
 支援格式:
   - ✅ 多行純文字（段落 + 換行）
   - ✅ Markdown pipe table（例如 | a | b | / |---|---|），會轉成 Jira 表格
-  - ❌ 其他 Markdown（如標題、清單、code block）目前仍以純文字呈現
+  - ✅ \`\`\`mermaid ... \`\`\`（需搭配 --render-flowchart）→ Jira 內嵌流程圖
+  - ⚠️ 流程圖渲染依賴 mermaid.ink 公開服務；失敗時 fallback 為 mermaid codeBlock
+
+Agent 使用建議:
+  當用戶要求將資料流／流程圖留言到 Jira 時，請使用 --render-flowchart，
+  並在 comment 內保留 \`\`\`mermaid 區塊與配套 Markdown 表格。
 
 範例:
   # 基本用法
   node add-jira-comment.mjs FE-1234 "這是一則評論"
 
-  # 使用具名參數
-  node add-jira-comment.mjs --ticket=FE-1234 --comment="這是一則評論"
+  # 留言含流程圖（從檔案讀取）
+  node add-jira-comment.mjs --ticket=FE-8250 --comment-file=./comment.md --render-flowchart
 
-  # 使用 URL
-  node add-jira-comment.mjs "https://innotech.atlassian.net/browse/FE-1234" "已完成修改"
+  # 留言含流程圖（inline）
+  node add-jira-comment.mjs FE-8250 "調整摘要
 
-  # 多行評論
-  node add-jira-comment.mjs FE-1234 "第一行
-第二行
-第三行"
+| 項目 | 說明 |
+|------|------|
+| 規則 | chat-report-guideline |
 
-  # 內部評論（Jira Service Management）
-  node add-jira-comment.mjs FE-1234 "內部備註" --internal
+\`\`\`mermaid
+flowchart TD
+  A[輸入] --> B[處理] --> C[輸出]
+\`\`\`" --render-flowchart
 
 輸出:
-  成功時輸出 JSON 格式的結果，包含:
-  - success: 是否成功
-  - ticket: Ticket ID
-  - ticketUrl: Ticket URL
-  - commentId: 評論 ID
-  - commentUrl: 評論直連 URL
-  - author: 評論作者
-  - created: 建立時間
-  - message: 結果訊息
+  成功時輸出 JSON，包含 ticket、commentUrl、renderFlowchart、flowcharts 等欄位
 `);
 }
 
-// 主函數
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
@@ -379,15 +469,21 @@ async function main() {
     process.exit(1);
   }
 
-  if (!args.comment) {
-    console.error("❌ 請提供評論內容");
+  let comment = args.comment;
+  if (args.commentFile) {
+    comment = readCommentFile(args.commentFile);
+  }
+
+  if (!comment) {
+    console.error("❌ 請提供評論內容（--comment 或 --comment-file）");
     console.error("\n使用 --help 查看完整說明");
     process.exit(1);
   }
 
   try {
-    const result = await addJiraComment(args.ticket, args.comment, {
+    const result = await addJiraComment(args.ticket, comment, {
       internal: args.internal,
+      renderFlowchart: args.renderFlowchart,
     });
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
@@ -396,7 +492,12 @@ async function main() {
   }
 }
 
-// 導出函數供其他模組使用
-export { addJiraComment, textToADF, parseJiraUrl };
+export {
+  addJiraComment,
+  buildCommentAdf,
+  textToADF,
+  parseJiraUrl,
+  convertPlainTextToAdfNodes,
+};
 
 main();
