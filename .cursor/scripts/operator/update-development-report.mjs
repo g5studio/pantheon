@@ -89,9 +89,8 @@ function getRelevantRulesText() {
   );
   const startTaskCommandText = readTextIfExists(startTaskCommandPath) || "";
 
-  const startTaskTemplate = extractStartTaskDevelopmentReportTemplateText(
-    startTaskCommandText,
-  );
+  const startTaskTemplate =
+    extractStartTaskDevelopmentReportTemplateText(startTaskCommandText);
 
   const parts = [];
   if (commitAndMrRules.trim()) {
@@ -271,7 +270,9 @@ async function callCompassOperatorProxyJson({
       rawText ||
       resp.statusText ||
       "Unknown error";
-    throw new Error(`Compass operator-proxy 失敗: ${resp.status} ${msg}`.trim());
+    throw new Error(
+      `Compass operator-proxy 失敗: ${resp.status} ${msg}`.trim(),
+    );
   }
 
   if (!json || typeof json !== "object") {
@@ -287,7 +288,10 @@ async function callCompassOperatorProxyJson({
   return coerceJsonObjectFromModel(resultText);
 }
 
-async function reviewDevelopmentReportWithLlm({ reportContent, startTaskInfo }) {
+async function reviewDevelopmentReportWithLlm({
+  reportContent,
+  startTaskInfo,
+}) {
   const rulesText = getRelevantRulesText();
   const changeSnapshot = getCurrentChangeSnapshot();
   const envLocal = loadEnvLocal();
@@ -296,7 +300,6 @@ async function reviewDevelopmentReportWithLlm({ reportContent, startTaskInfo }) 
     explicitModel: null,
     envLocal,
     envKeys: ["OPERATOR_LLM_MODEL", "LLM_MODEL", "OPENAI_MODEL"],
-    defaultModel: "gpt-5.2",
   });
 
   const schema = {
@@ -387,7 +390,7 @@ function readStartTaskInfo() {
     try {
       const noteContent = exec(
         `git notes --ref=start-task show ${currentCommit}`,
-        { silent: true }
+        { silent: true },
       ).trim();
       if (noteContent) {
         return { info: JSON.parse(noteContent), commit: currentCommit };
@@ -401,7 +404,7 @@ function readStartTaskInfo() {
       const parentCommit = exec("git rev-parse HEAD^", { silent: true }).trim();
       const noteContent = exec(
         `git notes --ref=start-task show ${parentCommit}`,
-        { silent: true }
+        { silent: true },
       ).trim();
       if (noteContent) {
         return { info: JSON.parse(noteContent), commit: parentCommit };
@@ -417,7 +420,7 @@ function readStartTaskInfo() {
       }).trim();
       const noteContent = exec(
         `git notes --ref=start-task show ${baseCommit}`,
-        { silent: true }
+        { silent: true },
       ).trim();
       if (noteContent) {
         return { info: JSON.parse(noteContent), commit: baseCommit };
@@ -446,7 +449,7 @@ function updateStartTaskInfo(startTaskInfo) {
         input: noteContent,
         encoding: "utf-8",
         stdio: ["pipe", "pipe", "pipe"],
-      }
+      },
     );
 
     if (result.status === 0) {
@@ -480,7 +483,7 @@ function formatMrDescription(startTaskInfo) {
       `| **負責人** | ${startTaskInfo.assignee || "未分配"} |`,
       `| **優先級** | ${startTaskInfo.priority || "未設置"} |`,
       `| **啟動時間** | ${new Date(startTaskInfo.startedAt).toLocaleString(
-        "zh-TW"
+        "zh-TW",
       )} |`,
     ].join("\n");
 
