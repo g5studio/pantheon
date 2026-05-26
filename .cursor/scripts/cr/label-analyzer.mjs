@@ -86,8 +86,12 @@ function getChangesSinceBase(baseRef) {
 
   // diff 可能很大（例如大量 json / 二進位），直接抓完整 patch 容易在 pipe 階段炸掉（ENOBUFS / maxBuffer）
   // 策略：先用 numstat 評估規模，只在「小變更」才抓 patch；失敗則降級略過 patch（但流程不中斷）
-  const maxPatchFiles = Number(process.env.LABEL_ANALYZER_MAX_PATCH_FILES || 80);
-  const maxPatchLines = Number(process.env.LABEL_ANALYZER_MAX_PATCH_LINES || 2000);
+  const maxPatchFiles = Number(
+    process.env.LABEL_ANALYZER_MAX_PATCH_FILES || 80,
+  );
+  const maxPatchLines = Number(
+    process.env.LABEL_ANALYZER_MAX_PATCH_LINES || 2000,
+  );
   const patchMaxBufferBytes = Number(
     process.env.LABEL_ANALYZER_PATCH_MAX_BUFFER_BYTES || 50 * 1024 * 1024,
   );
@@ -209,7 +213,9 @@ async function getJiraTicketInfo(ticket) {
 
   const data = await response.json();
   const fields = data.fields || {};
-  const fixVersions = Array.isArray(fields.fixVersions) ? fields.fixVersions : [];
+  const fixVersions = Array.isArray(fields.fixVersions)
+    ? fields.fixVersions
+    : [];
   const fixVersionNames = fixVersions
     .map((v) => v?.name)
     .filter((v) => typeof v === "string" && v.trim().length > 0);
@@ -237,14 +243,14 @@ export async function getJiraFixVersion(ticket) {
     config = getJiraConfig();
   } catch (error) {
     console.log(
-      `⚠️  無法獲取 ticket ${ticket} 的 fix version：${error.message}\n`
+      `⚠️  無法獲取 ticket ${ticket} 的 fix version：${error.message}\n`,
     );
     return null;
   }
 
   if (!config || !config.email || !config.apiToken) {
     console.log(
-      `⚠️  未設置 Jira API 認證信息，無法獲取 ticket ${ticket} 的 fix version\n`
+      `⚠️  未設置 Jira API 認證信息，無法獲取 ticket ${ticket} 的 fix version\n`,
     );
     guideJiraConfig();
     return null;
@@ -252,7 +258,7 @@ export async function getJiraFixVersion(ticket) {
 
   try {
     const auth = Buffer.from(`${config.email}:${config.apiToken}`).toString(
-      "base64"
+      "base64",
     );
     const baseUrl = config.baseUrl.endsWith("/")
       ? config.baseUrl.slice(0, -1)
@@ -271,13 +277,13 @@ export async function getJiraFixVersion(ticket) {
         console.log(`⚠️  找不到 Jira ticket: ${ticket}\n`);
       } else if (response.status === 401 || response.status === 403) {
         console.log(
-          `\n❌ Jira API Token 已過期或無權限 (${response.status})\n`
+          `\n❌ Jira API Token 已過期或無權限 (${response.status})\n`,
         );
         console.log(`   請聯繫最高管理員: william.chiang\n`);
         throw new Error("Jira API Token 已過期，請聯繫 william.chiang");
       } else {
         console.log(
-          `⚠️  獲取 Jira ticket ${ticket} 信息失敗: ${response.status} ${response.statusText}\n`
+          `⚠️  獲取 Jira ticket ${ticket} 信息失敗: ${response.status} ${response.statusText}\n`,
         );
       }
       return null;
@@ -293,7 +299,7 @@ export async function getJiraFixVersion(ticket) {
 
     const fixVersion = fixVersions[0].name;
     console.log(
-      `✅ 成功獲取 Jira ticket ${ticket} 的 fix version: ${fixVersion}\n`
+      `✅ 成功獲取 Jira ticket ${ticket} 的 fix version: ${fixVersion}\n`,
     );
     return fixVersion;
   } catch (error) {
@@ -301,7 +307,7 @@ export async function getJiraFixVersion(ticket) {
       throw error;
     }
     console.log(
-      `⚠️  獲取 Jira ticket ${ticket} 的 fix version 失敗: ${error.message}\n`
+      `⚠️  獲取 Jira ticket ${ticket} 的 fix version 失敗: ${error.message}\n`,
     );
     return null;
   }
@@ -361,7 +367,7 @@ export function readStartTaskInfo() {
     try {
       const noteContent = exec(
         `git notes --ref=start-task show ${currentCommit}`,
-        { silent: true }
+        { silent: true },
       ).trim();
       if (noteContent) {
         return JSON.parse(noteContent);
@@ -374,7 +380,7 @@ export function readStartTaskInfo() {
       const parentCommit = exec("git rev-parse HEAD^", { silent: true }).trim();
       const noteContent = exec(
         `git notes --ref=start-task show ${parentCommit}`,
-        { silent: true }
+        { silent: true },
       ).trim();
       if (noteContent) {
         return JSON.parse(noteContent);
@@ -389,7 +395,7 @@ export function readStartTaskInfo() {
       }).trim();
       const noteContent = exec(
         `git notes --ref=start-task show ${baseCommit}`,
-        { silent: true }
+        { silent: true },
       ).trim();
       if (noteContent) {
         return JSON.parse(noteContent);
@@ -431,12 +437,19 @@ async function suggestLabelsWithLlm({
   const forceCompassProxy = llmProvider === "compass";
 
   const explicitModel =
-    typeof envLocal.LABEL_LLM_MODEL === "string" ? envLocal.LABEL_LLM_MODEL : null;
+    typeof envLocal.LABEL_LLM_MODEL === "string"
+      ? envLocal.LABEL_LLM_MODEL
+      : null;
   const model = resolveLlmModel({
     explicitModel,
     envLocal,
-    envKeys: ["LABEL_LLM_MODEL", "ADAPT_LLM_MODEL", "AI_MODEL", "LLM_MODEL", "OPENAI_MODEL"],
-    defaultModel: "gpt-5.2",
+    envKeys: [
+      "LABEL_LLM_MODEL",
+      "ADAPT_LLM_MODEL",
+      "AI_MODEL",
+      "LLM_MODEL",
+      "OPENAI_MODEL",
+    ],
   });
 
   const system = `
@@ -491,7 +504,8 @@ async function suggestLabelsWithLlm({
   const labels = uniqStrings(resp?.labels);
   const reason = typeof resp?.reason === "string" ? resp.reason.trim() : "";
 
-  if (reason) console.log(`🧠 LLM 理由（摘要）：${truncateText(reason, 400)}\n`);
+  if (reason)
+    console.log(`🧠 LLM 理由（摘要）：${truncateText(reason, 400)}\n`);
   return labels;
 }
 
@@ -538,7 +552,9 @@ export async function determineLabels(ticket, options = {}) {
 
   const fixVersion = jiraInfo?.fixVersion || null;
   const inferredReleaseBranch =
-    fixVersion && isHotfixVersion(fixVersion) ? extractReleaseBranch(fixVersion) : null;
+    fixVersion && isHotfixVersion(fixVersion)
+      ? extractReleaseBranch(fixVersion)
+      : null;
 
   // 蒐集 changes（Hotfix 優先以 release/* 作為 base）
   const baseRef = `origin/${inferredReleaseBranch || targetBranch || "main"}`;
