@@ -13,7 +13,13 @@
 
 import { execSync, spawnSync } from "child_process";
 import { createHash } from "crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from "fs";
 import { dirname, join } from "path";
 import { getProjectRoot, loadEnvLocal, getGitLabToken } from "./env-loader.mjs";
 import { callOpenAiJson, resolveLlmModel } from "./llm-client.mjs";
@@ -64,7 +70,9 @@ function isGlabAuthenticated(hostname) {
       silent: true,
       throwOnError: false,
     });
-    return !!result && (result.includes("authenticated") || result.includes("✓"));
+    return (
+      !!result && (result.includes("authenticated") || result.includes("✓"))
+    );
   } catch {
     return false;
   }
@@ -101,7 +109,8 @@ function validateLabelsSection(value) {
   if (!Array.isArray(value)) return { ok: false, error: "labels 必須是 array" };
   for (let i = 0; i < value.length; i++) {
     const item = value[i];
-    if (!isPlainObject(item)) return { ok: false, error: `labels[${i}] 必須是 object` };
+    if (!isPlainObject(item))
+      return { ok: false, error: `labels[${i}] 必須是 object` };
     if (typeof item.name !== "string" || !item.name.trim()) {
       return { ok: false, error: `labels[${i}].name 必須是非空字串` };
     }
@@ -115,10 +124,16 @@ function validateLabelsSection(value) {
         // legacy ok
       } else if (isPlainObject(a)) {
         if (typeof a.ok !== "boolean") {
-          return { ok: false, error: `labels[${i}].applicable.ok 必須是 boolean` };
+          return {
+            ok: false,
+            error: `labels[${i}].applicable.ok 必須是 boolean`,
+          };
         }
         if (typeof a.reason !== "string" || !a.reason.trim()) {
-          return { ok: false, error: `labels[${i}].applicable.reason 必須是非空字串` };
+          return {
+            ok: false,
+            error: `labels[${i}].applicable.reason 必須是非空字串`,
+          };
         }
       } else {
         return {
@@ -147,14 +162,26 @@ function inferGitFlowFromData(gitFlowData) {
   const hasMain = gitFlowData.branches.remote.some((b) => b === "main");
 
   const branches = [];
-  if (hasMain) branches.push({ name: "main", role: "生產主線", description: "接收 release 分支合併，對應生產環境" });
-  if (hasDev) branches.push({ name: "dev", role: "開發整合主線", description: "預設分支，接收 feature/fix 與 release 分支合併" });
+  if (hasMain)
+    branches.push({
+      name: "main",
+      role: "生產主線",
+      description: "接收 release 分支合併，對應生產環境",
+    });
+  if (hasDev)
+    branches.push({
+      name: "dev",
+      role: "開發整合主線",
+      description: "預設分支，接收 feature/fix 與 release 分支合併",
+    });
   if (hasRelease) {
     const samples = (gitFlowData.branchNamePatterns?.release ?? []).slice(0, 3);
     branches.push({
       name: "release/X.Y.Z",
       role: "版本 release 分支",
-      description: `範例：${samples.join(", ")}。接收該版本的 fix/feat 合併後再合併回 dev` + (hasMain ? " 或 main" : ""),
+      description:
+        `範例：${samples.join(", ")}。接收該版本的 fix/feat 合併後再合併回 dev` +
+        (hasMain ? " 或 main" : ""),
     });
   }
   const featSamples = (gitFlowData.branchNamePatterns?.feat ?? []).slice(0, 3);
@@ -167,11 +194,12 @@ function inferGitFlowFromData(gitFlowData) {
     });
   }
 
-  const flowType = hasRelease && (hasDev || hasMain)
-    ? "Git Flow 變體（含 release 分支）"
-    : hasDev && hasMain
-      ? "Git Flow"
-      : "Trunk-based 或簡化分支";
+  const flowType =
+    hasRelease && (hasDev || hasMain)
+      ? "Git Flow 變體（含 release 分支）"
+      : hasDev && hasMain
+        ? "Git Flow"
+        : "Trunk-based 或簡化分支";
 
   const mergeFlow = hasRelease
     ? `feat/fix → release/X.Y.Z → ${hasDev ? "dev" : ""}${hasDev && hasMain ? "；release → main" : ""}`
@@ -190,8 +218,19 @@ function inferGitFlowFromData(gitFlowData) {
     summary: `預設分支為 ${defaultBranch}。${hasRelease ? "有 release 分支管理版本。" : ""}${hasDev ? "dev 為開發整合主線。" : ""}分支命名格式為 type/TICKET。`,
     branches,
     mergeFlow,
-    branchNaming: { format: "type/TICKET", examples: examples.length ? examples : ["feat/OPR-1234", "fix/IN-113575"] },
-    mrTargets: [...new Set([hasDev && "dev", hasRelease && "release/X.Y.Z", hasMain && "main"].filter(Boolean))],
+    branchNaming: {
+      format: "type/TICKET",
+      examples: examples.length ? examples : ["feat/OPR-1234", "fix/IN-113575"],
+    },
+    mrTargets: [
+      ...new Set(
+        [
+          hasDev && "dev",
+          hasRelease && "release/X.Y.Z",
+          hasMain && "main",
+        ].filter(Boolean),
+      ),
+    ],
   };
 }
 
@@ -212,7 +251,8 @@ function validateGitFlowSection(value) {
 }
 
 function validateCodingStandardSection(value) {
-  if (!Array.isArray(value)) return { ok: false, error: "coding-standard 必須是 array" };
+  if (!Array.isArray(value))
+    return { ok: false, error: "coding-standard 必須是 array" };
   for (let i = 0; i < value.length; i++) {
     const item = value[i];
     if (!isPlainObject(item)) {
@@ -222,7 +262,10 @@ function validateCodingStandardSection(value) {
       return { ok: false, error: `coding-standard[${i}].rule 必須是非空字串` };
     }
     if (typeof item.example !== "string" || !item.example.trim()) {
-      return { ok: false, error: `coding-standard[${i}].example 必須是非空字串` };
+      return {
+        ok: false,
+        error: `coding-standard[${i}].example 必須是非空字串`,
+      };
     }
   }
   return { ok: true };
@@ -253,7 +296,8 @@ function normalizeLabelItem(item) {
       error: "applicable 必須是 boolean 或 { ok: boolean, reason: string }",
     };
   }
-  const scenario = typeof item.scenario === "string" ? item.scenario.trim() : "";
+  const scenario =
+    typeof item.scenario === "string" ? item.scenario.trim() : "";
   if (!scenario) return { ok: false, error: "scenario 必須是非空字串" };
   return {
     ok: true,
@@ -268,7 +312,8 @@ function normalizeLabelItem(item) {
 function validateRepoKnowledgeObject(obj) {
   if (!isPlainObject(obj)) return { ok: false, error: "根節點必須是 object" };
   if (!("labels" in obj)) return { ok: false, error: "缺少 labels" };
-  if (!("coding-standard" in obj)) return { ok: false, error: "缺少 coding-standard" };
+  if (!("coding-standard" in obj))
+    return { ok: false, error: "缺少 coding-standard" };
   const a = validateLabelsSection(obj.labels);
   if (!a.ok) return a;
   const b = validateCodingStandardSection(obj["coding-standard"]);
@@ -302,8 +347,11 @@ function writeKnowledge(filePath, obj) {
 }
 
 function getProjectInfo() {
-  const remoteUrl = exec("git config --get remote.origin.url", { silent: true });
-  if (!remoteUrl) throw new Error("找不到 remote.origin.url，無法判斷 GitLab project");
+  const remoteUrl = exec("git config --get remote.origin.url", {
+    silent: true,
+  });
+  if (!remoteUrl)
+    throw new Error("找不到 remote.origin.url，無法判斷 GitLab project");
 
   if (remoteUrl.startsWith("git@")) {
     const match = remoteUrl.match(/git@([^:]+):(.+)/);
@@ -320,7 +368,11 @@ function getProjectInfo() {
 
   if (remoteUrl.startsWith("https://")) {
     const url = new URL(remoteUrl);
-    const fullPath = url.pathname.replace(/\.git$/, "").split("/").filter(Boolean).join("/");
+    const fullPath = url.pathname
+      .replace(/\.git$/, "")
+      .split("/")
+      .filter(Boolean)
+      .join("/");
     return {
       host: `${url.protocol}//${url.host}`,
       hostname: url.host,
@@ -337,7 +389,9 @@ async function fetchJson(url, { token } = {}) {
   const resp = await fetch(url, { headers });
   if (!resp.ok) {
     const txt = await resp.text().catch(() => "");
-    throw new Error(`GitLab API 失敗: ${resp.status} ${resp.statusText} ${txt}`.trim());
+    throw new Error(
+      `GitLab API 失敗: ${resp.status} ${resp.statusText} ${txt}`.trim(),
+    );
   }
   return await resp.json();
 }
@@ -347,7 +401,8 @@ async function listProjectLabels({ token, host, projectPathEncoded, useGlab }) {
     const data = glabApi(`projects/${projectPathEncoded}/labels`);
     if (Array.isArray(data)) return data;
   }
-  if (!token) throw new Error("缺少 GITLAB_TOKEN，且 glab 未登入，無法讀取 labels");
+  if (!token)
+    throw new Error("缺少 GITLAB_TOKEN，且 glab 未登入，無法讀取 labels");
   const url = `${host}/api/v4/projects/${projectPathEncoded}/labels?per_page=100`;
   return await fetchJson(url, { token });
 }
@@ -377,8 +432,8 @@ async function listMergeRequestsCreatedAfter({
     if (useGlab) {
       const data = glabApi(
         `projects/${projectPathEncoded}/merge_requests?scope=all&state=all&order_by=created_at&sort=desc&created_after=${encodeURIComponent(
-          createdAfterIso
-        )}&per_page=${pageSize}&page=${page}`
+          createdAfterIso,
+        )}&per_page=${pageSize}&page=${page}`,
       );
       if (!Array.isArray(data) || data.length === 0) break;
       all.push(...data);
@@ -387,10 +442,11 @@ async function listMergeRequestsCreatedAfter({
       continue;
     }
 
-    if (!token) throw new Error("缺少 GITLAB_TOKEN，且 glab 未登入，無法讀取 MR 列表");
+    if (!token)
+      throw new Error("缺少 GITLAB_TOKEN，且 glab 未登入，無法讀取 MR 列表");
 
     const url = `${host}/api/v4/projects/${projectPathEncoded}/merge_requests?scope=all&state=all&order_by=created_at&sort=desc&created_after=${encodeURIComponent(
-      createdAfterIso
+      createdAfterIso,
     )}&per_page=${pageSize}&page=${page}`;
     const data = await fetchJson(url, { token });
     if (!Array.isArray(data) || data.length === 0) break;
@@ -423,7 +479,10 @@ async function getMrChangesSummary({
     : [];
 
   const stats = [];
-  if (typeof data?.changes_count === "string" || typeof data?.changes_count === "number") {
+  if (
+    typeof data?.changes_count === "string" ||
+    typeof data?.changes_count === "number"
+  ) {
     stats.push(`filesChanged=${data.changes_count}`);
   } else if (files.length) {
     stats.push(`filesChanged=${files.length}`);
@@ -493,7 +552,9 @@ function stableStringify(value) {
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
   if (!isPlainObject(value)) return JSON.stringify(value);
   const keys = Object.keys(value).sort((a, b) => a.localeCompare(b));
-  const inner = keys.map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(",");
+  const inner = keys
+    .map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`)
+    .join(",");
   return `{${inner}}`;
 }
 
@@ -746,13 +807,18 @@ function collectGitFlowData() {
 
   try {
     // origin/HEAD -> default branch
-    const headRef = exec("git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null || true", {
-      silent: true,
-      throwOnError: false,
-    });
+    const headRef = exec(
+      "git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null || true",
+      {
+        silent: true,
+        throwOnError: false,
+      },
+    );
     if (headRef && headRef.trim()) {
       const m = headRef.trim().match(/refs\/remotes\/origin\/(.+)/);
-      result.remoteHead = m ? m[1] : headRef.replace("refs/remotes/origin/", "");
+      result.remoteHead = m
+        ? m[1]
+        : headRef.replace("refs/remotes/origin/", "");
     }
 
     // All branches
@@ -761,14 +827,22 @@ function collectGitFlowData() {
       throwOnError: false,
     });
     if (branchOut) {
-      const lines = branchOut.split("\n").map((s) => s.trim()).filter(Boolean);
+      const lines = branchOut
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
       for (const line of lines) {
-        const name = line.replace(/^\*\s*/, "").replace(/^remotes\/origin\//, "").trim();
+        const name = line
+          .replace(/^\*\s*/, "")
+          .replace(/^remotes\/origin\//, "")
+          .trim();
         if (!name || name === "HEAD") continue;
         if (line.startsWith("remotes/")) {
-          if (!result.branches.remote.includes(name)) result.branches.remote.push(name);
+          if (!result.branches.remote.includes(name))
+            result.branches.remote.push(name);
         } else {
-          if (!result.branches.local.includes(name)) result.branches.local.push(name);
+          if (!result.branches.local.includes(name))
+            result.branches.local.push(name);
         }
       }
     }
@@ -776,7 +850,7 @@ function collectGitFlowData() {
     // Recent merge commits (last 30)
     const mergeLog = exec(
       'git log --oneline --grep="Merge branch" -30 2>/dev/null || true',
-      { silent: true, throwOnError: false }
+      { silent: true, throwOnError: false },
     );
     if (mergeLog) {
       result.recentMergeLog = mergeLog
@@ -795,14 +869,26 @@ function collectGitFlowData() {
         result.branchNamePatterns.fix.push(name);
       } else if (/^release\//i.test(name)) {
         result.branchNamePatterns.release.push(name);
-      } else if (!["main", "master", "dev"].includes(name) && !/^origin\//.test(name)) {
+      } else if (
+        !["main", "master", "dev"].includes(name) &&
+        !/^origin\//.test(name)
+      ) {
         result.branchNamePatterns.other.push(name);
       }
     }
-    result.branchNamePatterns.feat = result.branchNamePatterns.feat.slice(0, 15);
+    result.branchNamePatterns.feat = result.branchNamePatterns.feat.slice(
+      0,
+      15,
+    );
     result.branchNamePatterns.fix = result.branchNamePatterns.fix.slice(0, 15);
-    result.branchNamePatterns.release = result.branchNamePatterns.release.slice(0, 20);
-    result.branchNamePatterns.other = result.branchNamePatterns.other.slice(0, 10);
+    result.branchNamePatterns.release = result.branchNamePatterns.release.slice(
+      0,
+      20,
+    );
+    result.branchNamePatterns.other = result.branchNamePatterns.other.slice(
+      0,
+      10,
+    );
 
     // Extract merge patterns from merge log
     const mergeInto = new Map();
@@ -837,7 +923,9 @@ function getRepoStructureSummary() {
   try {
     const top = readdirSync(projectRoot, { withFileTypes: true })
       .filter((d) => d && d.name && !d.name.startsWith(".git"))
-      .filter((d) => !["node_modules", "dist", "build", ".tmp"].includes(d.name))
+      .filter(
+        (d) => !["node_modules", "dist", "build", ".tmp"].includes(d.name),
+      )
       .map((d) => ({
         name: d.name,
         type: d.isDirectory() ? "dir" : d.isFile() ? "file" : "other",
@@ -862,7 +950,12 @@ function getRepoStructureSummary() {
   }
 }
 
-function buildFallbackScenario({ name, description, usageCount, repoStructure }) {
+function buildFallbackScenario({
+  name,
+  description,
+  usageCount,
+  repoStructure,
+}) {
   const desc = typeof description === "string" ? description.trim() : "";
   const used = typeof usageCount === "number" && usageCount > 0;
 
@@ -907,7 +1000,8 @@ function buildFallbackApplicable({ name, usageCount }) {
   if (allow.has(String(name))) {
     return {
       ok: true,
-      reason: "此 label 屬於跨功能的流程/工具類標記，通常適用於 tooling 類 repo。",
+      reason:
+        "此 label 屬於跨功能的流程/工具類標記，通常適用於 tooling 類 repo。",
     };
   }
 
@@ -917,7 +1011,12 @@ function buildFallbackApplicable({ name, usageCount }) {
   };
 }
 
-async function attemptLlmJsonCall({ callArgs, sectionName, warnings, maxAttempts = 3 }) {
+async function attemptLlmJsonCall({
+  callArgs,
+  sectionName,
+  warnings,
+  maxAttempts = 3,
+}) {
   const totalAttempts = Number.isFinite(maxAttempts)
     ? Math.max(1, Math.floor(maxAttempts))
     : 3;
@@ -926,7 +1025,9 @@ async function attemptLlmJsonCall({ callArgs, sectionName, warnings, maxAttempts
   for (let i = 1; i <= totalAttempts; i++) {
     try {
       if (i > 1) {
-        console.log(`🔁 LLM 重試 ${sectionName}（第 ${i}/${totalAttempts} 次）`);
+        console.log(
+          `🔁 LLM 重試 ${sectionName}（第 ${i}/${totalAttempts} 次）`,
+        );
       }
       return await callOpenAiJson(callArgs);
     } catch (e) {
@@ -943,14 +1044,18 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
 
   const filePath = args.file
-    ? (String(args.file).startsWith("/")
-        ? String(args.file)
-        : join(projectRoot, String(args.file)))
+    ? String(args.file).startsWith("/")
+      ? String(args.file)
+      : join(projectRoot, String(args.file))
     : getDefaultKnowledgeFile();
 
   const maxMrs = Number(args["max-mrs"] || 50);
-  const createdAfterIso = String(args["created-after"] || isoDateMinus3Months());
-  const llmRetryAttemptsRaw = Number(args["llm-retries"] ?? args["llm-repair-retries"] ?? 3);
+  const createdAfterIso = String(
+    args["created-after"] || isoDateMinus3Months(),
+  );
+  const llmRetryAttemptsRaw = Number(
+    args["llm-retries"] ?? args["llm-repair-retries"] ?? 3,
+  );
   const llmRetryAttempts = Number.isFinite(llmRetryAttemptsRaw)
     ? Math.max(1, Math.floor(llmRetryAttemptsRaw))
     : 3;
@@ -981,7 +1086,7 @@ async function main() {
     labels
       .filter((l) => l && typeof l === "object" && typeof l.name === "string")
       .map((l) => [l.name, Number(l.id)])
-      .filter((pair) => Number.isFinite(pair[1]))
+      .filter((pair) => Number.isFinite(pair[1])),
   );
 
   const mrs = await listMergeRequestsCreatedAfter({
@@ -996,7 +1101,7 @@ async function main() {
   console.log(`🏷️  labels: ${labels.length}`);
   console.log(`🔀 merge requests: ${mrs.length}`);
   console.log(
-    `🌿 git-flow: remoteHead=${gitFlowData.remoteHead ?? "?"} branches=${gitFlowData.branches?.remote?.length ?? 0} mergePatterns=${gitFlowData.mergePatterns?.length ?? 0}\n`
+    `🌿 git-flow: remoteHead=${gitFlowData.remoteHead ?? "?"} branches=${gitFlowData.branches?.remote?.length ?? 0} mergePatterns=${gitFlowData.mergePatterns?.length ?? 0}\n`,
   );
 
   const mrSamples = [];
@@ -1052,12 +1157,16 @@ async function main() {
   const repoStructure = getRepoStructureSummary();
   const inputPayload = {
     repo: { host: hostname, fullPath: projectInfo.fullPath },
-    labels: labels.map((l) => ({ id: l.id, name: l.name, description: l.description || "" })),
+    labels: labels.map((l) => ({
+      id: l.id,
+      name: l.name,
+      description: l.description || "",
+    })),
     mrs: mrSamples,
     labelUsage: Object.fromEntries(
       labels
         .filter((l) => l && typeof l === "object" && typeof l.name === "string")
-        .map((l) => [l.name, labelUsageCount.get(String(l.name)) || 0])
+        .map((l) => [l.name, labelUsageCount.get(String(l.name)) || 0]),
     ),
     repoStructure,
     gitFlowData,
@@ -1126,13 +1235,18 @@ async function main() {
   }
 
   // select provider
-  const explicitProvider = typeof args["llm-provider"] === "string" ? args["llm-provider"] : null;
-  const explicitModel = typeof args["llm-model"] === "string" ? args["llm-model"] : null;
+  const explicitProvider =
+    typeof args["llm-provider"] === "string" ? args["llm-provider"] : null;
+  const explicitModel =
+    typeof args["llm-model"] === "string" ? args["llm-model"] : null;
 
   const openaiKey = process.env.OPENAI_API_KEY || env.OPENAI_API_KEY || null;
-  const compassApiToken = process.env.COMPASS_API_TOKEN || env.COMPASS_API_TOKEN || null;
+  const compassApiToken =
+    process.env.COMPASS_API_TOKEN || env.COMPASS_API_TOKEN || null;
   const compassOperatorProxyUrl =
-    process.env.COMPASS_OPERATOR_PROXY_URL || env.COMPASS_OPERATOR_PROXY_URL || null;
+    process.env.COMPASS_OPERATOR_PROXY_URL ||
+    env.COMPASS_OPERATOR_PROXY_URL ||
+    null;
   const customOpenAiApiUrl =
     process.env.CUSTOM_OPENAI_API_URL ||
     env.CUSTOM_OPENAI_API_URL ||
@@ -1155,7 +1269,11 @@ async function main() {
         degradedReason =
           "指定 openai provider 但缺少 OPENAI_API_KEY，將改走 CUSTOM_OPENAI_API_URL";
       }
-    } else if (want === "api-domain" || want === "openai-domain" || want === "domain") {
+    } else if (
+      want === "api-domain" ||
+      want === "openai-domain" ||
+      want === "domain"
+    ) {
       provider = "api-domain";
     } else if (want === "compass") {
       if (compassApiToken) {
@@ -1172,13 +1290,11 @@ async function main() {
     provider = openaiKey ? "openai" : "api-domain";
   }
 
-  const model =
-    resolveLlmModel({
-      explicitModel,
-      envLocal: env,
-      envKeys: ["ADAPT_LLM_MODEL", "AI_MODEL", "LLM_MODEL", "OPENAI_MODEL"],
-      defaultModel: "gpt-5.2",
-    });
+  const model = resolveLlmModel({
+    explicitModel,
+    envLocal: env,
+    envKeys: ["ADAPT_LLM_MODEL", "AI_MODEL", "LLM_MODEL", "OPENAI_MODEL"],
+  });
 
   if (degradedReason) {
     console.log(`⚠️  ${degradedReason}`);
@@ -1193,7 +1309,8 @@ async function main() {
       apiKey: provider === "openai" ? openaiKey : null,
       customOpenAiApiUrl: provider === "api-domain" ? customOpenAiApiUrl : null,
       compassApiToken: provider === "compass" ? compassApiToken : null,
-      compassOperatorProxyUrl: provider === "compass" ? compassOperatorProxyUrl : null,
+      compassOperatorProxyUrl:
+        provider === "compass" ? compassOperatorProxyUrl : null,
       forceCompassProxy: provider === "compass",
       model,
       system: getAdaptSystemPrompt(),
@@ -1252,9 +1369,11 @@ async function main() {
     const repairResp = await attemptLlmJsonCall({
       callArgs: {
         apiKey: provider === "openai" ? openaiKey : null,
-        customOpenAiApiUrl: provider === "api-domain" ? customOpenAiApiUrl : null,
+        customOpenAiApiUrl:
+          provider === "api-domain" ? customOpenAiApiUrl : null,
         compassApiToken: provider === "compass" ? compassApiToken : null,
-        compassOperatorProxyUrl: provider === "compass" ? compassOperatorProxyUrl : null,
+        compassOperatorProxyUrl:
+          provider === "compass" ? compassOperatorProxyUrl : null,
         forceCompassProxy: provider === "compass",
         model,
         system: getAdaptLabelRepairSystemPrompt(),
@@ -1272,7 +1391,9 @@ async function main() {
       maxAttempts: llmRetryAttempts,
     });
 
-    const repairedLabels = Array.isArray(repairResp?.labels) ? repairResp.labels : [];
+    const repairedLabels = Array.isArray(repairResp?.labels)
+      ? repairResp.labels
+      : [];
     for (const item of repairedLabels) {
       const n = typeof item?.name === "string" ? item.name.trim() : "";
       if (!n || repairedLabelMap.has(n)) continue;
@@ -1286,9 +1407,11 @@ async function main() {
     const repairResp = await attemptLlmJsonCall({
       callArgs: {
         apiKey: provider === "openai" ? openaiKey : null,
-        customOpenAiApiUrl: provider === "api-domain" ? customOpenAiApiUrl : null,
+        customOpenAiApiUrl:
+          provider === "api-domain" ? customOpenAiApiUrl : null,
         compassApiToken: provider === "compass" ? compassApiToken : null,
-        compassOperatorProxyUrl: provider === "compass" ? compassOperatorProxyUrl : null,
+        compassOperatorProxyUrl:
+          provider === "compass" ? compassOperatorProxyUrl : null,
         forceCompassProxy: provider === "compass",
         model,
         system: getAdaptCodingStandardRepairSystemPrompt(),
@@ -1296,7 +1419,10 @@ async function main() {
           repo: { host: hostname, fullPath: projectInfo.fullPath },
           gitFlowData,
           mrs: mrSamples.slice(0, 20),
-          labels: labels.map((l) => ({ name: l.name, description: l.description || "" })),
+          labels: labels.map((l) => ({
+            name: l.name,
+            description: l.description || "",
+          })),
         },
         schema: getAdaptCodingStandardRepairJsonSchema(),
         schemaName: "adapt_repo_knowledge_cs_repair",
@@ -1313,9 +1439,11 @@ async function main() {
     const repairResp = await attemptLlmJsonCall({
       callArgs: {
         apiKey: provider === "openai" ? openaiKey : null,
-        customOpenAiApiUrl: provider === "api-domain" ? customOpenAiApiUrl : null,
+        customOpenAiApiUrl:
+          provider === "api-domain" ? customOpenAiApiUrl : null,
         compassApiToken: provider === "compass" ? compassApiToken : null,
-        compassOperatorProxyUrl: provider === "compass" ? compassOperatorProxyUrl : null,
+        compassOperatorProxyUrl:
+          provider === "compass" ? compassOperatorProxyUrl : null,
         forceCompassProxy: provider === "compass",
         model,
         system: getAdaptGitFlowRepairSystemPrompt(),
@@ -1354,7 +1482,11 @@ async function main() {
       const usageCount = labelUsageCount.get(name) || 0;
       const repaired = repairedLabelMap.get(name);
       const preferred = repaired || found;
-      if (preferred && typeof preferred.scenario === "string" && preferred.scenario.trim()) {
+      if (
+        preferred &&
+        typeof preferred.scenario === "string" &&
+        preferred.scenario.trim()
+      ) {
         return {
           name,
           applicable:
@@ -1397,7 +1529,8 @@ async function main() {
       : [
           {
             rule: "分析備註：本次 coding-standard 無法正確取得 llm 回覆",
-            example: "請於下一次執行 adapt 時重試，或人工補齊 coding-standard 內容",
+            example:
+              "請於下一次執行 adapt 時重試，或人工補齊 coding-standard 內容",
           },
         ];
   }
@@ -1417,7 +1550,9 @@ async function main() {
   base.cache.llm = { provider, model, analyzedAt: nowIso };
   if (llmWarnings.length > 0) {
     base.cache.llm.warnings = llmWarnings.slice(0, 20);
-    console.log(`⚠️  LLM 部分輸出異常，已採局部重試/保守降級（${llmWarnings.length} 項）`);
+    console.log(
+      `⚠️  LLM 部分輸出異常，已採局部重試/保守降級（${llmWarnings.length} 項）`,
+    );
   }
 
   writeKnowledge(filePath, base);
@@ -1428,4 +1563,3 @@ main().catch((e) => {
   console.error(`\n❌ adapt 失敗：${e.message}\n`);
   process.exit(1);
 });
-
