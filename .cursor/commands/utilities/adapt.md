@@ -149,7 +149,7 @@ node .cursor/scripts/utilities/repo-knowledge.mjs delete
 | 指令 | 前置 | 產物 |
 |---|---|---|
 | `adapt`（本指令） | - | `adapt.json`、pantheon-mounted-workflow skill |
-| `evolve` | 需先完成 `adapt` | `project-schema` skill、`misnamed-file-report.md`、註解補全 |
+| `evolve` | 需先完成 `adapt`；於目標專案執行 | 在目標專案產生 `project-schema` skill、`misnamed-file-report.md`、註解補全 |
 
 詳見 [evolve 指令文件](./evolve.md)。
 

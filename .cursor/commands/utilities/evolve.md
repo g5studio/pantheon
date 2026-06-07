@@ -13,12 +13,22 @@ description: 將專案改造成適合 Operator Agent 操作的生態（模塊架
 1. 專案內容有足夠註解與說明，協助不同 LLM 分析專案時不會因 model 等級而有太大結果落差
 2. 檔案命名與實際用途相符，且開發方式符合標準程式設計流程與專案自身的 coding standard / project coding style
 
-**落地產物**：
+**Pantheon 提供（掛載至目標專案）**：
 
-| 產物 | 路徑 | 說明 |
+| 類型 | 路徑 | 說明 |
 |---|---|---|
-| 模塊架構 skill | `.cursor/skills/project-schema/SKILL.md` | 記錄專案模塊分工，供後續 Operator 運作參考 |
-| 命名報告 | `misnamed-file-report.md`（專案根目錄） | 彙整命名不符檔案與推薦名稱 |
+| 指令 | `.cursor/commands/utilities/evolve.md` | 三階段 SOP |
+| 腳本 | `.cursor/scripts/utilities/evolve.mjs` | 輔助工具（check-prereq、file-history、write-schema 等） |
+
+**目標專案運作後產生（不在 Pantheon repo 內）**：
+
+| 產物 | 路徑（相對於目標專案根目錄） | 說明 |
+|---|---|---|
+| 模塊架構 skill | `.cursor/skills/project-schema/SKILL.md` | 階段一確認後由 `write-schema` 生成 |
+| 命名報告 | `misnamed-file-report.md` | 階段三由 `write-report` 生成 |
+| 分析暫存 | `.evolve-tmp/` | 進度、schema 草稿、rename plan 等（應加入目標專案 `.gitignore`） |
+
+> **重要**：`project-schema` skill 與 `.evolve-tmp/` 皆為 evolve 在**目標專案**執行時的落地產物，Pantheon 本身不預先包含這些檔案。
 
 ---
 
@@ -130,18 +140,47 @@ node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs writ
 }
 ```
 
-落地路徑（腳本會同步多處）：
+落地至**目標專案**（腳本會同步多處）：
 
 - `.cursor/skills/project-schema/SKILL.md`
-- `.agents/skills/project-schema/SKILL.md`（若存在 `.agent/` 也會同步）
+- `.agents/skills/project-schema/SKILL.md`（若目標專案有 `.agent/` 也會同步）
+
+`write-schema` 使用 `getProjectRoot()` 判斷目標專案根目錄，確保產物寫入執行 evolve 的專案，而非 Pantheon 掛載目錄。
 
 ---
 
 ## 2) 階段二：逐檔分析、註解補全與命名檢查
 
-依 `project-schema` 的模塊定義，**逐模塊、逐檔案**執行以下檢查。
+依 `project-schema` 的模塊定義，**逐模塊、逐檔案**執行分析。
 
-### 2.1 命名與用途核對原則
+**核心原則**：
+
+| 動作 | 時機 | 是否需要用戶確認 |
+|---|---|---|
+| 補充註解（檔案頂部、函式、物件、常數） | 單檔分析完成後**立即寫入** | ❌ 不需要 |
+| 記錄命名問題 | 分析過程中同步記錄 | ❌ 不需要 |
+| 重新命名檔案 | 全部檔案分析完成後 | ✅ 需要（階段三） |
+
+### 2.1 單檔處理流程
+
+每個檔案依序執行，**分析與註解寫入在同一輪完成**：
+
+```mermaid
+flowchart TD
+  A[讀取檔案內容] --> B[查 git history]
+  B --> C{commit 含工單號?}
+  C -->|是| D[查詢 Jira ticket]
+  C -->|否| E[判斷實際用途]
+  D --> E
+  E --> F[立即補充註解並寫入檔案]
+  F --> G{命名與用途相符?}
+  G -->|是| H[記錄完成]
+  G -->|否| I[記錄至命名問題清單]
+  H --> J[下一檔案]
+  I --> J
+```
+
+### 2.2 命名與用途核對原則
 
 **預設假設**：原始檔案命名可能有問題。核對方式：
 
@@ -161,9 +200,9 @@ node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs file
 pnpm run read-jira-ticket -- --ticket=FE-1234
 ```
 
-### 2.2 註解補全規則
+### 2.3 註解補全規則
 
-完成單檔分析後，依專案 `coding-standard` 補充註解：
+完成單檔分析後，依專案 `coding-standard` **立即**補充註解並寫入檔案（不需等待用戶確認）：
 
 | 目標 | 要求 |
 |---|---|
@@ -185,13 +224,19 @@ pnpm run read-jira-ticket -- --ticket=FE-1234
 // [FE-1234] 使用者權限檢查：驗證 token 有效性
 ```
 
+**允許行為**：
+
+- ✅ 分析完成後直接寫入註解（檔案頂部、函式、物件、常數）
+- ✅ 僅新增或補充缺少的註解，不改動程式邏輯
+
 **禁止行為**：
 
-- ❌ 未經用戶同意直接大量修改原始碼（階段二屬於「建議 + 待用戶確認後套用」；若用戶明確授權可批次套用）
 - ❌ 註解與實際邏輯不符
 - ❌ 刪除既有有效註解
+- ❌ 在階段二修改程式邏輯（僅允許新增註解）
+- ❌ 在階段二執行重新命名（重新命名統一留至階段三）
 
-### 2.3 單檔完成標記
+### 2.4 單檔完成標記
 
 每完成一檔分析，在內部追蹤表記錄：
 
@@ -205,13 +250,17 @@ pnpm run read-jira-ticket -- --ticket=FE-1234
 | `tickets` | 關聯工單號陣列 |
 | `commentsAdded` | 是否已補註解 |
 
-建議將追蹤資料寫入 `.evolve-tmp/analysis-progress.json`（此目錄應加入 `.gitignore`）。
+建議將追蹤資料寫入目標專案的 `.evolve-tmp/analysis-progress.json`。
+
+首次執行 evolve 時，AI 應確認目標專案 `.gitignore` 已包含 `.evolve-tmp/`（若無則追加）。
 
 ---
 
 ## 3) 階段三：命名報告與重新命名確認
 
-全部檔案檢查完成後：
+全部檔案分析與註解補全完成後，**僅針對命名與用途不符的檔案**進行確認：
+
+> 註解已在階段二直接寫入；階段三**只處理重新命名**，不再次詢問註解相關事項。
 
 ### 3.1 在 chat 呈現彙整表
 
@@ -274,15 +323,18 @@ node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs rena
 ```mermaid
 flowchart LR
   A[adapt] --> B[adapt.json]
-  B --> C[evolve 階段一]
-  C --> D[project-schema skill]
-  D --> E[evolve 階段二]
-  E --> F[註解補全 + 命名檢查]
-  F --> G[evolve 階段三]
-  G --> H[misnamed-file-report.md]
-  H --> I{用戶確認}
-  I -->|是| J[重新命名]
-  I -->|否| K[保留報告]
+  B --> C["階段一：模塊架構"]
+  C --> D{用戶確認架構}
+  D --> E[project-schema skill]
+  E --> F["階段二：逐檔分析"]
+  F --> G[立即寫入註解]
+  F --> H[記錄命名問題]
+  G --> I["階段三：命名報告"]
+  H --> I
+  I --> J[misnamed-file-report.md]
+  J --> K{用戶確認 rename?}
+  K -->|是| L[重新命名]
+  K -->|否| M[保留報告]
 ```
 
 | 步驟 | 指令 | 產物 |
@@ -319,10 +371,20 @@ node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs stat
 
 ---
 
-## 7) 禁止行為摘要
+## 7) 用戶確認點摘要
+
+| 步驟 | 需要確認 | 說明 |
+|---|---|---|
+| 階段一：模塊架構 | ✅ | 生成 `project-schema` 前須確認 |
+| 階段二：註解補全 | ❌ | 分析完成後直接寫入 |
+| 階段三：重新命名 | ✅ | 僅針對命名不符檔案，執行 rename 前須確認 |
+| commit | ✅ | 不自動 commit，須詢問用戶 |
+
+## 8) 禁止行為摘要
 
 - ❌ 未執行 `adapt` 就開始 `evolve`
 - ❌ 未經用戶確認架構就生成 `project-schema`
-- ❌ 未經用戶確認就執行大量重新命名
+- ❌ 未經用戶確認就執行重新命名
+- ❌ 階段二暫存註解建議但不寫入（應立即寫入）
 - ❌ 註解內容與實際程式邏輯不一致
 - ❌ 覆蓋用戶自訂且非 `managed-by-pantheon-evolve` 標記的 `project-schema` skill

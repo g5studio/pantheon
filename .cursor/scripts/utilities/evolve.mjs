@@ -7,10 +7,13 @@
  *   check-prereq          Verify adapt.json exists and output summary
  *   list-files            List analyzable source files
  *   file-history          Git history for a file with ticket extraction
- *   write-schema          Generate project-schema SKILL.md from JSON
- *   write-report          Generate misnamed-file-report.md from analysis JSON
+ *   write-schema          Generate project-schema SKILL.md in target project root
+ *   write-report          Generate misnamed-file-report.md in target project root
  *   rename                Execute file renames (supports --dry-run)
- *   status                Show evolve progress from .evolve-tmp/
+ *   status                Show evolve progress from target project .evolve-tmp/
+ *
+ * All generated artifacts (project-schema, misnamed-file-report, .evolve-tmp/)
+ * are written to the target project via getProjectRoot(), not into Pantheon source.
  */
 
 import { execSync } from "child_process";
