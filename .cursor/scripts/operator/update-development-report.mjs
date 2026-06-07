@@ -297,9 +297,9 @@ async function reviewDevelopmentReportWithLlm({
   const envLocal = loadEnvLocal();
 
   const model = resolveLlmModel({
-    explicitModel: null,
     envLocal,
     envKeys: ["OPERATOR_LLM_MODEL", "LLM_MODEL", "OPENAI_MODEL"],
+    defaultModel: "gpt-5.3-codex",
   });
 
   const schema = {
