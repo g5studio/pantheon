@@ -1,3 +1,6 @@
+# evolve runtime artifacts (target-project equivalent; ignore if generated locally)
+.evolve-tmp/
+
 # Environment variables
 .env.local
 .env*.local
