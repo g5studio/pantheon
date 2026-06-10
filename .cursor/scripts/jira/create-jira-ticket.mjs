@@ -10,6 +10,12 @@
  */
 
 import { getJiraConfig } from "../utilities/env-loader.mjs";
+import {
+  JIRA_CONTENT_OPERATIONS,
+  prepareJiraContent,
+  summarizeFormatCheck,
+} from "./jira-content-formatter.mjs";
+import { buildAdfDocFromText } from "./jira-adf-builder.mjs";
 
 function parseJiraUrl(url) {
   if (!url.includes("/")) {
@@ -27,43 +33,6 @@ function parseJiraUrl(url) {
   }
 
   return null;
-}
-
-function textToADF(text) {
-  const paragraphs = text.split(/\n\n+/);
-
-  return {
-    version: 1,
-    type: "doc",
-    content: paragraphs.map((paragraph) => {
-      const lines = paragraph.split(/\n/);
-
-      if (lines.length === 1) {
-        return {
-          type: "paragraph",
-          content: paragraph
-            ? [{ type: "text", text: paragraph }]
-            : [],
-        };
-      }
-
-      const lineContent = [];
-      lines.forEach((line, index) => {
-        if (index > 0) {
-          lineContent.push({ type: "hardBreak" });
-        }
-
-        if (line) {
-          lineContent.push({ type: "text", text: line });
-        }
-      });
-
-      return {
-        type: "paragraph",
-        content: lineContent,
-      };
-    }),
-  };
 }
 
 function createApiConfig() {
@@ -200,6 +169,7 @@ function parseArgs(args) {
     priority: null,
     labels: null,
     components: null,
+    skipFormatCheck: false,
     help: false,
   };
 
@@ -240,6 +210,8 @@ function parseArgs(args) {
       result.labels = arg.split("=").slice(1).join("=");
     } else if (arg.startsWith("--components=")) {
       result.components = arg.split("=").slice(1).join("=");
+    } else if (arg === "--skip-format-check") {
+      result.skipFormatCheck = true;
     }
   }
 
@@ -330,15 +302,32 @@ function normalizeTicketKey(ticketOrUrl) {
 
 async function buildCreateFields(options, createMeta, issueType) {
   const fieldMeta = createMeta.fields || {};
+  const formatChecks = {};
+
+  const summaryFormat = await prepareJiraContent(
+    options.summary,
+    JIRA_CONTENT_OPERATIONS.SUMMARY,
+    { skipFormatCheck: options.skipFormatCheck }
+  );
+  formatChecks.summary = summarizeFormatCheck(summaryFormat);
+
   const fields = {
     project: { key: options.project },
-    summary: options.summary,
+    summary: summaryFormat.normalizedContent,
     issuetype: { id: issueType.id },
   };
 
   const descriptionFieldKey = findFieldKeyBySystem(fieldMeta, "description");
   if (options.description && descriptionFieldKey) {
-    fields.description = textToADF(options.description);
+    const descriptionFormat = await prepareJiraContent(
+      options.description,
+      JIRA_CONTENT_OPERATIONS.DESCRIPTION,
+      { skipFormatCheck: options.skipFormatCheck }
+    );
+    formatChecks.description = summarizeFormatCheck(descriptionFormat);
+    fields.description = buildAdfDocFromText(
+      descriptionFormat.normalizedContent
+    );
   }
 
   const assigneeFieldKey = findFieldKeyBySystem(fieldMeta, "assignee");
@@ -411,17 +400,15 @@ async function buildCreateFields(options, createMeta, issueType) {
     fields,
     parentFieldKey,
     epicFieldKey: options.epic ? getEpicFieldKey(fieldMeta) : null,
+    formatChecks,
   };
 }
 
 async function createJiraTicket(options) {
   const issueType = await resolveIssueType(options.project, options.issueType);
   const createMeta = await getCreateFieldMeta(options.project, issueType.id);
-  const { fields, parentFieldKey, epicFieldKey } = await buildCreateFields(
-    options,
-    createMeta,
-    issueType
-  );
+  const { fields, parentFieldKey, epicFieldKey, formatChecks } =
+    await buildCreateFields(options, createMeta, issueType);
   const created = await requestJira("/rest/api/3/issue", {
     method: "POST",
     body: JSON.stringify({ fields }),
@@ -456,6 +443,7 @@ async function createJiraTicket(options) {
       : null,
     epic: options.epic ? normalizeTicketKey(options.epic) : null,
     issueLink,
+    formatCheck: formatChecks,
     message: `已成功建立 Jira ticket: ${created.key}`,
   };
 }
@@ -482,6 +470,7 @@ function showHelp() {
   --priority=<name>         指定優先級
   --labels="a,b"            設定 labels
   --components="A,B"        設定 components
+  --skip-format-check       略過 LLM 格式檢查（直接送出原始內容）
   -h, --help                顯示此說明
 
 範例:

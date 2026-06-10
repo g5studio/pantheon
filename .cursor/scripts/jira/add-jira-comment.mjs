@@ -12,11 +12,16 @@
 import { readFileSync } from "fs";
 import { getJiraConfig } from "../utilities/env-loader.mjs";
 import { appendAgentSignature } from "../utilities/agent-signature.mjs";
+import { hasMermaidBlocks } from "./mermaid-flowchart.mjs";
 import {
-  hasMermaidBlocks,
-  renderMermaidToAdfNodes,
-  splitCommentSegments,
-} from "./mermaid-flowchart.mjs";
+  JIRA_CONTENT_OPERATIONS,
+  prepareJiraContent,
+  summarizeFormatCheck,
+} from "./jira-content-formatter.mjs";
+import {
+  buildRichTextAdf,
+  buildTextSegmentAdfNodes,
+} from "./jira-adf-builder.mjs";
 
 // 從 Jira URL 解析 ticket ID
 function parseJiraUrl(url) {
@@ -37,220 +42,15 @@ function parseJiraUrl(url) {
   return null;
 }
 
-function normalizePipeRowCells(line) {
-  const trimmed = (line ?? "").trim();
-  if (!trimmed.includes("|")) return null;
+const buildCommentAdf = buildRichTextAdf;
 
-  const parts = trimmed.split("|").map((s) => s.trim());
-  if (parts.length > 0 && parts[0] === "") parts.shift();
-  if (parts.length > 0 && parts[parts.length - 1] === "") parts.pop();
-
-  if (parts.length === 0) return null;
-  return parts;
+async function textToADF(text, options = {}) {
+  const { doc } = await buildRichTextAdf(text, options);
+  return doc;
 }
 
-function isMarkdownTableSeparatorLine(line, expectedCols) {
-  const cells = normalizePipeRowCells(line);
-  if (!cells) return false;
-  if (typeof expectedCols === "number" && cells.length !== expectedCols) {
-    return false;
-  }
-  return cells.every((cell) => /^:?-{3,}:?$/.test(cell));
-}
-
-function makeAdfTextParagraph(text) {
-  const trimmed = (text ?? "").trim();
-  if (!trimmed) {
-    return { type: "paragraph", content: [] };
-  }
-  return {
-    type: "paragraph",
-    content: [{ type: "text", text: trimmed }],
-  };
-}
-
-function markdownPipeTableToADF(paragraph) {
-  const lines = (paragraph ?? "")
-    .split(/\n/)
-    .map((l) => l.trimEnd())
-    .filter((l) => l.length > 0);
-
-  if (lines.length < 2) return null;
-
-  const headerCells = normalizePipeRowCells(lines[0]);
-  if (!headerCells) return null;
-
-  if (!isMarkdownTableSeparatorLine(lines[1], headerCells.length)) return null;
-
-  const bodyRowCells = [];
-  for (let i = 2; i < lines.length; i++) {
-    const row = normalizePipeRowCells(lines[i]);
-    if (!row) return null;
-    bodyRowCells.push(row);
-  }
-
-  const colCount = headerCells.length;
-
-  const headerRow = {
-    type: "tableRow",
-    content: headerCells.map((cell) => ({
-      type: "tableHeader",
-      content: [makeAdfTextParagraph(cell)],
-    })),
-  };
-
-  const rows = bodyRowCells.map((cells) => {
-    const normalized = cells.slice(0, colCount);
-    while (normalized.length < colCount) normalized.push("");
-
-    return {
-      type: "tableRow",
-      content: normalized.map((cell) => ({
-        type: "tableCell",
-        content: [makeAdfTextParagraph(cell)],
-      })),
-    };
-  });
-
-  return {
-    type: "table",
-    content: [headerRow, ...rows],
-  };
-}
-
-function paragraphTextToAdfNode(paragraph) {
-  const tableNode = markdownPipeTableToADF(paragraph);
-  if (tableNode) {
-    return tableNode;
-  }
-
-  const trimmedParagraph = (paragraph ?? "").trim();
-  if (!trimmedParagraph) {
-    return null;
-  }
-
-  const lines = trimmedParagraph.split(/\n/);
-
-  if (lines.length === 1) {
-    return {
-      type: "paragraph",
-      content: [
-        {
-          type: "text",
-          text: trimmedParagraph,
-        },
-      ],
-    };
-  }
-
-  const lineContent = [];
-  lines.forEach((line, index) => {
-    if (index > 0) {
-      lineContent.push({ type: "hardBreak" });
-    }
-    if (line) {
-      lineContent.push({
-        type: "text",
-        text: line,
-      });
-    }
-  });
-
-  return {
-    type: "paragraph",
-    content: lineContent,
-  };
-}
-
-function buildTextSegmentAdfNodes(text) {
-  const paragraphs = (text ?? "").split(/\n\n+/);
-  const nodes = [];
-
-  paragraphs.forEach((paragraph) => {
-    const node = paragraphTextToAdfNode(paragraph);
-    if (node) {
-      nodes.push(node);
-    }
-  });
-
-  return nodes;
-}
-
-/**
- * 將純文字轉換為 ADF content nodes
- * @param {string} text
- * @returns {Object[]}
- */
 function convertPlainTextToAdfNodes(text) {
   return buildTextSegmentAdfNodes(text);
-}
-
-/**
- * 將留言轉換為 ADF 文件
- * @param {string} text
- * @param {Object} options
- * @param {boolean} [options.renderFlowchart=false]
- * @returns {Promise<{ doc: Object, flowcharts: Object[] }>}
- */
-async function buildCommentAdf(text, options = {}) {
-  const renderFlowchart = Boolean(options.renderFlowchart);
-
-  if (!renderFlowchart) {
-    return {
-      doc: {
-        version: 1,
-        type: "doc",
-        content: convertPlainTextToAdfNodes(text),
-      },
-      flowcharts: [],
-    };
-  }
-
-  const segments = splitCommentSegments(text);
-  const content = [];
-  const flowcharts = [];
-  let flowchartIndex = 0;
-
-  for (const segment of segments) {
-    if (segment.type === "text") {
-      content.push(...buildTextSegmentAdfNodes(segment.content));
-      continue;
-    }
-
-    flowchartIndex += 1;
-    const rendered = await renderMermaidToAdfNodes(
-      segment.content,
-      flowchartIndex
-    );
-
-    content.push(...rendered.nodes);
-    flowcharts.push({
-      index: flowchartIndex,
-      imageUrl: rendered.imageUrl,
-      fallback: rendered.fallback,
-      warning: rendered.warning || null,
-    });
-  }
-
-  return {
-    doc: {
-      version: 1,
-      type: "doc",
-      content,
-    },
-    flowcharts,
-  };
-}
-
-/**
- * 將純文字轉換為 ADF (Atlassian Document Format) 格式
- * @param {string} text
- * @param {Object} [options]
- * @returns {Promise<Object>|Object}
- */
-async function textToADF(text, options = {}) {
-  const { doc } = await buildCommentAdf(text, options);
-  return doc;
 }
 
 /**
@@ -277,13 +77,24 @@ async function addJiraComment(ticketOrUrl, comment, options = {}) {
     throw new Error(`無效的 Jira ticket 格式: ${ticketOrUrl}`);
   }
 
-  if (options.renderFlowchart && !hasMermaidBlocks(comment)) {
+  const formatResult = await prepareJiraContent(
+    comment,
+    JIRA_CONTENT_OPERATIONS.COMMENT,
+    {
+      skipFormatCheck: options.skipFormatCheck,
+      renderFlowchart: options.renderFlowchart,
+      silent: options.silentFormatCheck,
+    }
+  );
+  const normalizedComment = formatResult.normalizedContent;
+
+  if (options.renderFlowchart && !hasMermaidBlocks(normalizedComment)) {
     throw new Error(
       "已啟用 --render-flowchart，但留言內容未找到 ```mermaid ... ``` 區塊"
     );
   }
 
-  const signedComment = appendAgentSignature(comment);
+  const signedComment = appendAgentSignature(normalizedComment);
   const { doc, flowcharts } = await buildCommentAdf(signedComment, options);
 
   const apiUrl = `${baseUrl}/rest/api/3/issue/${ticket}/comment`;
@@ -344,6 +155,7 @@ async function addJiraComment(ticketOrUrl, comment, options = {}) {
       created: data.created,
       renderFlowchart: Boolean(options.renderFlowchart),
       flowcharts,
+      formatCheck: summarizeFormatCheck(formatResult),
       message: `已成功在 ${ticket} 新增評論`,
     };
   } catch (error) {
@@ -365,6 +177,7 @@ function parseArgs(args) {
     commentFile: null,
     internal: false,
     renderFlowchart: false,
+    skipFormatCheck: false,
     help: false,
   };
 
@@ -377,6 +190,8 @@ function parseArgs(args) {
       result.internal = true;
     } else if (arg === "--render-flowchart" || arg === "--flowchart") {
       result.renderFlowchart = true;
+    } else if (arg === "--skip-format-check") {
+      result.skipFormatCheck = true;
     } else if (arg.startsWith("--comment-file=")) {
       result.commentFile = arg.substring("--comment-file=".length);
     } else if (arg === "--comment-file" || arg === "-f") {
@@ -418,6 +233,7 @@ function showHelp() {
   -f, --comment-file=<path>  從檔案讀取評論內容（適合含 Mermaid 流程圖的長留言）
   --render-flowchart         將留言中的 \`\`\`mermaid ... \`\`\` 渲染為 Jira 內嵌流程圖
   --flowchart                --render-flowchart 別名
+  --skip-format-check        略過 LLM 格式檢查（直接送出原始內容）
   -i, --internal             設為內部評論（僅 Jira Service Management 有效）
   -h, --help                 顯示此說明
 
@@ -484,6 +300,7 @@ async function main() {
     const result = await addJiraComment(args.ticket, comment, {
       internal: args.internal,
       renderFlowchart: args.renderFlowchart,
+      skipFormatCheck: args.skipFormatCheck,
     });
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
