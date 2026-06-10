@@ -774,6 +774,7 @@ Ticket: [FE-7850](https://innotech.atlassian.net/browse/FE-7850)
 - 讀取和更新 Git notes 中的 `startTaskInfo`
 - 將開發報告保存到 `developmentReport` 欄位
 - 生成格式化的 MR description（使用表格格式，避免換行問題）
+- **Bug 類型**：自動執行 `trace-bug-root-cause.mjs`，將追溯結果注入 LLM 複查輸入；若報告缺少「造成問題的單號」區塊則自動附加
 
 **使用方式**：
 
@@ -818,6 +819,7 @@ node .cursor/scripts/operator/update-development-report.mjs --format
 - [x] 讀取 Git notes 中的 `startTaskInfo`
 - [x] 更新 `developmentReport` 欄位
 - [x] 生成格式化的 MR description（表格格式）
+- [x] Bug 類型整合 `trace-bug-root-cause` 追溯並納入 LLM 複查
 
 在 AI Chat 流程中：
 - [ ] 完成修改後，根據 Jira card 類型生成開發報告
@@ -835,4 +837,4 @@ node .cursor/scripts/operator/update-development-report.mjs --format
 4. **自動化處理**：AI 獨立完成的項目在建立 MR 時必須自動添加 AI label 和報告
 5. **完整性要求**：Bug 報告必須包含所有四項額外資訊，Request 報告必須包含所有三項額外資訊
 6. **影響分析**：潛在影響風險報告必須客觀評估，不可遺漏重要風險
-7. **溯源要求**：Bug 報告中的「造成問題的單號」必須盡可能追溯到具體的 commit 或 MR
+7. **溯源要求**：Bug 報告中的「造成問題的單號」必須透過 `pnpm run trace-bug-root-cause` 追溯引入 commit，**不得**把當前 Bug 單誤填為引入單號

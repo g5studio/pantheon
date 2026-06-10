@@ -160,6 +160,115 @@ function getCurrentChangeSnapshot() {
   return snapshot;
 }
 
+function resolveTraceBugRootCauseScriptPath() {
+  return resolvePantheonFilePath(
+    join(".cursor", "scripts", "cr", "trace-bug-root-cause.mjs"),
+  );
+}
+
+function runBugRootCauseTrace(ticket, { json = true, target = "main" } = {}) {
+  const scriptPath = resolveTraceBugRootCauseScriptPath();
+  if (!existsSync(scriptPath)) {
+    return { ok: false, error: "trace-bug-root-cause.mjs not found" };
+  }
+
+  const args = [`--ticket=${ticket}`, `--target=${target}`];
+  if (json) args.push("--json");
+
+  const result = spawnSync("node", [scriptPath, ...args], {
+    cwd: projectRoot,
+    encoding: "utf-8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  const stdout = String(result.stdout || "").trim();
+  if (result.status !== 0) {
+    return {
+      ok: false,
+      error: String(result.stderr || "").trim() || "trace script failed",
+      stdout,
+    };
+  }
+
+  if (json) {
+    try {
+      return { ok: true, data: JSON.parse(stdout) };
+    } catch {
+      return { ok: false, error: "invalid trace JSON output", stdout };
+    }
+  }
+
+  return { ok: true, markdown: stdout };
+}
+
+function isBugIssueType(issueType) {
+  return String(issueType || "").trim().toLowerCase() === "bug";
+}
+
+function reportHasRootCauseSection(reportContent) {
+  return /(^|\n)#{1,6}\s*[^\n]*造成問題的單號/m.test(
+    String(reportContent || ""),
+  );
+}
+
+function enrichChangeSnapshotForBug(snapshot, startTaskInfo) {
+  if (!isBugIssueType(startTaskInfo?.issueType)) return snapshot;
+
+  const ticket = String(startTaskInfo?.ticket || "").trim().toUpperCase();
+  if (!ticket) return snapshot;
+
+  const traceResult = runBugRootCauseTrace(ticket, { json: true });
+  if (!traceResult.ok) {
+    snapshot.rootCauseTrace = {
+      traceable: false,
+      error: traceResult.error || "trace failed",
+    };
+    return snapshot;
+  }
+
+  const trace = traceResult.data;
+  let markdownSection = null;
+  if (trace?.traceable) {
+    const mdResult = runBugRootCauseTrace(ticket, { json: false });
+    if (mdResult.ok) markdownSection = mdResult.markdown;
+  }
+
+  snapshot.rootCauseTrace = {
+    traceable: Boolean(trace?.traceable),
+    ticket: trace?.ticket ?? ticket,
+    topCandidate: trace?.topCandidate ?? null,
+    candidates: Array.isArray(trace?.candidates)
+      ? trace.candidates.slice(0, 5)
+      : [],
+    searchTerms: trace?.searchTerms ?? [],
+    changedFiles: trace?.changedFiles ?? [],
+    markdownSection,
+    note:
+      "此為自動 git log -S 追溯結果（排除當前修復分支 commits）。造成問題的單號不得填當前 Bug 單。",
+  };
+
+  return snapshot;
+}
+
+function injectRootCauseSectionIfNeeded(reportContent, startTaskInfo) {
+  if (!isBugIssueType(startTaskInfo?.issueType)) return reportContent;
+  if (reportHasRootCauseSection(reportContent)) return reportContent;
+
+  const ticket = String(startTaskInfo?.ticket || "").trim().toUpperCase();
+  if (!ticket) return reportContent;
+
+  const mdResult = runBugRootCauseTrace(ticket, { json: false });
+  if (!mdResult.ok || !String(mdResult.markdown || "").trim()) {
+    return reportContent;
+  }
+
+  console.log(
+    "ℹ️  報告缺少「造成問題的單號」區塊，已自動附加 trace-bug-root-cause 輸出",
+  );
+
+  return `${String(reportContent || "").trim()}\n\n---\n\n${mdResult.markdown.trim()}\n`;
+}
+
 function extractStartTaskDevelopmentReportTemplateText(startTaskCommandText) {
   const text = String(startTaskCommandText || "");
   if (!text.trim()) return "";
@@ -293,7 +402,10 @@ async function reviewDevelopmentReportWithLlm({
   startTaskInfo,
 }) {
   const rulesText = getRelevantRulesText();
-  const changeSnapshot = getCurrentChangeSnapshot();
+  const changeSnapshot = enrichChangeSnapshotForBug(
+    getCurrentChangeSnapshot(),
+    startTaskInfo,
+  );
   const envLocal = loadEnvLocal();
 
   const model = resolveLlmModel({
@@ -316,6 +428,8 @@ async function reviewDevelopmentReportWithLlm({
   const system = [
     "你是一個嚴格的 MR 開發報告審查器。",
     "請根據輸入的規範文字（rules）以及當前異動摘要（changes），檢查 report 是否符合規範、是否包含必要區塊與表格、且內容與 changes 一致。",
+    "若 issueType 為 Bug：changes.rootCauseTrace 為自動追溯結果。造成問題的單號必須引用 rootCauseTrace.topCandidate（traceable=true 時），不得把當前 Bug 單號當成引入單號。",
+    "若 rootCauseTrace.traceable=false，造成問題的單號區塊應標註無法追溯並說明原因。",
     "你必須回傳 JSON，格式為：{ ok: boolean, final: string, reason: string }。",
     "- ok=true：代表原始 report 已符合規範，此時 final 必須等於原始 report（不可改寫）。",
     "- ok=false：代表原始 report 不符合規範或與 changes 不一致；你必須在 final 內輸出「已修正且符合規範」的 report（Markdown 內容），並保留語言為繁體中文。",
@@ -571,6 +685,12 @@ async function main() {
     }
 
     const startTaskInfo = result.info;
+
+    // Bug 類型：若缺少「造成問題的單號」，先附加自動追溯區塊
+    reportContent = injectRootCauseSectionIfNeeded(
+      reportContent,
+      startTaskInfo,
+    );
 
     // 先送 LLM 複查（report + 規範 + 當前異動內容），依 ok 決定採用原文或修正版
     let finalReport = reportContent;
