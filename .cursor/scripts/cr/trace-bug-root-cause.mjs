@@ -10,12 +10,12 @@
  *   node .cursor/scripts/cr/trace-bug-root-cause.mjs --ticket=FE-1234 --files=src/a.ts,src/b.ts
  */
 
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 import { getProjectRoot } from "../utilities/env-loader.mjs";
 
 const projectRoot = getProjectRoot();
 
-const TICKET_PATTERN = /\b([A-Z]+-\d+)\b/g;
+const TICKET_PATTERN = /\b([A-Za-z]+-\d+)\b/g;
 const SKIP_SEARCH_TERMS = new Set([
   "true",
   "false",
@@ -137,6 +137,23 @@ function execGit(command, { silent = true } = {}) {
   }
 }
 
+function execGitArgs(args, { silent = true } = {}) {
+  try {
+    const result = spawnSync("git", args, {
+      cwd: projectRoot,
+      encoding: "utf-8",
+      stdio: silent ? ["ignore", "pipe", "pipe"] : "inherit",
+    });
+    if (result.status !== 0) return "";
+    return String(result.stdout || "").trim();
+  } catch (error) {
+    if (!silent) {
+      console.error(`Git error: ${error.message}`);
+    }
+    return "";
+  }
+}
+
 function getMergeBase(targetBranch) {
   const remoteRef = `origin/${targetBranch}`;
   const hasRemote = execGit(`git rev-parse --verify ${remoteRef}`, {
@@ -220,7 +237,8 @@ function extractSearchTerms(diffText, maxTerms) {
     const content = line.slice(1).trim();
     if (!content || content.startsWith("//") || content.startsWith("*")) continue;
 
-    const weight = line.startsWith("-") ? 3 : 2;
+    let weight = line.startsWith("-") ? 8 : 2;
+    if (content.includes(".length")) weight += 6;
 
     const propertyChains = content.match(
       /[a-zA-Z_$][\w$]*(?:\.[a-zA-Z_$][\w$]*){1,6}/g,
@@ -285,50 +303,100 @@ function getCommitMeta(hash) {
   };
 }
 
+function isMergeCommitMessage(message) {
+  return /^merge\b/i.test(String(message || "").trim());
+}
+
 function searchIntroducingCommits(term, file, excludeHashes, currentTicket) {
-  const escaped = term.replace(/"/g, '\\"');
-  const pickaxe = execGit(
-    `git log -S "${escaped}" --format=%H %s --follow -- ${file}`,
+  const pickaxe = execGitArgs(
+    [
+      "log",
+      "-S",
+      term,
+      "--reverse",
+      "--format=%H %s",
+      "--follow",
+      "--",
+      file,
+    ],
     { silent: true },
   );
-  const grep = execGit(
-    `git log --grep="${escaped}" --format=%H %s -- ${file}`,
+  const grep = execGitArgs(
+    ["log", "--grep", term, "--format=%H %s", "--", file],
     { silent: true },
   );
 
   const candidates = [];
   const seen = new Set();
 
-  for (const block of [pickaxe, grep]) {
-    for (const line of block.split("\n")) {
-      const parsed = parseLogLine(line);
-      if (!parsed) continue;
-      if (excludeHashes.has(parsed.hash)) continue;
-      if (seen.has(parsed.hash)) continue;
-      seen.add(parsed.hash);
+  const ingestLine = (line, { method, introductionRank = null }) => {
+    const parsed = parseLogLine(line);
+    if (!parsed) return;
+    if (excludeHashes.has(parsed.hash)) return;
+    if (isMergeCommitMessage(parsed.subject)) return;
+    if (seen.has(parsed.hash)) return;
+    seen.add(parsed.hash);
 
-      const meta = getCommitMeta(parsed.hash);
-      const tickets = meta.tickets.filter((t) => t !== currentTicket);
-      const isCurrentTicketOnly =
-        meta.tickets.length === 1 && meta.tickets[0] === currentTicket;
+    const meta = getCommitMeta(parsed.hash);
+    if (isMergeCommitMessage(meta.message)) return;
 
-      let score = 10;
-      if (tickets.length) score += 20;
-      if (isCurrentTicketOnly) score -= 30;
-      if (block === pickaxe) score += 15;
+    const tickets = meta.tickets.filter((t) => t !== currentTicket);
+    const isCurrentTicketOnly =
+      meta.tickets.length === 1 && meta.tickets[0] === currentTicket;
 
-      candidates.push({
-        ...meta,
-        relatedTickets: tickets,
-        matchedTerm: term,
-        matchedFile: file,
-        score,
-        method: block === pickaxe ? "pickaxe" : "grep",
-      });
-    }
-  }
+    let score = 10;
+    if (tickets.length) score += 20;
+    if (isCurrentTicketOnly) score -= 30;
+    if (method === "pickaxe") score += 15;
+    if (introductionRank === 0) score += 35;
+    else if (typeof introductionRank === "number")
+      score += Math.max(0, 18 - introductionRank * 4);
+
+    candidates.push({
+      ...meta,
+      relatedTickets: tickets,
+      matchedTerm: term,
+      matchedFile: file,
+      score,
+      method,
+      introductionRank,
+    });
+  };
+
+  pickaxe
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .forEach((line, index) => {
+      ingestLine(line, { method: "pickaxe", introductionRank: index });
+    });
+
+  grep
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .forEach((line) => {
+      ingestLine(line, { method: "grep" });
+    });
 
   return candidates;
+}
+
+function getCandidateRankScore(item) {
+  let score = Number(item.score) || 0;
+  const message = String(item.message || "");
+  const matchedTerms = item.matchedTerms || [item.matchedTerm].filter(Boolean);
+  const maxTermLength = Math.max(
+    0,
+    ...matchedTerms.map((term) => String(term || "").length),
+  );
+
+  if (/\bfeat\(/i.test(message)) score += 8;
+  if (/\bfix\(/i.test(message)) score -= 10;
+  score += Math.min(maxTermLength, 36);
+  if (item.introductionRank === 0) score += 20;
+
+  return score;
 }
 
 function rankCandidates(rawCandidates, maxCandidates) {
@@ -340,12 +408,18 @@ function rankCandidates(rawCandidates, maxCandidates) {
       byHash.set(item.hash, item);
     } else {
       prev.score += 2;
-      prev.matchedTerms = [...new Set([...(prev.matchedTerms || [prev.matchedTerm]), item.matchedTerm])];
+      prev.matchedTerms = [
+        ...new Set([
+          ...(prev.matchedTerms || [prev.matchedTerm]),
+          item.matchedTerm,
+        ]),
+      ];
     }
   }
 
   return [...byHash.values()]
-    .sort((a, b) => b.score - a.score)
+    .map((item) => ({ ...item, rankScore: getCandidateRankScore(item) }))
+    .sort((a, b) => b.rankScore - a.rankScore)
     .slice(0, maxCandidates);
 }
 
