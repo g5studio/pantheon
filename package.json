@@ -8,6 +8,7 @@
     "auto-commit-and-mr": "node .cursor/scripts/utilities/run-pantheon-script.mjs cr/auto-commit-and-mr.mjs",
     "create-mr": "node .cursor/scripts/utilities/run-pantheon-script.mjs cr/create-mr.mjs",
     "update-mr": "node .cursor/scripts/utilities/run-pantheon-script.mjs cr/update-mr.mjs",
+    "trace-bug-root-cause": "node .cursor/scripts/utilities/run-pantheon-script.mjs cr/trace-bug-root-cause.mjs",
     "label-analyzer": "node .cursor/scripts/utilities/run-pantheon-script.mjs cr/label-analyzer.mjs",
     "create-jira-ticket": "node .cursor/scripts/utilities/run-pantheon-script.mjs jira/create-jira-ticket.mjs",
     "read-jira-ticket": "node .cursor/scripts/utilities/run-pantheon-script.mjs jira/read-jira-ticket.mjs",
@@ -23,6 +24,7 @@
     "repo-knowledge": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/repo-knowledge.mjs",
     "generate-pantheon-guideline": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/generate-pantheon-guideline.mjs",
     "adapt": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs && node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/generate-pantheon-guideline.mjs",
+    "evolve": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs",
     "agent-signature": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/agent-signature.mjs",
     "llm-client": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/llm-client.mjs",
     "env-loader": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/env-loader.mjs"
