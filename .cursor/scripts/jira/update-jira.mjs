@@ -44,6 +44,12 @@
  */
 
 import { getJiraConfig } from "../utilities/env-loader.mjs";
+import {
+  JIRA_CONTENT_OPERATIONS,
+  prepareJiraContent,
+  summarizeFormatCheck,
+} from "./jira-content-formatter.mjs";
+import { buildAdfDocFromText } from "./jira-adf-builder.mjs";
 
 // ============================================================================
 // 工具函數
@@ -110,38 +116,6 @@ async function handleApiError(response, context) {
   } else {
     throw new Error(`操作失敗: ${response.status} ${response.statusText}`);
   }
-}
-
-/**
- * 將純文字轉換為 ADF (Atlassian Document Format) 格式
- */
-function textToADF(text) {
-  const paragraphs = text.split(/\n\n+/);
-
-  const content = paragraphs.map((paragraph) => {
-    const lines = paragraph.split(/\n/);
-
-    if (lines.length === 1) {
-      return {
-        type: "paragraph",
-        content: [{ type: "text", text: paragraph }],
-      };
-    }
-
-    const lineContent = [];
-    lines.forEach((line, index) => {
-      if (index > 0) {
-        lineContent.push({ type: "hardBreak" });
-      }
-      if (line) {
-        lineContent.push({ type: "text", text: line });
-      }
-    });
-
-    return { type: "paragraph", content: lineContent };
-  });
-
-  return { version: 1, type: "doc", content };
 }
 
 // ============================================================================
@@ -561,16 +535,31 @@ async function handleTransition(ticket, targetStatus) {
 async function handleFieldUpdate(ticket, options) {
   const fieldsToUpdate = {};
   const updates = [];
+  const formatChecks = {};
 
   // Summary（標題）
   if (options.summary) {
-    fieldsToUpdate.summary = options.summary;
-    updates.push({ field: "summary", value: options.summary });
+    const summaryFormat = await prepareJiraContent(
+      options.summary,
+      JIRA_CONTENT_OPERATIONS.SUMMARY,
+      { skipFormatCheck: options.skipFormatCheck }
+    );
+    formatChecks.summary = summarizeFormatCheck(summaryFormat);
+    fieldsToUpdate.summary = summaryFormat.normalizedContent;
+    updates.push({ field: "summary", value: summaryFormat.normalizedContent });
   }
 
   // Description（描述）
   if (options.description) {
-    fieldsToUpdate.description = textToADF(options.description);
+    const descriptionFormat = await prepareJiraContent(
+      options.description,
+      JIRA_CONTENT_OPERATIONS.DESCRIPTION,
+      { skipFormatCheck: options.skipFormatCheck }
+    );
+    formatChecks.description = summarizeFormatCheck(descriptionFormat);
+    fieldsToUpdate.description = buildAdfDocFromText(
+      descriptionFormat.normalizedContent
+    );
     updates.push({ field: "description", value: "(ADF content)" });
   }
 
@@ -710,6 +699,7 @@ async function handleFieldUpdate(ticket, options) {
     ticket,
     action: "update",
     updatedFields: updates,
+    formatCheck: Object.keys(formatChecks).length ? formatChecks : null,
   };
 }
 
@@ -833,6 +823,7 @@ function parseArgs(args) {
     // Info
     info: false,
     // Help
+    skipFormatCheck: false,
     help: false,
   };
 
@@ -893,6 +884,8 @@ function parseArgs(args) {
     } else if (arg === "--unlink") {
       result.unlink = args[++i];
       result.action = "unlink";
+    } else if (arg === "--skip-format-check") {
+      result.skipFormatCheck = true;
     } else if (!arg.startsWith("-") && !result.ticket) {
       result.ticket = arg;
     }
@@ -928,6 +921,7 @@ function showHelp() {
   --add-fix-version="5.36.0" 新增 Fix Version（保留現有）
   --due-date="2024-12-31"    設置到期日
   --story-points="3"         設置 Story Points
+  --skip-format-check        略過 LLM 格式檢查（直接送出原始內容）
 
 關聯選項:
   --link-type="blocks"       指定關聯類型（預設: relates to）
