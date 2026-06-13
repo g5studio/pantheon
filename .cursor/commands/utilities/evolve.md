@@ -273,6 +273,22 @@ node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs anno
 node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs annotation-audit -- --dirs=src --fix=true --output-file=.evolve-tmp/annotation-audit.json
 ```
 
+若要讓 Pantheon agent **自行呼叫 LLM 並直接回寫檔案註解**（不依賴 Cursor/Claude/Codex editor 內建編輯流程），使用：
+
+```bash
+# 建議先 dry-run 看安全閘結果
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs run-annotation-pass -- --dirs=src --max-files=50 --dry-run=true --format=text
+
+# 確認後執行實寫
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs run-annotation-pass -- --dirs=src --max-files=50 --format=text
+```
+
+`run-annotation-pass` 內建保護：
+
+- 以 LLM 逐檔分析用途與宣告註解
+- 僅允許 comments-only 寫回（Safety Gate）
+- 宣告級 `@external` 僅可使用來源 commit ticket（無票則省略）
+
 ### 2.5 單檔完成標記
 
 每完成一檔分析，在內部追蹤表記錄：

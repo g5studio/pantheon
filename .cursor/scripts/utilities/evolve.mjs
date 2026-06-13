@@ -25,7 +25,12 @@ import {
   writeFileSync,
 } from "fs";
 import { basename, dirname, extname, join, relative } from "path";
-import { getProjectRoot } from "./env-loader.mjs";
+import {
+  getCompassApiToken,
+  getProjectRoot,
+  loadEnvLocal,
+} from "./env-loader.mjs";
+import { callOpenAiJson, resolveLlmModel } from "./llm-client.mjs";
 
 const projectRoot = getProjectRoot();
 const EVOLVE_TMP_DIR = join(projectRoot, ".evolve-tmp");
@@ -217,6 +222,82 @@ function isNoiseCommitSubject(subject) {
   return NOISE_COMMIT_SUBJECT_PATTERNS.some((pattern) =>
     pattern.test(subject.trim()),
   );
+}
+
+function getFileHistorySubjects(filePath, max = 20) {
+  const safeMax = Number(max) > 0 ? Number(max) : 20;
+  const raw = exec(
+    `git log --follow --max-count=${safeMax} --format="%s" -- "${filePath}"`,
+    { silent: true, throwOnError: false },
+  );
+  if (!raw) return [];
+  return raw
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function extractDeclarationSignatures(content) {
+  const lines = String(content || "").split("\n");
+  const signatures = [];
+  const declarationPattern =
+    /^\s*(export\s+)?(default\s+)?(async\s+)?(function|const|let|var|class)\b.+$/;
+
+  for (const line of lines) {
+    if (!declarationPattern.test(line)) continue;
+    const normalized = line.trim();
+    if (!normalized) continue;
+    signatures.push(normalized.slice(0, 180));
+  }
+
+  return [...new Set(signatures)].slice(0, 160);
+}
+
+function getDeclarationOriginTickets(filePath, signatures) {
+  const result = [];
+  for (const signature of signatures) {
+    const escaped = signature.replace(/"/g, '\\"');
+    const raw = exec(
+      `git log --reverse --max-count=80 --format="%H|%s" -S "${escaped}" -- "${filePath}"`,
+      { silent: true, throwOnError: false },
+    );
+    if (!raw) {
+      result.push({ signature, originSubject: null, tickets: [] });
+      continue;
+    }
+
+    const commits = raw
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        const [hash, subject] = line.split("|");
+        return { hash, subject: subject || "", tickets: extractTickets(subject || "") };
+      });
+
+    const origin =
+      commits.find((c) => !isNoiseCommitSubject(c.subject) && c.tickets.length > 0) ||
+      commits.find((c) => !isNoiseCommitSubject(c.subject)) ||
+      commits[0];
+
+    result.push({
+      signature,
+      originSubject: origin?.subject || null,
+      tickets: origin?.tickets || [],
+    });
+  }
+  return result;
+}
+
+function stripLooseComments(text) {
+  return String(text || "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+}
+
+function isCommentOnlyChange(before, after) {
+  const normalizedBefore = stripLooseComments(before).replace(/\s+/g, " ").trim();
+  const normalizedAfter = stripLooseComments(after).replace(/\s+/g, " ").trim();
+  return normalizedBefore === normalizedAfter;
 }
 
 function isAnalyzableFile(filePath) {
@@ -834,6 +915,135 @@ function cmdAnnotationAudit(args) {
   console.log(JSON.stringify(report, null, 2));
 }
 
+async function cmdRunAnnotationPass(args) {
+  const format = args.format === "text" ? "text" : "json";
+  const dryRun = args["dry-run"] === true || args["dry-run"] === "true";
+  const maxFiles = Number(args["max-files"]) > 0 ? Number(args["max-files"]) : 200;
+  const model = resolveLlmModel({
+    explicitModel: typeof args.model === "string" ? args.model : null,
+    envLocal: loadEnvLocal(),
+    envKeys: ["EVOLVE_ANNOTATION_MODEL", "ADAPT_LLM_MODEL", "OPENAI_MODEL"],
+    defaultModel: "gpt-5.4-nano",
+  });
+
+  const files = getAnnotationAuditFiles(args).slice(0, maxFiles);
+  const compassApiToken = getCompassApiToken();
+
+  const report = {
+    scannedFiles: files.length,
+    updatedFiles: 0,
+    skippedFiles: 0,
+    rejectedBySafetyGate: 0,
+    failedFiles: 0,
+    dryRun,
+    model,
+    files: [],
+  };
+
+  for (const relPath of files) {
+    const absPath = join(projectRoot, relPath);
+    const before = readFileSync(absPath, "utf-8");
+    const signatures = extractDeclarationSignatures(before);
+    const declarationOrigins = getDeclarationOriginTickets(relPath, signatures);
+    const historySubjects = getFileHistorySubjects(relPath, 20);
+
+    try {
+      const schema = {
+        type: "object",
+        additionalProperties: false,
+        required: ["updatedContent", "summary"],
+        properties: {
+          updatedContent: { type: "string" },
+          summary: { type: "string" },
+        },
+      };
+
+      const llmResp = await callOpenAiJson({
+        model,
+        system:
+          "You are an annotation refactoring engine. Return ONLY JSON. " +
+          "You must only update comments. Do not change runtime logic. " +
+          "For declaration comments, use declaration origin tickets from input.declarationOrigins only. " +
+          "If no tickets for a declaration, omit @external. " +
+          "Avoid template purpose phrases like 'Provide declaration logic for'.",
+        input: {
+          path: relPath,
+          content: before,
+          fileHistorySubjects: historySubjects,
+          declarationOrigins,
+          requirements: {
+            topCommentRequired: true,
+            declarationCommentRequired: true,
+            omitExternalWhenNoTicket: true,
+            dedupeExternalInBlock: true,
+            removeMalformedJsdocDelimiters: true,
+            keepRuntimeLogicUnchanged: true,
+          },
+        },
+        schema,
+        schemaName: "evolve_annotation_pass_result",
+        compassApiToken,
+        forceCompassProxy: true,
+      });
+
+      const updatedContent = String(llmResp.updatedContent || "");
+      if (!updatedContent.trim()) {
+        report.failedFiles++;
+        report.files.push({ path: relPath, status: "failed", reason: "llm-empty-output" });
+        continue;
+      }
+
+      if (!isCommentOnlyChange(before, updatedContent)) {
+        report.rejectedBySafetyGate++;
+        report.files.push({
+          path: relPath,
+          status: "rejected",
+          reason: "safety-gate-non-comment-change",
+        });
+        continue;
+      }
+
+      if (updatedContent === before) {
+        report.skippedFiles++;
+        report.files.push({ path: relPath, status: "unchanged" });
+        continue;
+      }
+
+      if (!dryRun) {
+        writeFileSync(absPath, updatedContent, "utf-8");
+      }
+
+      report.updatedFiles++;
+      report.files.push({
+        path: relPath,
+        status: dryRun ? "would-update" : "updated",
+        summary: llmResp.summary || "",
+      });
+    } catch (error) {
+      report.failedFiles++;
+      report.files.push({
+        path: relPath,
+        status: "failed",
+        reason: error?.message || String(error),
+      });
+    }
+  }
+
+  if (format === "text") {
+    console.log(`📊 scanned: ${report.scannedFiles}`);
+    console.log(`✅ updated: ${report.updatedFiles}`);
+    console.log(`⏭️ skipped: ${report.skippedFiles}`);
+    console.log(`🛡️ rejected(safety): ${report.rejectedBySafetyGate}`);
+    console.log(`❌ failed: ${report.failedFiles}`);
+    for (const row of report.files.slice(0, 200)) {
+      console.log(`- ${row.path}: ${row.status}${row.reason ? ` (${row.reason})` : ""}`);
+    }
+    return;
+  }
+
+  console.log(JSON.stringify(report, null, 2));
+}
+
 function cmdWriteSchema(args) {
   const schema = readJsonInput(args.input, args["input-file"]);
   const content = renderSchemaSkill(schema);
@@ -1014,6 +1224,12 @@ Subcommands:
                  [--fix=true]      註解品質稽核（可選安全自動修復）
                  [--output-file=.evolve-tmp/annotation-audit.json]
                  [--format=json|text]
+  run-annotation-pass [--dirs=a,b]
+                 [--max-files=200]
+                 [--model=gpt-5.4-nano]
+                 [--dry-run=true]
+                 [--format=json|text]
+                 由 Pantheon agent 直接呼叫 LLM 逐檔補註解（含 comments-only 安全閘）
   write-schema --input-file=<json> 生成 project-schema SKILL.md
   write-report --input-file=<json> 生成 misnamed-file-report.md
   rename --input-file=<json>       執行重新命名
@@ -1027,13 +1243,14 @@ Examples:
   node evolve.mjs declaration-history --path=src/foo.ts --signature="const foo ="
   node evolve.mjs annotation-audit --dirs=src --format=text
   node evolve.mjs annotation-audit --dirs=src --fix=true --output-file=.evolve-tmp/annotation-audit.json
+  node evolve.mjs run-annotation-pass --dirs=src --max-files=50 --dry-run=true --format=text
   node evolve.mjs write-schema --input-file=.evolve-tmp/project-schema.json
   node evolve.mjs write-report --input-file=.evolve-tmp/analysis-progress.json
   node evolve.mjs rename --input-file=.evolve-tmp/rename-plan.json --dry-run
 `);
 }
 
-function main() {
+async function main() {
   const args = parseArgs(process.argv.slice(2));
   const command = args._[0];
 
@@ -1058,6 +1275,9 @@ function main() {
     case "annotation-audit":
       cmdAnnotationAudit(args);
       break;
+    case "run-annotation-pass":
+      await cmdRunAnnotationPass(args);
+      break;
     case "write-schema":
       cmdWriteSchema(args);
       break;
@@ -1077,4 +1297,7 @@ function main() {
   }
 }
 
-main();
+main().catch((error) => {
+  console.error(`❌ evolve 執行失敗: ${error?.message || String(error)}`);
+  process.exit(1);
+});
