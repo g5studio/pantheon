@@ -187,11 +187,18 @@ flowchart TD
 1. 閱讀檔案內容，判斷實際用途
 2. 查閱該檔案 git history 的 commit message
 3. 若 commit message 含工單號（如 `FE-1234`、`IN-5678`、`AI-320`），連帶查詢 Jira ticket
+4. 宣告級註解（尤其 `@external`）必須以「宣告來源 commit」為準，不可直接套用檔案層級票號池
 
 查詢單檔 git history：
 
 ```bash
 node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs file-history -- --path="src/foo/bar.ts" --max=30
+```
+
+查詢宣告來源（推薦，用於 `@external`）：
+
+```bash
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs declaration-history -- --path="src/foo/bar.ts" --signature="const foo ="
 ```
 
 查詢 Jira（有工單號時）：
@@ -206,10 +213,17 @@ pnpm run read-jira-ticket -- --ticket=FE-1234
 
 | 目標 | 要求 |
 |---|---|
-| 檔案頂部 | 在檔案最上方添加區塊註解，描述檔案用途、所屬模塊、關聯工單（若有） |
+| 檔案頂部 | 在檔案最上方添加區塊註解，描述檔案用途、所屬模塊、關聯工單（若有）；**禁止空白 `/** */`** |
 | 函式 | 說明用途、參數、回傳值；有工單則標註 |
 | 物件 / 常數 | 說明用途與使用情境；有工單則標註 |
 | 既有 skill 格式 | 若專案已有註解/skill 規範，**先**依專案格式，再在下方補檔案用途 |
+
+`@external` 規則（強制）：
+
+1. 使用 declaration-level 來源 commit（`declaration-history`）萃取 tickets
+2. 僅保留來源 commit 中的 ticket；若無 ticket，**省略 `@external`**
+3. 同一個 JSDoc block 內 `@external` 不可重複
+4. 遇到 noise commit（例如全檔 lint/format、`update`）不可直接當來源
 
 **工單註解格式範例**（依專案慣例調整）：
 
@@ -232,11 +246,34 @@ pnpm run read-jira-ticket -- --ticket=FE-1234
 **禁止行為**：
 
 - ❌ 註解與實際邏輯不符
+- ❌ 使用模板語句（例如 `Provide declaration logic for ...`）作為最終 `@purpose`
 - ❌ 刪除既有有效註解
 - ❌ 在階段二修改程式邏輯（僅允許新增註解）
 - ❌ 在階段二執行重新命名（重新命名統一留至階段三）
 
-### 2.4 單檔完成標記
+### 2.4 品質閘（Quality Gates）
+
+階段二每批次完成後，應執行以下檢查；任一失敗需停下修復後再往下：
+
+| Gate | 檢查內容 | 失敗處理 |
+|---|---|---|
+| A | Syntax gate（prettier parse / 基礎語法） | 先修復語法與 JSDoc 分隔符再繼續 |
+| B | Annotation schema gate（必填欄位、去重、格式） | 補齊缺漏並移除重複 |
+| C | Relevance gate（`@external` 與 declaration-origin 一致） | 回寫正確來源，無票則省略 |
+| D | Safety gate（comments-only） | 若觸及 runtime logic，標記風險並回退 |
+| E | Summary gate（輸出統計報告） | 產生可追溯清單供覆核 |
+
+建議使用 `annotation-audit` 子命令執行批次稽核：
+
+```bash
+# 僅稽核（文字摘要）
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs annotation-audit -- --dirs=src --format=text
+
+# 稽核 + 安全自動修復（僅修復重複 @external 與重複分隔符）
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs annotation-audit -- --dirs=src --fix=true --output-file=.evolve-tmp/annotation-audit.json
+```
+
+### 2.5 單檔完成標記
 
 每完成一檔分析，在內部追蹤表記錄：
 

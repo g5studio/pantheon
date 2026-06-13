@@ -156,11 +156,20 @@ function findFieldKeyByCustom(fieldMeta, customType) {
   );
 }
 
+function normalizeCliMultilineText(value) {
+  if (typeof value !== "string") return value;
+  return value
+    .replace(/\\r\\n/g, "\n")
+    .replace(/\\n/g, "\n")
+    .replace(/\\t/g, "\t");
+}
+
 function parseArgs(args) {
   const result = {
     project: null,
     summary: null,
     description: null,
+    descriptionFile: null,
     issueType: "Request",
     epic: null,
     parent: null,
@@ -190,6 +199,10 @@ function parseArgs(args) {
       result.description = arg.split("=").slice(1).join("=");
     } else if (arg === "--description" || arg === "-d") {
       result.description = args[++i];
+    } else if (arg.startsWith("--description-file=")) {
+      result.descriptionFile = arg.split("=").slice(1).join("=");
+    } else if (arg === "--description-file") {
+      result.descriptionFile = args[++i];
     } else if (arg.startsWith("--issue-type=")) {
       result.issueType = arg.split("=").slice(1).join("=");
     } else if (arg.startsWith("--epic=") || arg.startsWith("--epic-link=")) {
@@ -213,6 +226,18 @@ function parseArgs(args) {
     } else if (arg === "--skip-format-check") {
       result.skipFormatCheck = true;
     }
+  }
+
+  if (typeof result.summary === "string") {
+    result.summary = normalizeCliMultilineText(result.summary);
+  }
+  if (typeof result.description === "string") {
+    result.description = normalizeCliMultilineText(result.description);
+  }
+
+  if (result.descriptionFile) {
+    const filePath = result.descriptionFile;
+    result.description = readFileSync(filePath, "utf-8");
   }
 
   return result;
@@ -459,6 +484,7 @@ function showHelp() {
   -p, --project=<key>       Jira 專案代碼（例如 FE）
   -s, --summary=<text>      Ticket 標題
   -d, --description=<text>  Ticket 描述（會轉為 ADF）
+  --description-file=<path> 從檔案讀取描述（推薦：長內容/多段落）
 
 選填參數:
   --issue-type=<name>       Issue type，預設為 Request
@@ -489,6 +515,14 @@ function showHelp() {
     --summary="實作 create-jira-ticket parent 支援" \\
     --description="補上 parent 與 expanded createmeta" \\
     --parent=FE-7893
+
+  # 從 markdown 檔建立（避免 shell 轉義造成換行格式異常）
+  node create-jira-ticket.mjs \\
+    --project=FE \\
+    --issue-type=Request \\
+    --summary="[Evolve] one-pass optimization" \\
+    --description-file=.evolve-tmp/fe-7840-request.md \\
+    --parent=FE-7840
 
 輸出:
   成功時輸出 JSON，包含 ticket、url、issueType、parent、epic、issueLink。

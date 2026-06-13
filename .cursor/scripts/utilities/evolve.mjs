@@ -34,6 +34,20 @@ const REPORT_FILE = join(projectRoot, "misnamed-file-report.md");
 const PROGRESS_FILE = join(EVOLVE_TMP_DIR, "analysis-progress.json");
 
 const TICKET_PATTERN = /\b([A-Z]+-\d+)\b/g;
+const NOISE_COMMIT_SUBJECT_PATTERNS = [
+  /fix\([^)]*\):\s*fix all files eslint error/i,
+  /^update$/i,
+  /^chore:\s*bump version$/i,
+  /\bformat-and-lint\b/i,
+];
+const ANNOTATION_AUDIT_EXTENSIONS = new Set([
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".ts",
+  ".tsx",
+]);
 
 const DEFAULT_EXCLUDE_DIRS = new Set([
   ".git",
@@ -196,6 +210,13 @@ function extractTickets(text) {
   if (!text || typeof text !== "string") return [];
   const matches = text.match(TICKET_PATTERN) || [];
   return [...new Set(matches)];
+}
+
+function isNoiseCommitSubject(subject) {
+  if (!subject || typeof subject !== "string") return false;
+  return NOISE_COMMIT_SUBJECT_PATTERNS.some((pattern) =>
+    pattern.test(subject.trim()),
+  );
 }
 
 function isAnalyzableFile(filePath) {
@@ -490,6 +511,329 @@ function cmdFileHistory(args) {
   console.log(JSON.stringify(output, null, 2));
 }
 
+function cmdDeclarationHistory(args) {
+  const filePath = args.path;
+  const signature = args.signature || args.query;
+  const max = Number(args.max) > 0 ? Number(args.max) : 50;
+
+  if (!filePath || typeof filePath !== "string") {
+    throw new Error("請提供 --path=<file-path>");
+  }
+  if (!signature || typeof signature !== "string") {
+    throw new Error("請提供 --signature=<declaration-signature>");
+  }
+
+  const absPath = join(projectRoot, filePath);
+  if (!existsSync(absPath)) {
+    throw new Error(`檔案不存在：${filePath}`);
+  }
+
+  const escapedSignature = signature.replace(/"/g, '\\"');
+  const raw = exec(
+    `git log --reverse --max-count=${max} --date=short --format="%H|%s|%an|%ad" -S "${escapedSignature}" -- "${filePath}"`,
+    { silent: true, throwOnError: false },
+  );
+
+  if (!raw) {
+    console.log(
+      JSON.stringify(
+        {
+          path: filePath,
+          signature,
+          commitCount: 0,
+          origin: null,
+          commits: [],
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
+  const commits = raw
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const [hash, subject, author, date] = line.split("|");
+      const tickets = extractTickets(subject || "");
+      return {
+        hash,
+        subject,
+        author,
+        date,
+        tickets,
+        isNoise: isNoiseCommitSubject(subject || ""),
+      };
+    });
+
+  const preferredOrigin =
+    commits.find((c) => !c.isNoise && c.tickets.length > 0) ||
+    commits.find((c) => !c.isNoise) ||
+    commits[0];
+
+  const output = {
+    path: filePath,
+    signature,
+    commitCount: commits.length,
+    origin: preferredOrigin
+      ? {
+          hash: preferredOrigin.hash,
+          subject: preferredOrigin.subject,
+          tickets: preferredOrigin.tickets,
+          isNoise: preferredOrigin.isNoise,
+        }
+      : null,
+    commits,
+  };
+
+  console.log(JSON.stringify(output, null, 2));
+}
+
+function getAnnotationAuditFiles(args) {
+  const dirsArg = typeof args.dirs === "string" ? args.dirs : "";
+  const startDirs = dirsArg
+    ? dirsArg.split(",").map((d) => d.trim()).filter(Boolean)
+    : ["src"];
+
+  const allFiles = [];
+  for (const dir of startDirs) {
+    const absDir = join(projectRoot, dir);
+    const files = walkFiles(absDir);
+    allFiles.push(...files);
+  }
+
+  return [...new Set(allFiles)]
+    .filter((filePath) =>
+      ANNOTATION_AUDIT_EXTENSIONS.has(extname(filePath).toLowerCase()),
+    )
+    .sort();
+}
+
+function parseJsdocBlocks(lines) {
+  const blocks = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (lines[i].trim() !== "/**") {
+      i++;
+      continue;
+    }
+
+    let j = i + 1;
+    while (j < lines.length && lines[j].trim() !== "*/") {
+      j++;
+    }
+    if (j >= lines.length) break;
+
+    blocks.push({ start: i, end: j, lines: lines.slice(i, j + 1) });
+    i = j + 1;
+  }
+  return blocks;
+}
+
+function dedupeExternalLinesInBlocks(lines) {
+  const blocks = parseJsdocBlocks(lines);
+  if (!blocks.length) {
+    return { lines, removedCount: 0 };
+  }
+
+  const externalLinePattern =
+    /^\s*\*\s*@external\s+https:\/\/innotech\.atlassian\.net\/browse\/[A-Z]+-\d+\s*$/;
+
+  let removedCount = 0;
+  const output = [...lines];
+
+  // Reverse traversal to avoid index shift issues while splicing.
+  for (let b = blocks.length - 1; b >= 0; b--) {
+    const block = blocks[b];
+    const seen = new Set();
+    const next = [];
+
+    for (const line of block.lines) {
+      if (!externalLinePattern.test(line)) {
+        next.push(line);
+        continue;
+      }
+      const normalized = line.trim();
+      if (seen.has(normalized)) {
+        removedCount++;
+        continue;
+      }
+      seen.add(normalized);
+      next.push(line);
+    }
+
+    output.splice(block.start, block.end - block.start + 1, ...next);
+  }
+
+  return { lines: output, removedCount };
+}
+
+function cmdAnnotationAudit(args) {
+  const format = args.format === "text" ? "text" : "json";
+  const shouldFix = args.fix === true || args.fix === "true";
+  const outputFile = typeof args["output-file"] === "string"
+    ? args["output-file"]
+    : null;
+
+  const files = getAnnotationAuditFiles(args);
+  const issues = [];
+  const issueCounts = {
+    emptyTopComment: 0,
+    templatePurpose: 0,
+    duplicateExternal: 0,
+    duplicateReviewBlock: 0,
+    malformedDelimiter: 0,
+  };
+
+  const fixSummary = {
+    enabled: shouldFix,
+    filesChanged: 0,
+    duplicateExternalRemoved: 0,
+    delimiterNormalized: 0,
+  };
+
+  for (const relPath of files) {
+    const absPath = join(projectRoot, relPath);
+    const original = readFileSync(absPath, "utf-8");
+    let content = original;
+    const lines = content.split("\n");
+    const fileIssues = [];
+
+    // 1) Empty top file JSDoc block.
+    let firstContentLine = 0;
+    while (
+      firstContentLine < lines.length &&
+      lines[firstContentLine].trim() === ""
+    ) {
+      firstContentLine++;
+    }
+    if (
+      firstContentLine + 1 < lines.length &&
+      lines[firstContentLine].trim() === "/**" &&
+      lines[firstContentLine + 1].trim() === "*/"
+    ) {
+      fileIssues.push("emptyTopComment");
+      issueCounts.emptyTopComment++;
+    }
+
+    // 2) Template purpose.
+    const templatePurposePattern =
+      /@purpose\s+(Provide declaration logic for|Retrieve data for)\b/g;
+    if (templatePurposePattern.test(content)) {
+      fileIssues.push("templatePurpose");
+      issueCounts.templatePurpose++;
+    }
+
+    // 3) Duplicate review blocks.
+    const reviewBlockCount =
+      (content.match(/@llm-review-submitted-at/g) || []).length;
+    if (reviewBlockCount > 1) {
+      fileIssues.push("duplicateReviewBlock");
+      issueCounts.duplicateReviewBlock++;
+    }
+
+    // 4) Malformed duplicated delimiters.
+    const malformedBefore =
+      (content.match(/\/\*\*\s*\n\s*\/\*\*/g) || []).length +
+      (content.match(/\*\/\s*\n\s*\*\//g) || []).length;
+    if (malformedBefore > 0) {
+      fileIssues.push("malformedDelimiter");
+      issueCounts.malformedDelimiter++;
+    }
+
+    // 5) Duplicate @external in same block.
+    const blocks = parseJsdocBlocks(lines);
+    let duplicateExternalFound = false;
+    const externalLinePattern =
+      /^\s*\*\s*@external\s+https:\/\/innotech\.atlassian\.net\/browse\/[A-Z]+-\d+\s*$/;
+    for (const block of blocks) {
+      const seen = new Set();
+      for (const line of block.lines) {
+        if (!externalLinePattern.test(line)) continue;
+        const normalized = line.trim();
+        if (seen.has(normalized)) {
+          duplicateExternalFound = true;
+          break;
+        }
+        seen.add(normalized);
+      }
+      if (duplicateExternalFound) break;
+    }
+    if (duplicateExternalFound) {
+      fileIssues.push("duplicateExternal");
+      issueCounts.duplicateExternal++;
+    }
+
+    if (shouldFix) {
+      let changed = false;
+
+      // Safe fix A: normalize duplicated JSDoc delimiters.
+      const normalized = content
+        .replace(/\/\*\*\s*\n\s*\/\*\*\s*\n/g, "/**\n")
+        .replace(/\*\/\s*\n\s*\*\/\s*\n/g, "*/\n");
+      if (normalized !== content) {
+        content = normalized;
+        changed = true;
+        fixSummary.delimiterNormalized++;
+      }
+
+      // Safe fix B: dedupe @external in same block.
+      const dedupeResult = dedupeExternalLinesInBlocks(content.split("\n"));
+      if (dedupeResult.removedCount > 0) {
+        content = dedupeResult.lines.join("\n");
+        changed = true;
+        fixSummary.duplicateExternalRemoved += dedupeResult.removedCount;
+      }
+
+      if (changed && content !== original) {
+        writeFileSync(absPath, content, "utf-8");
+        fixSummary.filesChanged++;
+      }
+    }
+
+    if (fileIssues.length > 0) {
+      issues.push({
+        path: relPath,
+        issues: fileIssues,
+      });
+    }
+  }
+
+  const report = {
+    scannedFiles: files.length,
+    issueFileCount: issues.length,
+    issueCounts,
+    fixSummary,
+    files: issues,
+  };
+
+  if (outputFile) {
+    const reportPath = join(projectRoot, outputFile);
+    ensureDirForFile(reportPath);
+    writeFileSync(reportPath, JSON.stringify(report, null, 2), "utf-8");
+  }
+
+  if (format === "text") {
+    console.log(`📊 掃描檔案數: ${report.scannedFiles}`);
+    console.log(`📊 有問題檔案數: ${report.issueFileCount}`);
+    console.log(
+      `📋 問題統計: emptyTop=${issueCounts.emptyTopComment}, templatePurpose=${issueCounts.templatePurpose}, duplicateExternal=${issueCounts.duplicateExternal}, duplicateReview=${issueCounts.duplicateReviewBlock}, malformedDelimiter=${issueCounts.malformedDelimiter}`,
+    );
+    if (shouldFix) {
+      console.log(
+        `🛠️  修復結果: filesChanged=${fixSummary.filesChanged}, duplicateExternalRemoved=${fixSummary.duplicateExternalRemoved}, delimiterNormalized=${fixSummary.delimiterNormalized}`,
+      );
+    }
+    for (const file of issues.slice(0, 200)) {
+      console.log(`- ${file.path}: ${file.issues.join(", ")}`);
+    }
+    return;
+  }
+
+  console.log(JSON.stringify(report, null, 2));
+}
+
 function cmdWriteSchema(args) {
   const schema = readJsonInput(args.input, args["input-file"]);
   const content = renderSchemaSkill(schema);
@@ -664,6 +1008,12 @@ Subcommands:
                  [--format=json]
   file-history --path=<path>       查詢檔案 git history 與工單號
                  [--max=30]
+  declaration-history --path=<path> --signature="<text>"
+                 [--max=50]        查詢宣告級來源 commit 與工單號
+  annotation-audit [--dirs=a,b]
+                 [--fix=true]      註解品質稽核（可選安全自動修復）
+                 [--output-file=.evolve-tmp/annotation-audit.json]
+                 [--format=json|text]
   write-schema --input-file=<json> 生成 project-schema SKILL.md
   write-report --input-file=<json> 生成 misnamed-file-report.md
   rename --input-file=<json>       執行重新命名
@@ -674,6 +1024,9 @@ Examples:
   node evolve.mjs check-prereq
   node evolve.mjs list-files --dirs=src,.cursor --format=json
   node evolve.mjs file-history --path=src/foo.ts --max=20
+  node evolve.mjs declaration-history --path=src/foo.ts --signature="const foo ="
+  node evolve.mjs annotation-audit --dirs=src --format=text
+  node evolve.mjs annotation-audit --dirs=src --fix=true --output-file=.evolve-tmp/annotation-audit.json
   node evolve.mjs write-schema --input-file=.evolve-tmp/project-schema.json
   node evolve.mjs write-report --input-file=.evolve-tmp/analysis-progress.json
   node evolve.mjs rename --input-file=.evolve-tmp/rename-plan.json --dry-run
@@ -698,6 +1051,12 @@ function main() {
       break;
     case "file-history":
       cmdFileHistory(args);
+      break;
+    case "declaration-history":
+      cmdDeclarationHistory(args);
+      break;
+    case "annotation-audit":
+      cmdAnnotationAudit(args);
       break;
     case "write-schema":
       cmdWriteSchema(args);
