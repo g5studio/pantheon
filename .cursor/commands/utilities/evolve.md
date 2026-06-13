@@ -213,17 +213,19 @@ pnpm run read-jira-ticket -- --ticket=FE-1234
 
 | 目標 | 要求 |
 |---|---|
-| 檔案頂部 | 在檔案最上方添加區塊註解，描述檔案用途、所屬模塊、關聯工單（若有）；**禁止空白 `/** */`** |
-| 函式 | 說明用途、參數、回傳值；有工單則標註 |
+| 檔案頂部 | 必須有 `檔案用途區塊`，描述檔案用途、所屬模塊、關聯工單（若有）；**禁止空白 `/** */`** |
+| 函式 / 宣告 | 必須有 `宣告內容用途說明與單號關聯`（用途 + ticket 關聯） |
 | 物件 / 常數 | 說明用途與使用情境；有工單則標註 |
+| 檔案底部 | 必須有 `llm 分析紀錄區`（`@llm-review-submitted-at`、`@llm-review-model`、`@llm-review-note`） |
 | 既有 skill 格式 | 若專案已有註解/skill 規範，**先**依專案格式，再在下方補檔案用途 |
 
 `@external` 規則（強制）：
 
 1. 使用 declaration-level 來源 commit（`declaration-history`）萃取 tickets
 2. 僅保留來源 commit 中的 ticket；若無 ticket，**省略 `@external`**
-3. 同一個 JSDoc block 內 `@external` 不可重複
-4. 遇到 noise commit（例如全檔 lint/format、`update`）不可直接當來源
+3. `@external` 必須使用完整 Jira URL（`https://innotech.atlassian.net/browse/<TICKET>`）
+4. 同一個 JSDoc block 內 `@external` 不可重複
+5. 遇到 noise commit（例如全檔 lint/format、`update`）不可直接當來源
 
 **工單註解格式範例**（依專案慣例調整）：
 
@@ -277,18 +279,19 @@ node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs anno
 
 ```bash
 # 建議先 dry-run 看安全閘結果
-node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs run-annotation-pass -- --dirs=src --max-files=50 --dry-run=true --format=text
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs run-annotation-pass -- --dirs=src --max-files=50 --dry-run=true --format=text --llm-provider=api-domain
 
 # 確認後執行實寫
-node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs run-annotation-pass -- --dirs=src --max-files=50 --format=text
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs run-annotation-pass -- --dirs=src --max-files=50 --format=text --llm-provider=api-domain
 
 # 指定模型（預設為 gpt-5.3-codex）
-node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs run-annotation-pass -- --dirs=src --model=gpt-5.3-codex --format=text
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs run-annotation-pass -- --dirs=src --model=gpt-5.3-codex --format=text --llm-provider=api-domain
 ```
 
 `run-annotation-pass` 內建保護：
 
 - 以 LLM 逐檔分析用途與宣告註解
+- 強制三段式註解結構（頂部 `檔案用途區塊`、中段 `宣告內容用途說明與單號關聯`、底部 `llm 分析紀錄區`）
 - 僅允許 comments-only 寫回（Safety Gate）
 - 宣告級 `@external` 僅可使用來源 commit ticket（無票則省略）
 

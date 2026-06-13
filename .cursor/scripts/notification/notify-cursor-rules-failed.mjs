@@ -1,43 +1,52 @@
 #!/usr/bin/env node
 
 /**
- * 發送系統通知（支持 macOS 和 Windows），提示用戶 Cursor rules 檢查未通過
- * 注意：通知不包含任何 action 按鈕或交互元素，僅用於顯示訊息
+ * === 檔案用途區塊 ===
+ * @module script-runtime
+ * @purpose 管理 .cursor/scripts/notification/notify-cursor-rules-failed.mjs 的註解補全與用途說明
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ * @external https://innotech.atlassian.net/browse/FE-7892
  */
 
-import { execSync, spawn } from 'child_process';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-import { platform } from 'os';
-import { writeFileSync, unlinkSync, existsSync } from 'fs';
+/**
+ * 檔案用途區塊
+ * @module notify-cursor-rules-failed.mjs
+ * @purpose 發送跨平台系統通知，提醒使用者 Cursor rules 檢查未通過（支援 macOS/Windows，其他系統僅輸出到控制台）。
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ */
+
+import { execSync, spawn } from "child_process";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+import { platform } from "os";
+import { writeFileSync, unlinkSync, existsSync } from "fs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 /**
- * 發送系統通知並設定點擊時切換到 Cursor（跨平台支持）
- * 注意：通知不會自動切換視窗，只有在用戶點擊通知時才會切換
- * @param {string} title - 通知標題
- * @param {string} message - 通知內容
- * @param {string} mrUrl - MR 連結（可選）
+ * 宣告內容用途說明與單號關聯
+ * @description 提供對外入口，針對「Cursor rules 檢查未通過」場景發送通知。
+ * @purpose 將 title/message/mrUrl 轉交給通用通知發送流程。
+ * @external https://innotech.atlassian.net/browse/FE-7893
  */
-export function notifyCursorRulesFailed(title, message, mrUrl = '') {
+export function notifyCursorRulesFailed(title, message, mrUrl = "") {
   sendSystemNotification(title, message, mrUrl);
 }
 
 /**
- * 發送系統通知（通用函數）
- * @param {string} title - 通知標題
- * @param {string} message - 通知內容
- * @param {string} url - 相關連結（可選）
+ * 宣告內容用途說明與單號關聯
+ * @description 通用通知發送器，依作業系統選擇 macOS/Windows/to console 的策略。
+ * @purpose 封裝平台分支並統一輸入參數（url 為可選）。
+ * @external https://innotech.atlassian.net/browse/FE-7893
  */
-export function sendSystemNotification(title, message, url = '') {
+export function sendSystemNotification(title, message, url = "") {
   const osPlatform = platform();
 
-  if (osPlatform === 'darwin') {
+  if (osPlatform === "darwin") {
     // macOS
     notifyMacOS(title, message, url);
-  } else if (osPlatform === 'win32') {
+  } else if (osPlatform === "win32") {
     // Windows
     notifyWindows(title, message, url);
   } else {
@@ -56,8 +65,8 @@ export function sendSystemNotification(title, message, url = '') {
  * 注意：此腳本在 Cursor sandbox 環境中執行時，osascript 可能被限制
  *       AI 在調用此腳本時應使用 required_permissions: ["all"] 來繞過 sandbox 限制
  */
-function notifyMacOS(title, message, url = '') {
-  const escapedMessage = message.replace(/"/g, '\\"').replace(/\n/g, ' ');
+function notifyMacOS(title, message, url = "") {
+  const escapedMessage = message.replace(/"/g, '\\"').replace(/\n/g, " ");
   const escapedTitle = title.replace(/"/g, '\\"');
 
   // 使用 macOS 原生通知
@@ -74,7 +83,7 @@ function notifyMacOS(title, message, url = '') {
   // 發送通知（同步執行以捕獲錯誤）
   try {
     execSync(`osascript -e '${notifyScript.replace(/'/g, "'\\''")}'`, {
-      stdio: 'pipe',
+      stdio: "pipe",
       timeout: 5000,
     });
     console.log(`\n📢 已發送系統通知: ${title}`);
@@ -87,9 +96,13 @@ function notifyMacOS(title, message, url = '') {
     console.error(`\n⚠️  發送通知失敗: ${execError.message}`);
     console.log(`\n💡 提示: 如果未看到系統通知，請檢查：`);
     console.log(`   1. 系統偏好設置 > 通知與專注模式 > 確保通知已開啟`);
-    console.log(`   2. 系統偏好設置 > 安全性與隱私權 > 輔助使用 > 確保終端機或 Cursor 有權限`);
+    console.log(
+      `   2. 系統偏好設置 > 安全性與隱私權 > 輔助使用 > 確保終端機或 Cursor 有權限`,
+    );
     console.log(`   3. 通知可能被「請勿打擾」模式或專注模式阻擋`);
-    console.log(`   4. 如果是 Cursor AI 執行此腳本，請確保使用 required_permissions: ["all"]`);
+    console.log(
+      `   4. 如果是 Cursor AI 執行此腳本，請確保使用 required_permissions: ["all"]`,
+    );
     console.log(`\n📢 ${title}`);
     console.log(`訊息: ${message}`);
     if (url) {
@@ -102,22 +115,22 @@ function notifyMacOS(title, message, url = '') {
  * Windows 系統通知
  * 注意：通知不包含任何 action 按鈕，僅用於顯示訊息
  */
-function notifyWindows(title, message, url = '') {
+function notifyWindows(title, message, url = "") {
   try {
     // 轉義 XML 特殊字符
     const escapeXml = (str) => {
       return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;')
-        .replace(/\n/g, ' ');
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;")
+        .replace(/\n/g, " ");
     };
 
     const escapedTitle = escapeXml(title);
     const escapedMessage = escapeXml(message);
-    const escapedUrl = url ? escapeXml(url) : '';
+    const escapedUrl = url ? escapeXml(url) : "";
 
     // 構建通知內容
     let notificationBody = escapedMessage;
@@ -127,16 +140,16 @@ function notifyWindows(title, message, url = '') {
 
     // 使用 PowerShell 發送 Windows Toast 通知（無 action 按鈕）
     // 嘗試獲取 Cursor 應用圖標路徑（在 JavaScript 中）
-    let cursorIconPath = '';
+    let cursorIconPath = "";
     const possibleIconPaths = [
-      `${process.env.LOCALAPPDATA || ''}\\Programs\\cursor\\resources\\app\\assets\\icon.ico`,
-      `${process.env.ProgramFiles || ''}\\Cursor\\resources\\app\\assets\\icon.ico`,
-      `${process.env['ProgramFiles(x86)'] || ''}\\Cursor\\resources\\app\\assets\\icon.ico`,
-      `${process.env.APPDATA || ''}\\Cursor\\resources\\app\\assets\\icon.ico`,
+      `${process.env.LOCALAPPDATA || ""}\\Programs\\cursor\\resources\\app\\assets\\icon.ico`,
+      `${process.env.ProgramFiles || ""}\\Cursor\\resources\\app\\assets\\icon.ico`,
+      `${process.env["ProgramFiles(x86)"] || ""}\\Cursor\\resources\\app\\assets\\icon.ico`,
+      `${process.env.APPDATA || ""}\\Cursor\\resources\\app\\assets\\icon.ico`,
     ];
     for (const iconPath of possibleIconPaths) {
       if (iconPath && existsSync(iconPath)) {
-        cursorIconPath = iconPath.replace(/\\/g, '/');
+        cursorIconPath = iconPath.replace(/\\/g, "/");
         break;
       }
     }
@@ -187,11 +200,21 @@ function notifyWindows(title, message, url = '') {
     `;
 
     // 執行 PowerShell 腳本（異步執行）
-    spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', powershellScript], {
-      detached: true,
-      stdio: 'ignore',
-      shell: true,
-    }).unref();
+    spawn(
+      "powershell",
+      [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        powershellScript,
+      ],
+      {
+        detached: true,
+        stdio: "ignore",
+        shell: true,
+      },
+    ).unref();
 
     console.log(`\n📢 已發送系統通知: ${title}`);
     if (url) {
@@ -200,9 +223,9 @@ function notifyWindows(title, message, url = '') {
   } catch (error) {
     // 如果 PowerShell 通知失敗，嘗試使用簡單的 msg 命令（Windows 7+）
     try {
-      const simpleMessage = `${title}\n${message}${url ? `\n\n連結: ${url}` : ''}`;
+      const simpleMessage = `${title}\n${message}${url ? `\n\n連結: ${url}` : ""}`;
       execSync(`msg %username% "${simpleMessage.replace(/"/g, '\\"')}"`, {
-        stdio: 'ignore',
+        stdio: "ignore",
         shell: true,
       });
       console.log(`\n📢 已發送系統通知: ${title}`);
@@ -223,9 +246,22 @@ function notifyWindows(title, message, url = '') {
 
 // 如果直接執行此腳本
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const title = process.argv[2] || 'Cursor Rules 檢查未通過';
-  const message = process.argv[3] || '請返回 Cursor 修正問題';
-  const mrUrl = process.argv[4] || '';
+  const title = process.argv[2] || "Cursor Rules 檢查未通過";
+  const message = process.argv[3] || "請返回 Cursor 修正問題";
+  const mrUrl = process.argv[4] || "";
 
   notifyCursorRulesFailed(title, message, mrUrl);
 }
+
+/**
+ * llm 分析紀錄區
+ * @llm-review-submitted-at 2026-06-13
+ * @llm-review-model gpt-4.1
+ * @llm-review-note 依需求僅調整注釋並套用三段式註解格式；不變更任何執行邏輯。
+ */
+/**
+ * === llm 分析紀錄區 ===
+ * @llm-review-submitted-at 2026-06-13T17:33:18.845Z
+ * @llm-review-model gpt-5.4-nano
+ * @llm-review-note 重構此檔案注釋為三區塊格式，並在宣告函式處補上對應 FE-7893 單號的 @external 標記；新增 llm 分析紀錄區；不修改任何程式邏輯。
+ */

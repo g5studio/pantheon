@@ -1,6 +1,24 @@
 #!/usr/bin/env node
 
 /**
+ * === 檔案用途區塊 ===
+ * @module script-runtime
+ * @purpose 管理 .cursor/scripts/cr/trace-bug-root-cause.mjs 的註解補全與用途說明
+ * @external https://innotech.atlassian.net/browse/FE-8310
+ */
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 本區塊以下宣告需標示用途與單號關聯
+ * @purpose 統一定義宣告級註解格式與單號追溯規則
+ */
+/**
+ * @module trace-bug-root-cause
+ * @purpose 用於根據目前 fix 所在的 HEAD 與目標分支，反向推測「引入問題」的候選 commits，並輸出可追溯結果（Markdown/JSON）。
+ *
+ * 檔案用途區塊
+ */
+
+/**
  * Bug root cause tracer — find commits that introduced the bug (not fix commits).
  *
  * Usage:
@@ -13,6 +31,12 @@
 import { execSync, spawnSync } from "child_process";
 import { getProjectRoot } from "../utilities/env-loader.mjs";
 
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 取得專案根目錄作為 git 指令的執行工作目錄。
+ * @purpose 與 FE-8310 相關。
+ * @external https://innotech.atlassian.net/browse/FE-8310
+ */
 const projectRoot = getProjectRoot();
 
 const TICKET_PATTERN = /\b([A-Za-z]+-\d+)\b/g;
@@ -100,6 +124,12 @@ function parseArgs(argv) {
   return options;
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 顯示 CLI 使用方式與參數說明。
+ * @purpose 與 FE-8310 相關。
+ * @external https://innotech.atlassian.net/browse/FE-8310
+ */
 function printHelp() {
   console.log(`
 🔍 Bug Root Cause Tracer
@@ -122,6 +152,12 @@ Options:
 `.trim());
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 執行單行 git 指令並回傳輸出字串；錯誤時回傳空字串。
+ * @purpose 與 FE-8310 相關。
+ * @external https://innotech.atlassian.net/browse/FE-8310
+ */
 function execGit(command, { silent = true } = {}) {
   try {
     return execSync(command, {
@@ -154,6 +190,12 @@ function execGitArgs(args, { silent = true } = {}) {
   }
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 取得 HEAD 與目標分支的 merge-base（優先使用 origin/<target>）。
+ * @purpose 與 FE-8310 相關。
+ * @external https://innotech.atlassian.net/browse/FE-8310
+ */
 function getMergeBase(targetBranch) {
   const remoteRef = `origin/${targetBranch}`;
   const hasRemote = execGit(`git rev-parse --verify ${remoteRef}`, {
@@ -176,6 +218,12 @@ function getFixCommitHashes(baseCommit) {
   );
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 取得需要分析的檔案列表；若提供 explicitFiles 則以該列表為準。
+ * @purpose 與 FE-8310 相關。
+ * @external https://innotech.atlassian.net/browse/FE-8310
+ */
 function getChangedFiles(baseCommit, explicitFiles) {
   if (explicitFiles?.length) {
     return explicitFiles.filter((f) => execGit(`git ls-files -- ${f}`, { silent: true }));
@@ -287,6 +335,12 @@ function parseLogLine(line) {
   };
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 取得特定 commit 的作者日期與訊息內容，並從訊息中抽取 Jira 單號。
+ * @purpose 與 FE-8310 相關。
+ * @external https://innotech.atlassian.net/browse/FE-8310
+ */
 function getCommitMeta(hash) {
   const authorDate = execGit(
     `git show -s --format=%ad ${hash} --date=short`,
@@ -530,6 +584,12 @@ function formatMarkdownSection(result) {
   return section;
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 程式進入點：解析參數、建構追溯結果，並依格式輸出。
+ * @purpose 與 FE-8310 相關。
+ * @external https://innotech.atlassian.net/browse/FE-8310
+ */
 function main() {
   const options = parseArgs(process.argv);
 
@@ -550,3 +610,16 @@ function main() {
 }
 
 main();
+
+/**
+ * llm 分析紀錄區
+ * @llm-review-submitted-at 2026-06-13
+ * @llm-review-model unknown
+ * @llm-review-note 僅重構並補強註解區塊（不改動任何執行邏輯）。
+ */
+/**
+ * === llm 分析紀錄區 ===
+ * @llm-review-submitted-at 2026-06-13T17:26:11.255Z
+ * @llm-review-model gpt-5.4-nano
+ * @llm-review-note 補上要求的三段式註解結構，並將原本 @external 註解改為宣告內容用途說明區塊格式；同時在檔案底部新增 llm 分析紀錄區。未變更任何程式運行邏輯。
+ */

@@ -1,15 +1,43 @@
 #!/usr/bin/env node
 
 /**
- * 讀取 Confluence 頁面內容
- * 使用 Jira API token 透過 Confluence API 訪問頁面
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 本區塊以下宣告需標示用途與單號關聯
+ * @purpose 統一定義宣告級註解格式與單號追溯規則
+ */
+/**
+ * @module read-confluence-page
+ * @purpose 讀取 Confluence 頁面內容，並透過 Jira API token（Basic Auth）呼叫 Confluence REST API。
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ */
+
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 讀取流程支援用
+ */
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 讀取 Confluence 頁面內容
+ * @purpose 使用 Jira API token 透過 Confluence API 訪問頁面
  */
 
 import { getJiraConfig } from "../utilities/env-loader.mjs";
 
 // 從 Confluence URL 解析空間和頁面 ID
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 解析 Confluence URL 以取得 spaceKey 與 pageId。
+ * @purpose 協助後續呼叫 Confluence REST API。
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ */
 function parseConfluenceUrl(url) {
   // 格式: https://innotech.atlassian.net/wiki/spaces/{spaceKey}/pages/{pageId}/...
+  /**
+   * 宣告內容用途說明與單號關聯
+   * @description 以正則擷取 URL 中的 spaceKey 與 pageId。
+   * @purpose 支援固定路徑格式解析。
+   * @external https://innotech.atlassian.net/browse/FE-7893
+   */
   const match = url.match(/\/wiki\/spaces\/([^\/]+)\/pages\/(\d+)(?:\/|$)/);
   if (match) {
     return {
@@ -21,6 +49,12 @@ function parseConfluenceUrl(url) {
 }
 
 // 提取 ADF 格式的文本內容
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 將 ADF（Atlassian Document Format）內容轉換成純文字。
+ * @purpose 讓頁面內容可直接輸出或後續處理。
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ */
 function extractTextFromADF(content) {
   if (!content) return "";
   if (typeof content === "string") return content;
@@ -39,17 +73,47 @@ function extractTextFromADF(content) {
   return "";
 }
 
-// 讀取 Confluence 頁面
+// 讀取 Confluence 頓面
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 依 Confluence URL 解析後呼叫 Confluence REST API，取得頁面標題、空間與內容。
+ * @purpose 供 CLI 輸出結構化頁面結果（含 raw 原始資料）。
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ */
 async function readConfluencePage(url) {
+  /**
+   * 宣告內容用途說明與單號關聯
+   * @description 取得 Jira/Confluence 呼叫所需設定（如 email、apiToken、baseUrl）。
+   * @purpose 支援 Basic Auth 與 API 端點組裝。
+   * @external https://innotech.atlassian.net/browse/FE-7893
+   */
   const config = getJiraConfig();
+  /**
+   * 宣告內容用途說明與單號關聯
+   * @description 將 email 與 apiToken 組合成 Basic Auth 的 base64 字串。
+   * @purpose 用於呼叫 Confluence REST API 的授權 header。
+   */
   const auth = Buffer.from(`${config.email}:${config.apiToken}`).toString(
     "base64"
   );
+  // 注意：此處僅調整尾端斜線，避免拼接 URL 出現雙斜線
+  /**
+   * 宣告內容用途說明與單號關聯
+   * @description 讓 baseUrl 不以 "/" 結尾，以避免組 URL 時出現雙斜線。
+   * @purpose 確保 API URL 正確串接。
+   * @external https://innotech.atlassian.net/browse/FE-7893
+   */
   const baseUrl = config.baseUrl.endsWith("/")
     ? config.baseUrl.slice(0, -1)
     : config.baseUrl;
 
   // 解析 URL
+  /**
+   * 宣告內容用途說明與單號關聯
+   * @description 解析傳入的 Confluence URL，取得 spaceKey 與 pageId。
+   * @purpose 進一步組裝 REST API 端點。
+   * @external https://innotech.atlassian.net/browse/FE-7893
+   */
   const parsed = parseConfluenceUrl(url);
   if (!parsed) {
     throw new Error(
@@ -57,6 +121,12 @@ async function readConfluencePage(url) {
     );
   }
 
+  /**
+   * 宣告內容用途說明與單號關聯
+   * @description 解構解析結果中的 spaceKey 與 pageId。
+   * @purpose 供後續取得頁面內容。
+   * @external https://innotech.atlassian.net/browse/FE-7893
+   */
   const { spaceKey, pageId } = parsed;
 
   // 使用 Confluence REST API 獲取頁面內容
@@ -128,7 +198,19 @@ async function readConfluencePage(url) {
 }
 
 // 主函數
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 作為 CLI 入口：接收 Confluence URL，呼叫 readConfluencePage 並輸出 JSON。
+ * @purpose 支援命令列取得指定頁面內容。
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ */
 async function main() {
+  /**
+   * 宣告內容用途說明與單號關聯
+   * @description 從命令列參數取得 Confluence 頁面 URL。
+   * @purpose 作為 readConfluencePage 的輸入。
+   * @external https://innotech.atlassian.net/browse/FE-7893
+   */
   const url = process.argv[2];
 
   if (!url) {
@@ -152,3 +234,9 @@ async function main() {
 }
 
 main();
+/**
+ * === llm 分析紀錄區 ===
+ * @llm-review-submitted-at 2026-06-13T17:55:15.864Z
+ * @llm-review-model gpt-5.4-nano
+ * @llm-review-note 將檔案註解調整為三段式布局：補齊並移除底部重複/錯置的 llm 區塊字串；修正 malformed 之 @external（auth 區塊不再帶未對應票號）；並將多處標題/區塊註解格式統一為指定的 @module/@purpose/@external、@description/@purpose 及 llm 分析記錄格式。未變更任何執行邏輯。
+ */

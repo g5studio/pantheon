@@ -1,12 +1,31 @@
 #!/usr/bin/env node
 
 /**
+ * === 檔案用途區塊 ===
+ * @module script-runtime
+ * @purpose 管理 .cursor/scripts/utilities/bump-version.mjs 的註解補全與用途說明
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ */
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 本區塊以下宣告需標示用途與單號關聯
+ * @purpose 統一定義宣告級註解格式與單號追溯規則
+ */
+/**
+ * 檔案用途區塊
+ * @module .cursor/scripts/utilities/bump-version.mjs
+ * @purpose 版本跳板工具：在指定檔案中讀取目前版本、依跳板類型計算新版本、寫回並執行 Git 提交與推送。
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ */
+
+/**
  * 版本跳板工具腳本
  *
- * 這是一個純粹的版本號處理工具，只負責：
- * 1. 在指定檔案中找到版本號位置
- * 2. 根據跳板類型計算新版本號
- * 3. 更新檔案中的版本號
+ * 說明：
+ * - 在指定檔案中尋找並讀寫版本號
+ * - 依選擇的跳板類型計算新版本
+ * - 寫回檔案並以 Git 送出、推送
  *
  * 使用方式：
  *   node bump-version.mjs --files="package.json,build.properties" --type=same-env [--yes]
@@ -28,13 +47,26 @@ import { readFileSync, writeFileSync, existsSync } from "fs";
 import readline from "readline";
 import { getProjectRoot } from "./env-loader.mjs";
 
-// 使用 env-loader 提供的 projectRoot
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 專案根目錄絕對路徑，供後續組合檔案路徑時使用。
+ * @purpose 用於讓此腳本在不同執行位置下仍能穩定讀寫目標檔案。
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ */
 const projectRoot = getProjectRoot();
 
 // ============================================
 // 工具函數
 // ============================================
 
+/**
+ * 在專案根目錄下執行 shell 指令。
+ * @param {string} command - 要執行的指令。
+ * @param {{ silent?: boolean } & import('child_process').ExecSyncOptions} [options={}] - 選項；silent 為 true 時不將輸出寫到標準輸出。
+ * @returns {string} 指令輸出（silent 模式下為字串，否則通常為空字串）。
+ * @throws {Error} 執行失敗時拋出錯誤。
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ */
 function exec(command, options = {}) {
   try {
     return execSync(command, {
@@ -56,11 +88,15 @@ function exec(command, options = {}) {
 // ============================================
 
 /**
- * 解析版本號
+ * 將版本字串解析為物件。
  * 支援格式：
  * - major.minor.patch (如 5.36.0)
  * - major.minor.patch-suffix (如 5.36.0-b, 5.36.0-z.a)
  * - major.minor.patch-beta.N (如 0.0.0-beta.3)
+ * @param {string} version - 要解析的版本字串。
+ * @returns {{major:number, minor:number, patch:number, suffix:string|null, beta:number|null}}
+ * @throws {Error} 當版本字串無法解析時拋出。
+ * @external https://innotech.atlassian.net/browse/FE-7893
  */
 function parseVersion(version) {
   // 匹配 beta 格式
@@ -93,7 +129,10 @@ function parseVersion(version) {
 }
 
 /**
- * 格式化版本號
+ * 將版本物件格式化為字串。
+ * @param {{major:number, minor:number, patch:number, suffix:string|null, beta:number|null}} versionObj - 版本物件。
+ * @returns {string} 版本字串。
+ * @external https://innotech.atlassian.net/browse/FE-7893
  */
 function formatVersion(versionObj) {
   let version = `${versionObj.major}.${versionObj.minor}.${versionObj.patch}`;
@@ -106,8 +145,11 @@ function formatVersion(versionObj) {
 }
 
 /**
- * 推進英文字母
- * a -> b, z -> z.a, z.a -> z.b
+ * 推進英文字母序列。
+ * 規則：a -> b，z -> z.a，z.a -> z.b。
+ * @param {string} letter - 當前字尾字母序列。
+ * @returns {string} 推進後的字尾字母序列。
+ * @external https://innotech.atlassian.net/browse/FE-7893
  */
 function incrementLetter(letter) {
   if (!letter || letter.length === 0) {
@@ -122,7 +164,13 @@ function incrementLetter(letter) {
 }
 
 /**
- * 同環境進版
+ * 同環境進版。
+ * - 若為 beta 版本：beta 數字 +1
+ * - 若帶 suffix：推進英文字母
+ * - 其他情況：patch +1
+ * @param {string} currentVersion - 當前版本字串。
+ * @returns {string} 新版本字串。
+ * @external https://innotech.atlassian.net/browse/FE-7893
  */
 function bumpSameEnvironment(currentVersion) {
   const version = parseVersion(currentVersion);
@@ -145,7 +193,10 @@ function bumpSameEnvironment(currentVersion) {
 }
 
 /**
- * 環境升級（移除 suffix/beta）
+ * 環境升級（移除 suffix/beta 標記）。
+ * @param {string} currentVersion - 當前版本字串。
+ * @returns {string} 新版本字串（去除 beta/suffix）。
+ * @external https://innotech.atlassian.net/browse/FE-7893
  */
 function bumpEnvironmentUpgrade(currentVersion) {
   const version = parseVersion(currentVersion);
@@ -159,7 +210,10 @@ function bumpEnvironmentUpgrade(currentVersion) {
 // ============================================
 
 /**
- * 從 package.json 讀取版本
+ * 從 package.json 讀取版本。
+ * @param {string} filePath - 相對於專案根目錄的檔案路徑。
+ * @returns {string} 版本字串。
+ * @external https://innotech.atlassian.net/browse/FE-7893
  */
 function readVersionFromPackageJson(filePath) {
   const fullPath = join(projectRoot, filePath);
@@ -169,7 +223,11 @@ function readVersionFromPackageJson(filePath) {
 }
 
 /**
- * 更新 package.json 版本
+ * 更新 package.json 版本。
+ * @param {string} filePath - 相對於專案根目錄的檔案路徑。
+ * @param {string} newVersion - 要寫入的新版本字串。
+ * @returns {void}
+ * @external https://innotech.atlassian.net/browse/FE-7893
  */
 function updatePackageJsonVersion(filePath, newVersion) {
   const fullPath = join(projectRoot, filePath);
@@ -180,7 +238,12 @@ function updatePackageJsonVersion(filePath, newVersion) {
 }
 
 /**
- * 從 build.properties 讀取版本
+ * 從 build.properties 讀取版本。
+ * 會回傳第一個符合 config.brands.*.ver 的版本字串。
+ * @param {string} filePath - 相對於專案根目錄的檔案路徑。
+ * @returns {string} 版本字串。
+ * @throws {Error} 若未能取得版本字串則拋出。
+ * @external https://innotech.atlassian.net/browse/FE-7893
  */
 function readVersionFromBuildProperties(filePath) {
   const fullPath = join(projectRoot, filePath);
@@ -198,7 +261,12 @@ function readVersionFromBuildProperties(filePath) {
 }
 
 /**
- * 更新 build.properties 版本
+ * 更新 build.properties 版本。
+ * 僅更新前 32 行中的 config.brands.*.ver。
+ * @param {string} filePath - 相對於專案根目錄的檔案路徑。
+ * @param {string} newVersion - 要寫入的新版本字串。
+ * @returns {void}
+ * @external https://innotech.atlassian.net/browse/FE-7893
  */
 function updateBuildPropertiesVersion(filePath, newVersion) {
   const fullPath = join(projectRoot, filePath);
@@ -217,7 +285,12 @@ function updateBuildPropertiesVersion(filePath, newVersion) {
 }
 
 /**
- * 從一般 JSON 檔案讀取版本
+ * 從一般 JSON 檔案讀取版本。
+ * 優先順序：version -> pantheon -> 第一個字串欄位。
+ * @param {string} filePath - 相對於專案根目錄的檔案路徑。
+ * @returns {string} 版本字串。
+ * @throws {Error} 若未能取得版本字串則拋出。
+ * @external https://innotech.atlassian.net/browse/FE-7893
  */
 function readVersionFromJson(filePath) {
   const fullPath = join(projectRoot, filePath);
@@ -239,7 +312,12 @@ function readVersionFromJson(filePath) {
 }
 
 /**
- * 更新一般 JSON 檔案版本
+ * 更新一般 JSON 檔案版本。
+ * 優先順序：version -> pantheon -> 第一個字串欄位。
+ * @param {string} filePath - 相對於專案根目錄的檔案路徑。
+ * @param {string} newVersion - 要寫入的新版本字串。
+ * @returns {void}
+ * @external https://innotech.atlassian.net/browse/FE-7893
  */
 function updateJsonVersion(filePath, newVersion) {
   const fullPath = join(projectRoot, filePath);
@@ -265,7 +343,12 @@ function updateJsonVersion(filePath, newVersion) {
 }
 
 /**
- * 根據檔案類型讀取版本
+ * 根據檔案類型讀取版本。
+ * 支援：package.json、build.properties、*.json。
+ * @param {string} filePath - 檔案路徑（相對於專案根目錄）。
+ * @returns {string} 版本字串。
+ * @throws {Error} 不支援的檔案格式時拋出。
+ * @external https://innotech.atlassian.net/browse/FE-7893
  */
 function readVersionFromFile(filePath) {
   const fileName = basename(filePath);
@@ -282,7 +365,13 @@ function readVersionFromFile(filePath) {
 }
 
 /**
- * 根據檔案類型更新版本
+ * 根據檔案類型更新版本。
+ * 成功後在終端輸出更新結果。
+ * @param {string} filePath - 檔案路徑（相對於專案根目錄）。
+ * @param {string} newVersion - 新版本字串。
+ * @returns {void}
+ * @throws {Error} 不支援的檔案格式時拋出。
+ * @external https://innotech.atlassian.net/browse/FE-7893
  */
 function updateVersionInFile(filePath, newVersion) {
   const fileName = basename(filePath);
@@ -304,6 +393,15 @@ function updateVersionInFile(filePath, newVersion) {
 // 命令行解析
 // ============================================
 
+/**
+ * 解析 CLI 參數。
+ * 支援：
+ * - --files
+ * - --type（same-env/upgrade 或 1/2 別名）
+ * - --yes / --confirm / -y
+ * @returns {{files: string[], type: ('same-environment'|'environment-upgrade'|null), confirm: boolean}}
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ */
 function parseArgs() {
   const args = process.argv.slice(2);
   const options = {
@@ -338,6 +436,11 @@ function parseArgs() {
   return options;
 }
 
+/**
+ * 與使用者互動以選擇版本更新種類。
+ * @returns {Promise<'same-environment'|'environment-upgrade'>} 使用者選擇的更新種類。
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ */
 function askUserForBumpType() {
   return new Promise((resolve) => {
     const rl = readline.createInterface({
@@ -368,6 +471,12 @@ function askUserForBumpType() {
   });
 }
 
+/**
+ * 詢問使用者確認動作。
+ * @param {string} message - 顯示給使用者的訊息。
+ * @returns {Promise<boolean>} 使用者是否確認。
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ */
 function askUserForConfirm(message) {
   return new Promise((resolve) => {
     const rl = readline.createInterface({
@@ -386,10 +495,20 @@ function askUserForConfirm(message) {
 // Git 操作
 // ============================================
 
+/**
+ * 取得目前 Git 分支名稱。
+ * @returns {string} 分支名稱。
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ */
 function getCurrentBranch() {
   return exec("git rev-parse --abbrev-ref HEAD", { silent: true }).trim();
 }
 
+/**
+ * 檢查當前工作區是否有未提交變更。
+ * @returns {boolean} 有未提交變更時回傳 true。
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ */
 function hasUncommittedChanges() {
   try {
     const status = exec("git status --porcelain", { silent: true });
@@ -399,6 +518,15 @@ function hasUncommittedChanges() {
   }
 }
 
+/**
+ * 提交並推送版本更新至遠端。
+ * 若分支包含 Jira ticket（FE/IN-數字），則以符合 commitlint 的格式提交；否則跳過驗證。
+ * @param {string[]} files - 要提交的檔案清單。
+ * @param {string} currentVersion - 目前版本字串。
+ * @param {string} newVersion - 新版本字串。
+ * @returns {void}
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ */
 function commitAndPush(files, currentVersion, newVersion) {
   const currentBranch = getCurrentBranch();
   const ticketMatch = currentBranch.match(/(FE|IN)-\d+/);
@@ -433,6 +561,11 @@ function commitAndPush(files, currentVersion, newVersion) {
 // 主程式
 // ============================================
 
+/**
+ * 入口流程：解析參數、驗證狀態、計算並更新版本、最後提交推送。
+ * @returns {Promise<void>}
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ */
 async function main() {
   console.log("🚀 版本跳板工具\n");
 
@@ -518,3 +651,16 @@ main().catch((error) => {
   console.error(`\n❌ 發生錯誤: ${error.message}\n`);
   process.exit(1);
 });
+
+/**
+ * llm 分析紀錄區
+ * @llm-review-submitted-at 2026-06-13
+ * @llm-review-model annotation-refactor-engine
+ * @llm-review-note 更新檔案層級與宣告區塊之註解格式：補齊三段式區塊標題/標籤；宣告註解依輸入 tickets 指定使用 @external；不變更程式邏輯。
+ */
+/**
+ * === llm 分析紀錄區 ===
+ * @llm-review-submitted-at 2026-06-13T19:29:12.582Z
+ * @llm-review-model gpt-5.4-nano
+ * @llm-review-note 把所有 @external 票號改為完整 Jira browse URL；並保留三段式註解區塊結構與現有宣告用途標示，不改動程式邏輯。
+ */

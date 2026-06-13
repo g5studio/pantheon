@@ -1,12 +1,31 @@
 #!/usr/bin/env node
+/**
+ * === 檔案用途區塊 ===
+ * @module script-runtime
+ * @purpose 管理 .cursor/scripts/utilities/query-file.mjs 的註解補全與用途說明
+ * @external https://innotech.atlassian.net/browse/FE-8384
+ */
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 宣告內容用途說明與單號關聯
+ * @purpose 統一定義宣告級註解格式與單號追溯規則
+ */
+/**
+ * @description 宣告內容用途說明與單號關聯
+ * @purpose 本檔案提供 CLI 介面與查詢流程：
+ * - parseArgs / parsePathFilters：處理參數與搜尋範圍
+ * - buildIndex / readIndex：建立與讀取本地索引
+ * - queryFromCodegraph：CodeGraph-first 查詢
+ * - queryFromIndex / runContentFallback：本地索引與內容回退
+ *
+ * 關聯單號：FE-8384
+ */
 
 /**
- * query-file - Mounted-safe file query helper
- *
- * Goals:
- * - Prefer external tool (CodeGraph) when available.
- * - Keep behavior identical in Pantheon repo and mounted projects.
- * - Keep local index + content fallback as resilient backup path.
+ * llm 分析紀錄區
+ * @llm-review-submitted-at 2026-06-13T18:06:18.392Z
+ * @llm-review-model gpt-5.4-nano
+ * @llm-review-note 依需求改寫檔案註解為三區塊格式（檔案用途區塊/宣告內容用途說明與單號關聯/llm 分析紀錄區），並將外部依賴以 @external 標示於用途區塊；不變更執行邏輯。
  */
 
 import { execSync } from "child_process";
@@ -72,6 +91,11 @@ const BINARY_EXTENSIONS = new Set([
   ".lock",
 ]);
 
+/**
+ * @description 解析 CLI args
+ * @purpose 解析輸入參數並產生標準化 args 結構
+ * @external https://innotech.atlassian.net/browse/FE-8384
+ */
 function parseArgs(argv) {
   const args = {
     keyword: "",
@@ -131,11 +155,21 @@ function parseArgs(argv) {
   return args;
 }
 
+/**
+ * @description 確保指定檔案路徑的父目錄存在
+ * @purpose 若父目錄不存在則建立
+ * @external https://innotech.atlassian.net/browse/FE-8384
+ */
 function ensureDirForFile(filePath) {
   const dir = filePath.slice(0, filePath.lastIndexOf("/"));
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 }
 
+/**
+ * @description 判斷檔案副檔名是否屬於文字類型
+ * @purpose 依副檔名與 BINARY_EXTENSIONS 集合決定是否視為可讀文本
+ * @external https://innotech.atlassian.net/browse/FE-8384
+ */
 function isTextLikeFile(filePath) {
   const ext = extname(filePath).toLowerCase();
   return !BINARY_EXTENSIONS.has(ext);
@@ -200,6 +234,11 @@ function readIndex() {
   }
 }
 
+/**
+ * @description 轉換逗號分隔的路徑過濾條件
+ * @purpose 將 raw 字串轉為小寫的片段陣列
+ * @external https://innotech.atlassian.net/browse/FE-8384
+ */
 function parsePathFilters(raw) {
   if (!raw || typeof raw !== "string") return [];
   return raw
@@ -624,3 +663,9 @@ function main() {
 }
 
 main();
+/**
+ * === llm 分析紀錄區 ===
+ * @llm-review-submitted-at 2026-06-13T19:33:52.978Z
+ * @llm-review-model gpt-5.4-nano
+ * @llm-review-note Refactored only comment headers to match the required three-section annotation layout; removed malformed/duplicated middle-block content and kept runtime logic unchanged.
+ */

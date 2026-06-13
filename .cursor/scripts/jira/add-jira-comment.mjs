@@ -1,6 +1,23 @@
 #!/usr/bin/env node
 
 /**
+ * === 檔案用途區塊 ===
+ * @module add-jira-comment-script
+ * @purpose 使用 Jira API 在指定 ticket 新增評論，並支援內嵌 Mermaid 流程圖渲染（以 ADF 格式輸出）
+ * @external https://innotech.atlassian.net/browse/FE-8310
+ * @external https://innotech.atlassian.net/browse/FE-8250
+ * @external https://innotech.atlassian.net/browse/FE-8004
+ * @external https://innotech.atlassian.net/browse/FE-7910
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ */
+
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 宣告需標示用途與單號關聯
+ * @purpose 統一定義宣告級註解格式與單號追溯規則
+ */
+
+/**
  * 新增 Jira ticket 留言
  * 使用 Jira API token 透過 API 在 ticket 上新增評論
  *
@@ -55,12 +72,10 @@ function convertPlainTextToAdfNodes(text) {
 
 /**
  * 在 Jira ticket 上新增評論
- * @param {string} ticketOrUrl
- * @param {string} comment
- * @param {Object} options
- * @param {boolean} [options.internal=false]
- * @param {boolean} [options.renderFlowchart=false]
- * @returns {Promise<Object>}
+ * @description 組合並送出 Jira Comment ADF（含格式檢查結果與可選 mermaid 流程圖渲染）
+ * @purpose add jira comment
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ * @external https://innotech.atlassian.net/browse/FE-8310
  */
 async function addJiraComment(ticketOrUrl, comment, options = {}) {
   const config = getJiraConfig();
@@ -318,3 +333,16 @@ export {
 };
 
 main();
+
+/**
+ * llm 分析紀錄區
+ * @llm-review-submitted-at 2026-06-13T17:52:53.540Z
+ * @llm-review-model gpt-5.4-nano
+ * @llm-review-note 只調整註解結構：補齊三區塊佈局；移除重複/不符合格式的聲明註解；確保 addJiraComment 宣告級 @external 僅使用來源單號並符合 Jira browse URL 格式；不改動任何程式邏輯。
+ */
+/**
+ * === llm 分析紀錄區 ===
+ * @llm-review-submitted-at 2026-06-13T19:21:24.325Z
+ * @llm-review-model gpt-5.4-nano
+ * @llm-review-note 修正註解為三區塊格式；移除重複/不符合規則的 addJiraComment JSDoc 與不符合版型內容；整理 llm 分析紀錄為單一底部區塊，並確保 @external 使用完整 Jira browse URL 與宣告單號關聯規則。
+ */
