@@ -22,7 +22,8 @@ import { extname, join, relative } from "path";
 import { getProjectRoot } from "./env-loader.mjs";
 
 const projectRoot = getProjectRoot();
-const indexFilePath = join(projectRoot, ".evolve-tmp", "query-file-index.json");
+const INDEX_FILE_NAME = "query-file-index.json";
+const indexFilePath = join(projectRoot, INDEX_FILE_NAME);
 const codegraphDirPath = join(projectRoot, ".codegraph");
 const codegraphNpxPrefix = "npx -y @colbymchenry/codegraph";
 
@@ -155,6 +156,7 @@ function listFilesRecursively(startDir, results = []) {
 
     if (!entry.isFile()) continue;
     if (!isTextLikeFile(absolutePath)) continue;
+    if (relPath === INDEX_FILE_NAME) continue;
 
     results.push(relPath);
   }
