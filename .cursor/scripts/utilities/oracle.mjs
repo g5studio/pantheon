@@ -217,6 +217,7 @@ function updateGitignore(cwd, installFolderName) {
   const gitignorePath = join(cwd, ".gitignore");
   const entries = [
     ".pantheon/",
+    ".codegraph/",
     ".cursor/.env.local",
     ".cursor/skills/pantheon-mounted-workflow/",
     `.cursor/commands/${installFolderName}/`,
@@ -258,6 +259,54 @@ function updateGitignore(cwd, installFolderName) {
   writeFileSync(gitignorePath, `${baseContent}${prefix}${section}`);
   log.success("已更新 .gitignore");
   sectionEntries.forEach((entry) => log.dim(`保留: ${entry}`));
+}
+
+/**
+ * 自動準備 CodeGraph（best effort，不阻斷主流程）
+ * 目標：讓掛載 Pantheon 的專案在執行 descend/oracle 後可直接受益於外部工具查詢。
+ */
+function setupCodegraph(cwd) {
+  const codegraphDir = join(cwd, ".codegraph");
+
+  if (existsSync(codegraphDir)) {
+    log.success("CodeGraph 已初始化（.codegraph 已存在）");
+    return;
+  }
+
+  console.log("");
+  log.info("檢查並初始化 CodeGraph...");
+
+  const hasCodegraphCli = !!exec("codegraph --version", {
+    cwd,
+    silent: true,
+    throwOnError: false,
+  });
+
+  if (hasCodegraphCli) {
+    try {
+      exec("codegraph init", { cwd, silent: true });
+      if (existsSync(codegraphDir)) {
+        log.success("已完成 CodeGraph 初始化（使用本機 codegraph CLI）");
+        return;
+      }
+    } catch (error) {
+      log.warning(`本機 codegraph CLI 初始化失敗：${error.message}`);
+    }
+  }
+
+  try {
+    exec("npx -y @colbymchenry/codegraph init", { cwd, silent: true });
+    if (existsSync(codegraphDir)) {
+      log.success("已完成 CodeGraph 初始化（使用 npx @colbymchenry/codegraph）");
+      return;
+    }
+  } catch (error) {
+    log.warning(`npx CodeGraph 初始化失敗：${error.message}`);
+  }
+
+  log.warning(
+    "CodeGraph 初始化未完成，查詢流程會自動回退到本地索引模式（不影響 Oracle 同步）",
+  );
 }
 
 /**
@@ -432,7 +481,12 @@ async function main() {
   updateGitignore(cwd, installFolderName);
 
   // ========================================
-  // 7. 檢查並建立環境變數配置檔
+  // 7. 自動準備 CodeGraph（best effort）
+  // ========================================
+  setupCodegraph(cwd);
+
+  // ========================================
+  // 8. 檢查並建立環境變數配置檔
   // ========================================
   console.log("");
   const envLocalPath = join(cwd, ".cursor", ".env.local");
@@ -453,7 +507,7 @@ async function main() {
   }
 
   // ========================================
-  // 8. 輸出結果
+  // 9. 輸出結果
   // ========================================
   console.log("");
   console.log("==========================================");
