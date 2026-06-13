@@ -58,11 +58,19 @@ node .pantheon/.cursor/scripts/utilities/oracle.mjs
 
 自動將 `.pantheon/`、`.cursor/.env.local`、`.cursor/.../<install-name>/` 與 `.agents/.../<install-name>/` 加入專案 `.gitignore`，避免 Pantheon 安裝產物與本地環境變數被提交到目標專案；ignore 範圍只涵蓋 Pantheon installed copy 與 `.cursor/.env.local`，不會忽略 `.cursor` 或 `.agents` 內其他專案自有項目。
 
-### 6. 檢查並建立環境變數配置檔
+### 6. 自動準備 CodeGraph（best effort）
+
+在不改變使用者操作習慣前提下，`oracle` 會嘗試自動準備 CodeGraph 查詢能力：
+
+- 優先使用本機 `codegraph` CLI（若已安裝）
+- 若本機 CLI 不可用，改用 `npx @colbymchenry/codegraph`
+- 若初始化失敗，不中斷 oracle 同步流程，後續查詢會自動回退
+
+### 7. 檢查並建立環境變數配置檔
 
 檢查 `.cursor/.env.local` 是否存在，若不存在則以 pantheon 的 `.env.example` 為模板建立。
 
-### 7. 輸出結果
+### 8. 輸出結果
 
 顯示同步結果摘要：
 
