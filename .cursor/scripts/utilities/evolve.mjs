@@ -923,7 +923,7 @@ async function cmdRunAnnotationPass(args) {
     explicitModel: typeof args.model === "string" ? args.model : null,
     envLocal: loadEnvLocal(),
     envKeys: ["EVOLVE_ANNOTATION_MODEL", "ADAPT_LLM_MODEL", "OPENAI_MODEL"],
-    defaultModel: "gpt-5.4-nano",
+    defaultModel: "gpt-5.3-codex",
   });
 
   const files = getAnnotationAuditFiles(args).slice(0, maxFiles);
@@ -1226,7 +1226,7 @@ Subcommands:
                  [--format=json|text]
   run-annotation-pass [--dirs=a,b]
                  [--max-files=200]
-                 [--model=gpt-5.4-nano]
+                 [--model=gpt-5.3-codex]
                  [--dry-run=true]
                  [--format=json|text]
                  由 Pantheon agent 直接呼叫 LLM 逐檔補註解（含 comments-only 安全閘）

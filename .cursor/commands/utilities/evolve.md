@@ -281,6 +281,9 @@ node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs run-
 
 # 確認後執行實寫
 node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs run-annotation-pass -- --dirs=src --max-files=50 --format=text
+
+# 指定模型（預設為 gpt-5.3-codex）
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs run-annotation-pass -- --dirs=src --model=gpt-5.3-codex --format=text
 ```
 
 `run-annotation-pass` 內建保護：
