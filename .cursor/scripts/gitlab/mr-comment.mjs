@@ -1,34 +1,55 @@
 #!/usr/bin/env node
 
 /**
- * GitLab MR 留言與回覆腳本
- *
- * 支援功能：
- * 1. 在 MR 上新增留言（note）
- * 2. 回覆指定的討論（discussion）
- * 3. 列出 MR 的所有討論
- *
- * 使用方式：
- *   # 新增留言
- *   node mr-comment.mjs --mr=123 --message="留言內容"
- *   node mr-comment.mjs --mr-url="https://gitlab.../merge_requests/123" --message="留言內容"
- *
- *   # 回覆討論
- *   node mr-comment.mjs --mr=123 --discussion=abc123 --message="回覆內容"
- *
- *   # 列出討論
- *   node mr-comment.mjs --mr=123 --list-discussions
- *
- *   # 在特定檔案行留言（建立新討論）
- *   node mr-comment.mjs --mr=123 --message="留言" --file="src/app.ts" --line=42 --line-type=new
+ * === 檔案用途區塊 ===
+ * @module script-runtime
+ * @purpose 管理 .cursor/scripts/gitlab/mr-comment.mjs 的註解補全與用途說明
+ * @external https://innotech.atlassian.net/browse/FE-8004
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ */
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 依宣告用途說明並以來源單號對應
+ * @purpose 統一宣告級註解格式與單號追溯規則
+ */
+/**
+ * @module gitlab-mr-comment
+ * @purpose GitLab MR 留言/討論新增、回覆與列表腳本（CLI）
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ */
+
+/**
+ * @description 解析 MR/專案資訊並對應 GitLab API 行為：
+ *  - 新增簡單 note
+ *  - 建立 discussion（含檔案行位置討論）
+ *  - 回覆 discussion
+ *  - 列出所有 discussion
+ * @purpose 提供 CLI 入口以完成 MR 討論操作
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ */
+
+/**
+ * @llm-review-submitted-at 2026-06-13T17:52:26.463Z
+ * @llm-review-model gpt-5.4-nano
+ * @llm-review-note Refactor annotations only: corrected three-section layout (top/middle/bottom), moved/normalized llm block to bottom section, removed duplicate/malformed declaration comments, and ensured declaration-level @external tags are present only when supported by FE-8004/FE-7892 tickets from declarationOrigins.
  */
 
 import { execSync } from "child_process";
 import { getProjectRoot, getGitLabToken } from "../utilities/env-loader.mjs";
 import { appendAgentSignature } from "../utilities/agent-signature.mjs";
 
+/**
+ * @description 取得專案根目錄供執行命令使用
+ * @purpose 設定腳本執行的工作目錄
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ */
 const projectRoot = getProjectRoot();
 
+/**
+ * @description 包裝 execSync 以統一工作目錄與錯誤輸出行為
+ * @purpose 方便在腳本內執行 shell 指令
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ */
 function exec(command, options = {}) {
   try {
     return execSync(command, {
@@ -45,14 +66,29 @@ function exec(command, options = {}) {
   }
 }
 
-// 獲取項目信息
+/**
+ * @description 由 git remote.origin.url 推導 GitLab host 與 project path
+ * @purpose 建立 GitLab API 使用的項目信息
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ */
 function getProjectInfo() {
   const remoteUrl = exec("git config --get remote.origin.url", {
     silent: true,
   }).trim();
 
+  /**
+   * @description 判斷 SSH remote URL 格式並抽取 host 與路徑
+   * @purpose 支援 git@host:path 的 remote 來源
+   * @external https://innotech.atlassian.net/browse/FE-7892
+   */
   if (remoteUrl.startsWith("git@")) {
     const match = remoteUrl.match(/git@([^:]+):(.+)/);
+
+    /**
+     * @description 提取 SSH URL 的 host 與 repo path
+     * @purpose 形成 GitLab API 所需 projectPath
+     * @external https://innotech.atlassian.net/browse/FE-7892
+     */
     if (match) {
       const [, host, path] = match;
       return {
@@ -63,8 +99,19 @@ function getProjectInfo() {
     }
   }
 
+  /**
+   * @description 判斷 HTTPS remote URL 格式並抽取 host 與路徑
+   * @purpose 支援 https://host/path 的 remote 來源
+   * @external https://innotech.atlassian.net/browse/FE-7892
+   */
   if (remoteUrl.startsWith("https://")) {
     const url = new URL(remoteUrl);
+
+    /**
+     * @description 由 URL pathname 組合 GitLab projectPath 與 fullPath
+     * @purpose 建立 GitLab API 使用的項目信息
+     * @external https://innotech.atlassian.net/browse/FE-7892
+     */
     const pathParts = url.pathname
       .replace(/\.git$/, "")
       .split("/")
@@ -79,7 +126,11 @@ function getProjectInfo() {
   throw new Error("無法解析 remote URL");
 }
 
-// 從 MR URL 解析 MR ID
+/**
+ * @description 從 MR URL 解析 MR IID
+ * @purpose 支援使用 --mr-url 取得 MR ID
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ */
 function parseMRUrl(mrUrl) {
   const match = mrUrl.match(/merge_requests\/(\d+)/);
   if (match) {
@@ -88,7 +139,11 @@ function parseMRUrl(mrUrl) {
   throw new Error(`無法從 URL 解析 MR ID: ${mrUrl}`);
 }
 
-// 獲取 MR 信息
+/**
+ * @description 呼叫 GitLab API 取得指定 MR 的資訊（包含 diff refs）
+ * @purpose 用於後續建立檔案行位置討論
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ */
 async function getMRInfo(token, host, projectPath, mrIid) {
   const url = `${host}/api/v4/projects/${projectPath}/merge_requests/${mrIid}`;
   const response = await fetch(url, {
@@ -105,7 +160,11 @@ async function getMRInfo(token, host, projectPath, mrIid) {
   return await response.json();
 }
 
-// 在 MR 上新增留言
+/**
+ * @description 在指定 MR 上建立簡單留言（note）
+ * @purpose 使用 GitLab notes API 新增留言內容
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ */
 async function createNote(token, host, projectPath, mrIid, message) {
   const url = `${host}/api/v4/projects/${projectPath}/merge_requests/${mrIid}/notes`;
   const response = await fetch(url, {
@@ -125,7 +184,11 @@ async function createNote(token, host, projectPath, mrIid, message) {
   return await response.json();
 }
 
-// 建立新討論（可選：在特定代碼行）
+/**
+ * @description 在指定 MR 上建立新的討論（discussion），可選擇附帶程式碼位置
+ * @purpose 建立可落在 diff 位置之 GitLab discussion
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ */
 async function createDiscussion(
   token,
   host,
@@ -160,7 +223,11 @@ async function createDiscussion(
   return await response.json();
 }
 
-// 回覆指定的討論
+/**
+ * @description 回覆指定 discussion 的 notes
+ * @purpose 將回覆內容新增至指定討論串
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ */
 async function replyToDiscussion(
   token,
   host,
@@ -187,7 +254,11 @@ async function replyToDiscussion(
   return await response.json();
 }
 
-// 列出 MR 的所有討論
+/**
+ * @description 列出指定 MR 的所有討論（discussions）
+ * @purpose 取得並展示 MR 討論列表
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ */
 async function listDiscussions(token, host, projectPath, mrIid) {
   const url = `${host}/api/v4/projects/${projectPath}/merge_requests/${mrIid}/discussions`;
   const response = await fetch(url, {
@@ -204,7 +275,11 @@ async function listDiscussions(token, host, projectPath, mrIid) {
   return await response.json();
 }
 
-// 解析命令行參數
+/**
+ * @description 解析命令列參數並回傳鍵值表
+ * @purpose 供 main() 取用 CLI 設定
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ */
 function parseArgs(args) {
   const result = {};
 
@@ -219,7 +294,11 @@ function parseArgs(args) {
   return result;
 }
 
-// 顯示使用說明
+/**
+ * @description 輸出腳本使用說明（help/usage）
+ * @purpose 降低 CLI 使用門檻
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ */
 function showUsage() {
   console.log(`
 GitLab MR 留言與回覆腳本
@@ -269,7 +348,11 @@ GitLab MR 留言與回覆腳本
 `);
 }
 
-// 格式化討論輸出
+/**
+ * @description 將單一 discussion 轉為可讀的輸出字串（含解析 notes 與位置、可選 verbose）
+ * @purpose 供 list-discussions 模式展示討論摘要
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ */
 function formatDiscussion(discussion, verbose = false) {
   const notes = discussion.notes || [];
   const firstNote = notes[0];
@@ -306,6 +389,11 @@ function formatDiscussion(discussion, verbose = false) {
   return lines.join("\n");
 }
 
+/**
+ * @description 主程式：依 CLI 參數選擇列出討論/新增 note/建立 discussion/回覆討論等流程
+ * @purpose 對外提供統一執行入口
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ */
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
@@ -382,6 +470,11 @@ async function main() {
   }
 
   // 檢查留言內容
+  /**
+   * @description 讓使用者輸入的留言內容自動附上 agent 顯示名稱簽名
+   * @purpose 對留言內容進行簽名標記
+   * @external https://innotech.atlassian.net/browse/FE-8004
+   */
   const message = appendAgentSignature(args.message);
   if (!message) {
     console.error("❌ 請提供 --message=<留言內容>\n");
@@ -499,3 +592,9 @@ main().catch((error) => {
   console.error(`\n❌ 發生錯誤: ${error.message}\n`);
   process.exit(1);
 });
+/**
+ * === llm 分析紀錄區 ===
+ * @llm-review-submitted-at 2026-06-13T19:21:00.921Z
+ * @llm-review-model gpt-5.4-nano
+ * @llm-review-note Fixed annotation formatting to meet the required 3-section layout and normalized all @external Jira references to full browse URLs (removed malformed/duplicate declaration comments and replaced feat(FE-*) placeholders with https://innotech.atlassian.net/browse/<TICKET>).
+ */

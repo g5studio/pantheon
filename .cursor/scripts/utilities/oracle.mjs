@@ -1,13 +1,23 @@
 #!/usr/bin/env node
-
+/**
+ * === 檔案用途區塊 ===
+ * @module script-runtime
+ * @purpose 管理 .cursor/scripts/utilities/oracle.mjs 的註解補全與用途說明
+ * @external https://innotech.atlassian.net/browse/FE-8384
+ * @external https://innotech.atlassian.net/browse/FE-8164
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ * @external https://innotech.atlassian.net/browse/FE-7922
+ */
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 本區塊以下宣告需標示用途與單號關聯
+ * @purpose 統一定義宣告級註解格式與單號追溯規則
+ */
 /**
  * Oracle - Pantheon Cursor 同步腳本
  *
- * 將 .pantheon/.cursor 的內容複製安裝到專案的 .cursor 與 .agents 目錄中
- *
- * 使用方式:
- *   node .cursor/scripts/utilities/oracle.mjs
- *   node .pantheon/.cursor/scripts/utilities/oracle.mjs
+ * @module oracle
+ * @purpose Pantheon 安裝內容同步至目標專案的 .cursor 與 .agents 目錄，並同步 .gitignore 與環境變數範本。
  */
 
 import {
@@ -25,7 +35,14 @@ import {
 import { execSync } from "child_process";
 import { dirname, join } from "path";
 
-// 顏色輸出
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * @description 顏色輸出用常數物件。
+ * @purpose 用於 log 的 UI 顏色渲染。
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ */
+/** @external */
 const colors = {
   reset: "\x1b[0m",
   green: "\x1b[32m",
@@ -35,6 +52,14 @@ const colors = {
   dim: "\x1b[2m",
 };
 
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * @description 統一的終端輸出（成功/警告/錯誤/資訊/灰階）。
+ * @purpose 讓腳本在同步過程中有一致的提示格式。
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ */
+/** @external */
 const log = {
   success: (msg) => console.log(`${colors.green}✅ ${msg}${colors.reset}`),
   warning: (msg) => console.log(`${colors.yellow}⚠️  ${msg}${colors.reset}`),
@@ -43,12 +68,38 @@ const log = {
   dim: (msg) => console.log(`${colors.dim}   ${msg}${colors.reset}`),
 };
 
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * @description .gitignore 片段區塊標題字串。
+ * @purpose 用於定位/移除既有 Pantheon 安裝片段，避免重複寫入。
+ * @external https://innotech.atlassian.net/browse/FE-8164
+ */
+/** @external */
 const GITIGNORE_SECTION_HEADER = "# Pantheon installed tooling";
+
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * @description bootstrap skill 檔案相對路徑。
+ * @purpose 從多種候選位置搜尋並落地 pantheon-mounted-workflow/SKILL.md。
+ * @external https://innotech.atlassian.net/browse/FE-8164
+ */
+/** @external */
 const BOOTSTRAP_SKILL_RELATIVE = join(
   "skills",
   "pantheon-mounted-workflow",
   "SKILL.md",
 );
+
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * @description 管理標記字串：判斷 SKILL.md 是否由腳本管理。
+ * @purpose 在物件存在時避免覆蓋使用者自訂內容。
+ * @external https://innotech.atlassian.net/browse/FE-8164
+ */
+/** @external */
 const BOOTSTRAP_SKILL_MANAGED_MARKER = "managed-by-pantheon-adapt";
 
 function removePantheonGitignoreSection(content) {
@@ -81,7 +132,11 @@ function removePantheonGitignoreSection(content) {
 }
 
 /**
- * 執行 shell 命令
+ * 宣告內容用途說明與單號關聯
+ *
+ * @description 執行 shell 命令並回傳輸出（失敗時依設定處理）。
+ * @purpose 供腳本使用 git/codegraph 等 CLI。
+ * @external https://innotech.atlassian.net/browse/FE-7892
  */
 function exec(cmd, options = {}) {
   try {
@@ -99,7 +154,11 @@ function exec(cmd, options = {}) {
 }
 
 /**
- * 檢查路徑是否為符號連結
+ * 宣告內容用途說明與單號關聯
+ *
+ * @description 檢查給定路徑是否為符號連結。
+ * @purpose 用於判斷同步目標是否需用 unlink 移除。
+ * @external https://innotech.atlassian.net/browse/FE-7892
  */
 function isSymlink(path) {
   try {
@@ -110,7 +169,11 @@ function isSymlink(path) {
 }
 
 /**
- * 移除舊的同步目標，包含過去版本建立的 symlink。
+ * 宣告內容用途說明與單號關聯
+ *
+ * @description 移除既有同步目標（包含舊版 symlink）。
+ * @purpose 在複製目標前清理殘留。
+ * @external https://innotech.atlassian.net/browse/FE-8164
  */
 function removeSyncTarget(path) {
   if (isSymlink(path)) {
@@ -124,7 +187,11 @@ function removeSyncTarget(path) {
 }
 
 /**
- * 將 Pantheon 來源目錄複製到目標專案。
+ * 宣告內容用途說明與單號關聯
+ *
+ * @description 將來源目錄複製到目標專案（並在必要時清理舊目標）。
+ * @purpose 用於把 .pantheon/.cursor 安裝產物複製到 .cursor 與 .agents。
+ * @external https://innotech.atlassian.net/browse/FE-8164
  */
 function copyDirectory(source, target, cwd) {
   if (!existsSync(source)) {
@@ -150,6 +217,13 @@ function findBootstrapSkillSource(cwd, installFolderName) {
   return candidates.find((path) => existsSync(path)) || null;
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * @description 落地 bootstrap skill（包含多目標落地與避免覆蓋自訂內容）。
+ * @purpose 確保掛載後目標專案可讀取 pantheon-mounted-workflow/SKILL.md。
+ * @external https://innotech.atlassian.net/browse/FE-8164
+ */
 function materializeBootstrapSkill(cwd, installFolderName) {
   const sourcePath = findBootstrapSkillSource(cwd, installFolderName);
   if (!sourcePath) {
@@ -211,7 +285,11 @@ function materializeBootstrapSkill(cwd, installFolderName) {
 }
 
 /**
- * 將 Pantheon 安裝產物加入目標專案 .gitignore。
+ * 宣告內容用途說明與單號關聯
+ *
+ * @description 將 Pantheon 安裝產物加入目標專案 .gitignore。
+ * @purpose 透過刪除既有區塊再重寫，確保已列入正確安裝路徑（含 .cursor/.agents 與 .env.local）。
+ * @external https://innotech.atlassian.net/browse/FE-8164
  */
 function updateGitignore(cwd, installFolderName) {
   const gitignorePath = join(cwd, ".gitignore");
@@ -262,8 +340,11 @@ function updateGitignore(cwd, installFolderName) {
 }
 
 /**
- * 自動準備 CodeGraph（best effort，不阻斷主流程）
- * 目標：讓掛載 Pantheon 的專案在執行 descend/oracle 後可直接受益於外部工具查詢。
+ * 宣告內容用途說明與單號關聯
+ *
+ * @description 自動準備 CodeGraph（best effort，不阻斷主流程）。
+ * @purpose 讓掛載 Pantheon 的專案在執行 descend/oracle 後可直接受益於外部工具查詢。
+ * @external https://innotech.atlassian.net/browse/FE-8384
  */
 function setupCodegraph(cwd) {
   const codegraphDir = join(cwd, ".codegraph");
@@ -310,7 +391,11 @@ function setupCodegraph(cwd) {
 }
 
 /**
- * 主程式
+ * 宣告內容用途說明與單號關聯
+ *
+ * @description 主程式：執行 Pantheon oracle 同步流程。
+ * @purpose 整合 pantheon 拉取、目錄建立、安裝檔案複製、bootstrap 落地、.gitignore、CodeGraph、環境範本建立。
+ * @external https://innotech.atlassian.net/browse/FE-7892
  */
 async function main() {
   console.log("");
@@ -582,3 +667,17 @@ main().catch((error) => {
   log.error(`執行失敗: ${error.message}`);
   process.exit(1);
 });
+
+/**
+ * llm 分析紀錄區
+ *
+ * @llm-review-submitted-at 2026-06-13
+ * @llm-review-model annotation-refactoring-engine
+ * @llm-review-note 依規範補齊三段式註解區塊，並在可對應的宣告處加入 @description/@purpose/@external（使用 input.declarationOrigins 的票據）。
+ */
+/**
+ * === llm 分析紀錄區 ===
+ * @llm-review-submitted-at 2026-06-13T18:05:10.338Z
+ * @llm-review-model gpt-5.4-nano
+ * @llm-review-note Refactor comments only: added required three-section file header, enriched selected declaration comments with ticket-linked @description/@purpose/@external using declarationOrigins, and appended required llm analysis record block. Runtime logic unchanged.
+ */

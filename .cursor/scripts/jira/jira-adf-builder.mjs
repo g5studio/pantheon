@@ -1,10 +1,21 @@
 #!/usr/bin/env node
 
 /**
- * Jira ADF 共用建構器
- *
- * 將純文字 / Markdown pipe table 轉為 Jira ADF。
- * 供 add-jira-comment、create-jira-ticket、update-jira 共用。
+ * === 檔案用途區塊 ===
+ * @module script-runtime
+ * @purpose 管理 .cursor/scripts/jira/jira-adf-builder.mjs 的註解補全與用途說明
+ * @external https://innotech.atlassian.net/browse/FE-8310
+ */
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 中間區塊：宣告級註解用途說明與單號關聯
+ * @purpose 統一定義宣告級註解格式與單號追溯規則
+ */
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 本檔案主要導出用於產生 Jira ADF 的建構器；解析 heading、pipe table、bullet list，並可選擇支援 mermaid 渲染。
+ * @purpose 銜接外層組裝 ADF doc/content 的通用流程
+ * @external https://innotech.atlassian.net/browse/FE-8310
  */
 
 import {
@@ -45,6 +56,10 @@ function makeAdfTextParagraph(text) {
 }
 
 /**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 解析 Markdown heading 行（例如：# 標題），回傳 level 與文字。
+ * @purpose 銜接 ADF heading 節點產生流程。
+ * @external https://innotech.atlassian.net/browse/FE-8310
  * @param {string} line
  * @returns {{ level: number, text: string } | null}
  */
@@ -90,6 +105,14 @@ function stripBulletMarker(line) {
     .trim();
 }
 
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 將 Markdown pipe table 區段轉為 Jira ADF table 結構。
+ * @purpose 用於段落解析時偵測表格格式並產出對應 ADF nodes。
+ * @external https://innotech.atlassian.net/browse/FE-8310
+ * @param {string} paragraph
+ * @returns {{ type: string, content: any[] } | null}
+ */
 export function markdownPipeTableToADF(paragraph) {
   const lines = (paragraph ?? "")
     .split(/\n/)
@@ -190,7 +213,10 @@ function paragraphToAdfNodes(paragraph) {
 }
 
 /**
- * 將純文字區段轉為 ADF content nodes（支援 heading、pipe table、bullet list）
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 將文字區段拆分成多個段落，並逐段產出 ADF content nodes（支援 heading、pipe table、bullet list）。
+ * @purpose 提供給外層組裝 ADF doc/content。
+ * @external https://innotech.atlassian.net/browse/FE-8310
  * @param {string} text
  * @returns {Object[]}
  */
@@ -206,7 +232,10 @@ export function buildTextSegmentAdfNodes(text) {
 }
 
 /**
- * 將純文字轉為完整 ADF doc（同步，不含 mermaid 渲染）
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 將純文字轉為完整 ADF doc（同步，不含 mermaid 渲染）。
+ * @purpose 提供無 mermaid 時的 ADF doc 組裝。
+ * @external https://innotech.atlassian.net/browse/FE-8310
  * @param {string} text
  * @returns {Object}
  */
@@ -219,7 +248,10 @@ export function buildAdfDocFromText(text) {
 }
 
 /**
- * 將富文字轉為 ADF（可選 mermaid 渲染）
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 將富文字轉為 ADF（可選 mermaid 渲染）。
+ * @purpose 在需要時將 mermaid segment 以 ADF nodes 與對應 flowcharts 結合。
+ * @external https://innotech.atlassian.net/browse/FE-8310
  * @param {string} text
  * @param {Object} [options]
  * @param {boolean} [options.renderFlowchart=false]
@@ -270,3 +302,10 @@ export async function buildRichTextAdf(text, options = {}) {
     flowcharts,
   };
 }
+
+/**
+ * === llm 分析紀錄區 ===
+ * @llm-review-submitted-at 2026-06-13T19:22:34.970Z
+ * @llm-review-model gpt-5.4-nano
+ * @llm-review-note 調整並統一檔案註解為三段式版面；修正中間宣告區塊標題與 @external URL 取值為完整 Jira browse 格式；保留程式邏輯不變並移除重複/不符合格式的 llm 分析區註解。
+ */

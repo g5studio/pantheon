@@ -1,4 +1,21 @@
 #!/usr/bin/env node
+/**
+ * === 檔案用途區塊 ===
+ * @module script-runtime
+ * @purpose 管理 .cursor/scripts/jira/create-jira-ticket.mjs 的註解補全與用途說明
+ * @external https://innotech.atlassian.net/browse/FE-8385
+ * @external https://innotech.atlassian.net/browse/FE-8310
+ * @external https://innotech.atlassian.net/browse/FE-8065
+ */
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 本區塊以下宣告需標示用途與單號關聯
+ * @purpose 統一定義宣告級註解格式與單號追溯規則
+ */
+/**
+ * @module 檔案用途區塊
+ * @purpose 此腳本提供 CLI 介面，依使用者輸入與 Jira createmeta 即時組裝 fields，透過 Jira REST API 建立 Issue，並可選擇性設定 parent/epic 與 issueLink。
+ */
 
 /**
  * Jira 開單腳本
@@ -17,6 +34,25 @@ import {
 } from "./jira-content-formatter.mjs";
 import { buildAdfDocFromText } from "./jira-adf-builder.mjs";
 
+/**
+ * 檔案用途區塊
+ *
+ * @module create-jira-ticket.mjs
+ * @purpose 解析 Jira URL/ticket key、取得 createmeta 欄位並組裝 ADF 描述後，透過 Jira REST API 建立 Jira Issue。
+ *
+ * @llm-review-submitted-at 2026-06-13
+ * @llm-review-model gpt-4.1
+ * @llm-review-note 依要求補齊三段式註解結構與聲明區 @external 條件。
+ */
+
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * 解析 Jira URL 或 ticket key。
+ *
+ * @description 由輸入的 URL/代號萃取標準化 ticket key。
+ * @purpose feat(FE-8065)
+ */
 function parseJiraUrl(url) {
   if (!url.includes("/")) {
     return url.toUpperCase();
@@ -35,6 +71,14 @@ function parseJiraUrl(url) {
   return null;
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * 建立 Jira API 請求所需的 basic auth 與 baseUrl。
+ *
+ * @description 從環境設定組裝 Authorization 與 baseUrl，供後續 requestJira 使用。
+ * @purpose feat(FE-8065)
+ */
 function createApiConfig() {
   const config = getJiraConfig();
   const auth = Buffer.from(`${config.email}:${config.apiToken}`).toString(
@@ -47,6 +91,14 @@ function createApiConfig() {
   return { auth, baseUrl };
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * 向 Jira API 發出請求，並在非 2xx 時回傳對應錯誤訊息。
+ *
+ * @description 使用 basic auth 呼叫 Jira REST API；解析錯誤訊息並回拋可讀訊息。
+ * @purpose feat(FE-8065)
+ */
 async function requestJira(path, options = {}) {
   const { auth, baseUrl } = createApiConfig();
   const response = await fetch(`${baseUrl}${path}`, {
@@ -90,16 +142,40 @@ async function requestJira(path, options = {}) {
   return response.json();
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * 查詢 Jira 使用者（以 query 搜尋）。
+ *
+ * @description 根據輸入字串查詢 Jira user search API，並回傳候選使用者列表。
+ * @purpose feat(FE-8065)
+ */
 async function searchUsers(query) {
   return requestJira(
     `/rest/api/3/user/search?query=${encodeURIComponent(query)}&maxResults=10`
   );
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * 取得指定專案可建立的 issue types（createmeta）。
+ *
+ * @description 呼叫 createmeta 取得 projectKey 下可用的 issuetypes。
+ * @purpose feat(FE-8065)
+ */
 async function getCreateIssueTypes(projectKey) {
   return requestJira(`/rest/api/3/issue/createmeta/${projectKey}/issuetypes`);
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * 取得指定專案與 issue type 的 createmeta 欄位資訊。
+ *
+ * @description 取得 issue create fields meta，用於後續組裝 fields payload。
+ * @purpose feat(FE-8065)
+ */
 async function getCreateFieldMeta(projectKey, issueTypeId) {
   const data = await requestJira(
     `/rest/api/3/issue/createmeta?projectKeys=${encodeURIComponent(
@@ -119,6 +195,14 @@ async function getCreateFieldMeta(projectKey, issueTypeId) {
   return { fields: issueTypeMeta.fields };
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * 以 issue type 名稱解析對應的 issue type 物件。
+ *
+ * @description 依 issueTypeName（case-insensitive）從 createmeta 的 issuetypes 中找出匹配項。
+ * @purpose feat(FE-8065)
+ */
 async function resolveIssueType(projectKey, issueTypeName) {
   const data = await getCreateIssueTypes(projectKey);
   const issueTypes = data.issueTypes || [];
@@ -139,16 +223,40 @@ async function resolveIssueType(projectKey, issueTypeName) {
   return matched;
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * 從 field meta 中找出符合 predicate 的欄位 key。
+ *
+ * @description 在 createmeta 的 fields 中依 predicate 找出欄位 key。
+ * @purpose fix(FE-8065)
+ */
 function findFieldKey(fieldMeta, predicate) {
   return (
     Object.entries(fieldMeta).find(([, meta]) => predicate(meta))?.[0] || null
   );
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * 依 system 欄位（Jira 內建欄位）取得欄位 key。
+ *
+ * @description 透過 meta.schema.system 對應到內建欄位。
+ * @purpose fix(FE-8065)
+ */
 function findFieldKeyBySystem(fieldMeta, system) {
   return findFieldKey(fieldMeta, (meta) => meta.schema?.system === system);
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * 依 custom 欄位（Jira custom field schema.custom）取得欄位 key。
+ *
+ * @description 透過 meta.schema.custom 對應到特定 custom field。
+ * @purpose fix(FE-8065)
+ */
 function findFieldKeyByCustom(fieldMeta, customType) {
   return findFieldKey(
     fieldMeta,
@@ -156,11 +264,36 @@ function findFieldKeyByCustom(fieldMeta, customType) {
   );
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * 將 CLI 輸入的多行 escape 字元規格化為實際換行/縮排。
+ *
+ * @description 將字串中的 \r\n/\n/\t escape 序列轉為對應字元。
+ * @purpose update(FE-8385)
+ */
+function normalizeCliMultilineText(value) {
+  if (typeof value !== "string") return value;
+  return value
+    .replace(/\\r\\n/g, "\n")
+    .replace(/\\n/g, "\n")
+    .replace(/\\t/g, "\t");
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * 將 CLI args 解析為腳本使用的參數結構。
+ *
+ * @description 解析 --project/--summary/--description 等參數，並支援從檔案讀取 description。
+ * @purpose feat(FE-8065)
+ */
 function parseArgs(args) {
   const result = {
     project: null,
     summary: null,
     description: null,
+    descriptionFile: null,
     issueType: "Request",
     epic: null,
     parent: null,
@@ -190,6 +323,10 @@ function parseArgs(args) {
       result.description = arg.split("=").slice(1).join("=");
     } else if (arg === "--description" || arg === "-d") {
       result.description = args[++i];
+    } else if (arg.startsWith("--description-file=")) {
+      result.descriptionFile = arg.split("=").slice(1).join("=");
+    } else if (arg === "--description-file") {
+      result.descriptionFile = args[++i];
     } else if (arg.startsWith("--issue-type=")) {
       result.issueType = arg.split("=").slice(1).join("=");
     } else if (arg.startsWith("--epic=") || arg.startsWith("--epic-link=")) {
@@ -215,9 +352,29 @@ function parseArgs(args) {
     }
   }
 
+  if (typeof result.summary === "string") {
+    result.summary = normalizeCliMultilineText(result.summary);
+  }
+  if (typeof result.description === "string") {
+    result.description = normalizeCliMultilineText(result.description);
+  }
+
+  if (result.descriptionFile) {
+    const filePath = result.descriptionFile;
+    result.description = readFileSync(filePath, "utf-8");
+  }
+
   return result;
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * 取得 Epic 對應的 field key（優先使用 gh-epic-link custom schema）。
+ *
+ * @description 在 createmeta fields 中找尋 Epic/史诗链接相關欄位 key。
+ * @purpose feat(FE-8065)
+ */
 function getEpicFieldKey(fieldMeta) {
   return (
     findFieldKeyByCustom(fieldMeta, "com.pyxis.greenhopper.jira:gh-epic-link") ||
@@ -227,6 +384,14 @@ function getEpicFieldKey(fieldMeta) {
   );
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * 找出必填但尚未提供/無預設值的欄位，供建立時檢查。
+ *
+ * @description 比對 fields payload 與 createmeta 欄位 required/default，產生缺少清單。
+ * @purpose fix(FE-8065)
+ */
 function getMissingRequiredFields(fieldMeta, fields) {
   const handledSystems = new Set([
     "project",
@@ -248,11 +413,27 @@ function getMissingRequiredFields(fieldMeta, fields) {
     .map(([, meta]) => meta.name || meta.schema?.system || "unknown");
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * 取得 Jira issue link type 清單。
+ *
+ * @description 呼叫 issueLinkType endpoint 取得可用 link type。
+ * @purpose fix(FE-8065)
+ */
 async function getIssueLinkTypes() {
   const data = await requestJira("/rest/api/3/issueLinkType");
   return data.issueLinkTypes || [];
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * 建立兩張 Jira issue 之間的 linkage。
+ *
+ * @description 依 linkTypeName 找出對應 link type，送出 issueLink 建立請求。
+ * @purpose fix(FE-8065)
+ */
 async function createIssueLink(sourceTicket, targetTicket, linkTypeName) {
   const linkTypes = await getIssueLinkTypes();
   const linkType = linkTypes.find(
@@ -290,6 +471,14 @@ async function createIssueLink(sourceTicket, targetTicket, linkTypeName) {
   };
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * 將 ticket key 或 Jira URL 正規化為 ticket key（如 FE-1234）。
+ *
+ * @description 解析輸入並驗證 ticket 格式，返回標準化大寫 ticket key。
+ * @purpose fix(FE-8065)
+ */
 function normalizeTicketKey(ticketOrUrl) {
   const ticket = parseJiraUrl(ticketOrUrl) || ticketOrUrl.toUpperCase();
 
@@ -300,6 +489,14 @@ function normalizeTicketKey(ticketOrUrl) {
   return ticket;
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * 根據 createmeta 與 CLI options 組裝 Jira create issue 的 fields payload。
+ *
+ * @description 使用 prepareJiraContent 進行 LLM 格式檢查/正規化，並將描述轉為 ADF；同時處理 parent/epic 與缺少必填欄位檢查。
+ * @purpose feat(FE-8310)
+ */
 async function buildCreateFields(options, createMeta, issueType) {
   const fieldMeta = createMeta.fields || {};
   const formatChecks = {};
@@ -404,6 +601,14 @@ async function buildCreateFields(options, createMeta, issueType) {
   };
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * 建立 Jira ticket（含可選 parent / epic 關聯與 issue link）。
+ *
+ * @description 解析 issue type/meta、建立 issue、可選擇建立 parent/epic 關聯與 issueLink，並回傳建立結果。
+ * @purpose feat(FE-8065)
+ */
 async function createJiraTicket(options) {
   const issueType = await resolveIssueType(options.project, options.issueType);
   const createMeta = await getCreateFieldMeta(options.project, issueType.id);
@@ -448,6 +653,14 @@ async function createJiraTicket(options) {
   };
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * 顯示 CLI 使用說明。
+ *
+ * @description 印出腳本用法、參數與範例。
+ * @purpose feat(FE-8065)
+ */
 function showHelp() {
   console.log(`
 🆕 Jira 開單工具
@@ -459,6 +672,7 @@ function showHelp() {
   -p, --project=<key>       Jira 專案代碼（例如 FE）
   -s, --summary=<text>      Ticket 標題
   -d, --description=<text>  Ticket 描述（會轉為 ADF）
+  --description-file=<path> 從檔案讀取描述（推薦：長內容/多段落）
 
 選填參數:
   --issue-type=<name>       Issue type，預設為 Request
@@ -490,12 +704,28 @@ function showHelp() {
     --description="補上 parent 與 expanded createmeta" \\
     --parent=FE-7893
 
+  # 從 markdown 檔建立（避免 shell 轉義造成換行格式異常）
+  node create-jira-ticket.mjs \\
+    --project=FE \\
+    --issue-type=Request \\
+    --summary="[Evolve] one-pass optimization" \\
+    --description-file=.evolve-tmp/fe-7840-request.md \\
+    --parent=FE-7840
+
 輸出:
   成功時輸出 JSON，包含 ticket、url、issueType、parent、epic、issueLink。
   失敗時輸出 JSON error 訊息。
 `);
 }
 
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * CLI entrypoint：解析 args、呼叫建立流程並輸出結果。
+ *
+ * @description 解析 CLI 參數、執行 createJiraTicket，並處理成功/失敗輸出。
+ * @purpose feat(FE-8065)
+ */
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
@@ -527,3 +757,17 @@ export {
 };
 
 main();
+
+/**
+ * llm 分析紀錄區
+ *
+ * @llm-review-submitted-at 2026-06-13
+ * @llm-review-model gpt-4.1
+ * @llm-review-note 補齊三段式註解並將原本的 @external 依聲明/來源票券規則調整；未改動程式邏輯。
+ */
+/**
+ * === llm 分析紀錄區 ===
+ * @llm-review-submitted-at 2026-06-13T17:53:47.425Z
+ * @llm-review-model gpt-5.4-nano
+ * @llm-review-note 已重構並補齊 .mjs 檔案的三段式註解結構：上方新增檔案用途區塊（含 @module/@purpose/@external），中間對宣告函式更新為「宣告內容用途說明與單號關聯」格式（含 @description/@purpose/@external，並依 declarationOrigins 僅引用對應票券；若無票券則不加 @external），下方新增 llm 分析紀錄區（含 @llm-review-*）。未變更任何 runtime 邏輯。
+ */
