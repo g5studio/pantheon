@@ -1,14 +1,20 @@
 #!/usr/bin/env node
 
 /**
- * adapt - repo knowledge bootstrapper
+ * adapt - Repository knowledge bootstrapper script
  *
- * - Collect GitLab labels and merge requests within last 3 months (by created_at)
- * - Compress MR data into fixed array format:
- *   { label: 123, changes: "...", comments: [{ message: "xxx", line: 13 }, ...] }[]
- * - Send to LLM for analysis and persist output into JSON:
- *   { labels: [{name,scenario}], "coding-standard": [{rule,example}], ...meta/cache/sources }
- * - Cache: skip LLM when inputs hash unchanged
+ * Responsibilities:
+ * - Query GitLab for labels and recent merge requests (created_at within last 3 months)
+ * - Summarize MR samples into compact records: { label: number, changes: string, comments: [{ message, line|null }] }
+ * - Call LLM to infer: labels applicability/scenarios, coding standards, and git-flow; write result to adapt.json
+ * - Cache by input hash; skip LLM when inputs unchanged; provide conservative fallbacks on LLM failure
+ *
+ * CLI highlights:
+ * - --file, --max-mrs, --created-after, --no-llm, --llm-provider, --llm-model, --llm-retries
+ * - GitLab access via glab (if authenticated) or PRIVATE-TOKEN
+ *
+ * Output sections:
+ * - labels, coding-standard, git-flow, meta, sources, cache
  */
 
 import { execSync, spawnSync } from "child_process";
@@ -24,8 +30,18 @@ import { dirname, join } from "path";
 import { getProjectRoot, loadEnvLocal, getGitLabToken } from "./env-loader.mjs";
 import { callOpenAiJson, resolveLlmModel } from "./llm-client.mjs";
 
+/**
+ * Absolute repository root directory resolved from env-loader.
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 const projectRoot = getProjectRoot();
 
+/**
+ * Parse CLI argv into an options object. Supports --k=v, --flag, and positional args in _.
+ * @param {string[]} argv - Raw argv (without node and script path).
+ * @returns {{_: string[], [key: string]: string|boolean|string[]}} Parsed arguments.
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function parseArgs(argv) {
   const args = { _: [] };
   for (const raw of argv) {
@@ -41,6 +57,13 @@ function parseArgs(argv) {
   return args;
 }
 
+/**
+ * Execute a shell command in the project root with optional silent mode.
+ * @param {string} command - Shell command to execute.
+ * @param {{silent?: boolean, throwOnError?: boolean}} [options]
+ * @returns {string|null} stdout trimmed; null when throwOnError=false and an error occurs.
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function exec(command, options = {}) {
   try {
     return execSync(command, {
@@ -55,6 +78,11 @@ function exec(command, options = {}) {
   }
 }
 
+/**
+ * Check if `glab` CLI is available in PATH.
+ * @returns {boolean}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function hasGlab() {
   try {
     exec("which glab", { silent: true });
@@ -64,6 +92,12 @@ function hasGlab() {
   }
 }
 
+/**
+ * Verify glab authentication status for a given GitLab hostname.
+ * @param {string} hostname
+ * @returns {boolean}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function isGlabAuthenticated(hostname) {
   try {
     const result = exec(`glab auth status --hostname ${hostname}`, {
@@ -78,21 +112,44 @@ function isGlabAuthenticated(hostname) {
   }
 }
 
+/**
+ * Call GitLab API via glab and parse JSON response.
+ * @param {string} path - API path used by `glab api`.
+ * @returns {any|null}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function glabApi(path) {
   const result = exec(`glab api "${path}"`, { silent: true });
   if (!result) return null;
   return JSON.parse(result);
 }
 
+/**
+ * Ensure the directory for a given file path exists.
+ * @param {string} filePath
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function ensureDirForFile(filePath) {
   const dir = dirname(filePath);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 }
 
+/**
+ * Default output knowledge file path at repo root.
+ * @returns {string}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function getDefaultKnowledgeFile() {
   return join(projectRoot, "adapt.json");
 }
 
+/**
+ * Safely parse JSON with a descriptive error.
+ * @param {string} text
+ * @param {string} [hint="JSON"] - Used in error message.
+ * @returns {any}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function safeJsonParse(text, hint = "JSON") {
   try {
     return JSON.parse(text);
@@ -101,10 +158,22 @@ function safeJsonParse(text, hint = "JSON") {
   }
 }
 
+/**
+ * Determine if a value is a plain object.
+ * @param {any} v
+ * @returns {boolean}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function isPlainObject(v) {
   return !!v && typeof v === "object" && !Array.isArray(v);
 }
 
+/**
+ * Validate the labels section shape and basic field requirements.
+ * @param {any} value
+ * @returns {{ok: true} | {ok: false, error: string}}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function validateLabelsSection(value) {
   if (!Array.isArray(value)) return { ok: false, error: "labels 必須是 array" };
   for (let i = 0; i < value.length; i++) {
@@ -150,8 +219,10 @@ function validateLabelsSection(value) {
 }
 
 /**
- * Infer a minimal git-flow object from collected git data (no LLM).
- * Used when --no-llm or when no API key.
+ * Infer a minimal git-flow description from local git data (no LLM).
+ * @param {any} gitFlowData - Data from collectGitFlowData().
+ * @returns {null|{flowType:string,defaultBranch:string,summary:string,branches:{name:string,role:string,description:string}[],mergeFlow:string,branchNaming:{format:string,examples:string[]},mrTargets:string[]}}
+ * @external https://innotech.atlassian.net/browse/FE-8016
  */
 function inferGitFlowFromData(gitFlowData) {
   if (!gitFlowData || !gitFlowData.branches?.remote?.length) return null;
@@ -234,6 +305,12 @@ function inferGitFlowFromData(gitFlowData) {
   };
 }
 
+/**
+ * Validate git-flow object minimal schema.
+ * @param {any} value
+ * @returns {{ok:true}|{ok:false,error:string}}
+ * @external https://innotech.atlassian.net/browse/FE-8016
+ */
 function validateGitFlowSection(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return { ok: false, error: "git-flow 必須是 object" };
@@ -250,6 +327,12 @@ function validateGitFlowSection(value) {
   return { ok: true };
 }
 
+/**
+ * Validate coding-standard section format.
+ * @param {any} value
+ * @returns {{ok:true}|{ok:false,error:string}}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function validateCodingStandardSection(value) {
   if (!Array.isArray(value))
     return { ok: false, error: "coding-standard 必須是 array" };
@@ -271,6 +354,12 @@ function validateCodingStandardSection(value) {
   return { ok: true };
 }
 
+/**
+ * Normalize `applicable` field to the new object form or return null on invalid.
+ * @param {boolean|{ok:boolean,reason:string}|any} value
+ * @returns {{ok:boolean,reason:string}|null}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function normalizeApplicable(value) {
   if (typeof value === "boolean") {
     return {
@@ -285,6 +374,12 @@ function normalizeApplicable(value) {
   return null;
 }
 
+/**
+ * Normalize a label item and validate fields.
+ * @param {any} item
+ * @returns {{ok:true,value:{name:string,applicable:{ok:boolean,reason:string},scenario:string}}|{ok:false,error:string}}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function normalizeLabelItem(item) {
   if (!isPlainObject(item)) return { ok: false, error: "item 必須是 object" };
   const name = typeof item.name === "string" ? item.name.trim() : "";
@@ -309,6 +404,12 @@ function normalizeLabelItem(item) {
   };
 }
 
+/**
+ * Validate the repo knowledge JSON object root shape.
+ * @param {any} obj
+ * @returns {{ok:true}|{ok:false,error:string}}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function validateRepoKnowledgeObject(obj) {
   if (!isPlainObject(obj)) return { ok: false, error: "根節點必須是 object" };
   if (!("labels" in obj)) return { ok: false, error: "缺少 labels" };
@@ -330,6 +431,12 @@ function validateRepoKnowledgeObject(obj) {
   return { ok: true };
 }
 
+/**
+ * Read existing knowledge file if present and validate schema.
+ * @param {string} filePath
+ * @returns {any|null}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function readKnowledgeIfExists(filePath) {
   if (!existsSync(filePath)) return null;
   const text = readFileSync(filePath, "utf-8").replace(/^\uFEFF/, "");
@@ -339,6 +446,12 @@ function readKnowledgeIfExists(filePath) {
   return obj;
 }
 
+/**
+ * Write knowledge JSON to disk after schema validation.
+ * @param {string} filePath
+ * @param {any} obj
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function writeKnowledge(filePath, obj) {
   const check = validateRepoKnowledgeObject(obj);
   if (!check.ok) throw new Error(`schema 驗證失敗：${check.error}`);
@@ -346,6 +459,12 @@ function writeKnowledge(filePath, obj) {
   writeFileSync(filePath, JSON.stringify(obj, null, 2) + "\n", "utf-8");
 }
 
+/**
+ * Resolve GitLab project host and path from git remote.origin.url.
+ * Supports git@ and https:// formats.
+ * @returns {{host:string,hostname:string,projectPathEncoded:string,fullPath:string}}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function getProjectInfo() {
   const remoteUrl = exec("git config --get remote.origin.url", {
     silent: true,
@@ -384,6 +503,13 @@ function getProjectInfo() {
   throw new Error("無法解析 remote URL（僅支援 git@... 或 https://...）");
 }
 
+/**
+ * Minimal JSON fetch helper with optional PRIVATE-TOKEN header.
+ * @param {string} url
+ * @param {{token?: string}} [param1]
+ * @returns {Promise<any>}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 async function fetchJson(url, { token } = {}) {
   const headers = token ? { "PRIVATE-TOKEN": token } : {};
   const resp = await fetch(url, { headers });
@@ -396,6 +522,12 @@ async function fetchJson(url, { token } = {}) {
   return await resp.json();
 }
 
+/**
+ * List project labels via glab (preferred if authenticated) or HTTP API.
+ * @param {{token?:string,host:string,projectPathEncoded:string,useGlab:boolean}} param0
+ * @returns {Promise<any[]>}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 async function listProjectLabels({ token, host, projectPathEncoded, useGlab }) {
   if (useGlab) {
     const data = glabApi(`projects/${projectPathEncoded}/labels`);
@@ -407,12 +539,23 @@ async function listProjectLabels({ token, host, projectPathEncoded, useGlab }) {
   return await fetchJson(url, { token });
 }
 
+/**
+ * ISO datetime string for current time minus 3 months.
+ * @returns {string}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function isoDateMinus3Months() {
   const d = new Date();
   d.setMonth(d.getMonth() - 3);
   return d.toISOString();
 }
 
+/**
+ * List merge requests created after the given ISO timestamp, paginated up to maxMrs.
+ * @param {{token?:string,host:string,projectPathEncoded:string,createdAfterIso:string,maxMrs:number,useGlab:boolean}} param0
+ * @returns {Promise<any[]>}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 async function listMergeRequestsCreatedAfter({
   token,
   host,
@@ -458,6 +601,12 @@ async function listMergeRequestsCreatedAfter({
   return all.slice(0, maxMrs);
 }
 
+/**
+ * Summarize MR changes (file list and basic stats) via glab or HTTP API.
+ * @param {{token?:string,host:string,projectPathEncoded:string,mrIid:string|number,useGlab:boolean}} param0
+ * @returns {Promise<{files:string[],stats:string}>}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 async function getMrChangesSummary({
   token,
   host,
@@ -494,6 +643,12 @@ async function getMrChangesSummary({
   };
 }
 
+/**
+ * Fetch up to 100 discussions for a given MR.
+ * @param {{token?:string,host:string,projectPathEncoded:string,mrIid:string|number,useGlab:boolean}} param0
+ * @returns {Promise<any[]>}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 async function listMrDiscussions({
   token,
   host,
@@ -512,6 +667,13 @@ async function listMrDiscussions({
   return Array.isArray(data) ? data : [];
 }
 
+/**
+ * Extract comment messages and optional line numbers from discussions.
+ * @param {any[]} discussions
+ * @param {number} [maxComments=60]
+ * @returns {{message:string,line:number|null}[]}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function extractCommentsFromDiscussions(discussions, maxComments = 60) {
   const comments = [];
   for (const d of discussions || []) {
@@ -533,6 +695,13 @@ function extractCommentsFromDiscussions(discussions, maxComments = 60) {
   return comments;
 }
 
+/**
+ * Pick a primary label id for an MR by lexicographically sorting label names.
+ * @param {string[]} mrLabels
+ * @param {Map<string, number>} labelNameToId
+ * @returns {number}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function pickPrimaryLabelId(mrLabels, labelNameToId) {
   if (!Array.isArray(mrLabels) || mrLabels.length === 0) return 0;
   const sorted = [...mrLabels].map(String).sort((a, b) => a.localeCompare(b));
@@ -543,10 +712,22 @@ function pickPrimaryLabelId(mrLabels, labelNameToId) {
   return 0;
 }
 
+/**
+ * Hash helper using SHA-256 for cache key computation.
+ * @param {string} text
+ * @returns {string}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function sha256(text) {
   return createHash("sha256").update(text).digest("hex");
 }
 
+/**
+ * Deterministic-ish stringify: recursively sorts object keys; arrays preserved.
+ * @param {any} value
+ * @returns {string}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function stableStringify(value) {
   // deterministic-ish stringify: sort keys recursively for objects
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
@@ -558,6 +739,11 @@ function stableStringify(value) {
   return `{${inner}}`;
 }
 
+/**
+ * Build the system prompt for the primary LLM call to generate repo knowledge JSON.
+ * @returns {string}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function getAdaptSystemPrompt() {
   return [
     "You are a senior engineer helping to build a reusable repository knowledge base.",
@@ -590,6 +776,11 @@ function getAdaptSystemPrompt() {
   ].join("\n");
 }
 
+/**
+ * JSON schema for validating the primary LLM output.
+ * @returns {object}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function getAdaptResponseJsonSchema() {
   return {
     type: "object",
@@ -681,6 +872,11 @@ function getAdaptResponseJsonSchema() {
   };
 }
 
+/**
+ * Build the system prompt for repairing invalid label cases.
+ * @returns {string}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function getAdaptLabelRepairSystemPrompt() {
   return [
     "You are repairing invalid cases in a repository knowledge JSON generation flow.",
@@ -698,6 +894,11 @@ function getAdaptLabelRepairSystemPrompt() {
   ].join("\n");
 }
 
+/**
+ * JSON schema for validating the label repair LLM output.
+ * @returns {object}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function getAdaptLabelRepairJsonSchema() {
   return {
     type: "object",
@@ -729,6 +930,11 @@ function getAdaptLabelRepairJsonSchema() {
   };
 }
 
+/**
+ * Build the system prompt for repairing the coding-standard section.
+ * @returns {string}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function getAdaptCodingStandardRepairSystemPrompt() {
   return [
     "You are repairing the `coding-standard` section for repository knowledge JSON.",
@@ -744,6 +950,11 @@ function getAdaptCodingStandardRepairSystemPrompt() {
   ].join("\n");
 }
 
+/**
+ * JSON schema for validating the coding-standard repair LLM output.
+ * @returns {object}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function getAdaptCodingStandardRepairJsonSchema() {
   return {
     type: "object",
@@ -766,6 +977,11 @@ function getAdaptCodingStandardRepairJsonSchema() {
   };
 }
 
+/**
+ * Build the system prompt for repairing the git-flow section.
+ * @returns {string}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function getAdaptGitFlowRepairSystemPrompt() {
   return [
     "You are repairing the `git-flow` section for repository knowledge JSON.",
@@ -781,6 +997,11 @@ function getAdaptGitFlowRepairSystemPrompt() {
   ].join("\n");
 }
 
+/**
+ * JSON schema for validating the git-flow repair LLM output.
+ * @returns {object}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function getAdaptGitFlowRepairJsonSchema() {
   return {
     type: "object",
@@ -793,8 +1014,10 @@ function getAdaptGitFlowRepairJsonSchema() {
 }
 
 /**
- * Collect git-flow related data from local repo (no GitLab API needed).
- * Used as input for LLM to infer and output git-flow section.
+ * Collect git-flow related information from the local git repository.
+ * No network or GitLab API required.
+ * @returns {{remoteHead:string|null,branches:{local:string[],remote:string[]},mergePatterns:string[],branchNamePatterns:{feat:string[],fix:string[],release:string[],other:string[]},recentMergeLog:string[]}}
+ * @external https://innotech.atlassian.net/browse/FE-8016
  */
 function collectGitFlowData() {
   const result = {
@@ -917,6 +1140,11 @@ function collectGitFlowData() {
   }
 }
 
+/**
+ * Provide minimal repository structure hints (top-level items and .cursor dir) for LLM.
+ * @returns {{topLevel:{name:string,type:string}[],cursor:{name:string,type:string}[]}}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function getRepoStructureSummary() {
   // Provide minimal repo structure hints for inferring scenarios of unused labels.
   // Keep it small to reduce token usage.
@@ -950,6 +1178,12 @@ function getRepoStructureSummary() {
   }
 }
 
+/**
+ * Build a conservative scenario description when LLM cannot provide one.
+ * @param {{name:string,description?:string,usageCount?:number,repoStructure?:any}} param0
+ * @returns {string}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function buildFallbackScenario({
   name,
   description,
@@ -979,6 +1213,12 @@ function buildFallbackScenario({
   return `近三個月內未觀察到使用案例；可依 label 名稱「${name}」與 repo 結構（${structureHint || "無"}）推測適用情境，並以通用規則為主。`;
 }
 
+/**
+ * Build a conservative applicable decision when LLM output is missing or invalid.
+ * @param {{name:string,usageCount?:number}} param0
+ * @returns {{ok:boolean,reason:string}}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function buildFallbackApplicable({ name, usageCount }) {
   const used = typeof usageCount === "number" && usageCount > 0;
   if (used) {
@@ -1011,6 +1251,12 @@ function buildFallbackApplicable({ name, usageCount }) {
   };
 }
 
+/**
+ * Attempt an LLM JSON call with retry and collect warnings on failure.
+ * @param {{callArgs:any,sectionName:string,warnings:string[],maxAttempts?:number}} param0
+ * @returns {Promise<any|null>}
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 async function attemptLlmJsonCall({
   callArgs,
   sectionName,
@@ -1040,6 +1286,11 @@ async function attemptLlmJsonCall({
   return null;
 }
 
+/**
+ * Main entry: collect inputs, call LLM (with repair flows), assemble output JSON, and write to disk.
+ * Respects --no-llm and cache; includes conservative fallbacks when LLM output is invalid.
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
@@ -1559,6 +1810,7 @@ async function main() {
   console.log(`✅ 已更新：${filePath}\n`);
 }
 
+// Execute main and surface errors with non-zero exit code.
 main().catch((e) => {
   console.error(`\n❌ adapt 失敗：${e.message}\n`);
   process.exit(1);

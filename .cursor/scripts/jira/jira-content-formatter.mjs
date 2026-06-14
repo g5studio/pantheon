@@ -1,6 +1,23 @@
 #!/usr/bin/env node
 
 /**
+ * === 檔案用途區塊 ===
+ * @module script-runtime
+ * @purpose 管理 .cursor/scripts/jira/jira-content-formatter.mjs 的註解補全與用途說明
+ * @external https://innotech.atlassian.net/browse/FE-8310
+ */
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 本區塊以下宣告需標示用途與單號關聯
+ * @purpose 統一定義宣告級註解格式與單號追溯規則
+ */
+/**
+ * @module jira-content-formatter
+ * @purpose Jira 內容格式檢查與正規化（Markdown 轉 Jira-safe 文字，用於 ADF 呈現前）
+ * @external https://innotech.atlassian.net/browse/FE-8310
+ */
+
+/**
  * Jira 內容格式檢查與正規化
  *
  * 在呼叫 Jira API 前，將 chat 常見的 Markdown 內容轉為 Jira 可正確呈現的格式。
@@ -10,6 +27,11 @@
 import { loadEnvLocal, getCompassApiToken } from "../utilities/env-loader.mjs";
 import { callOpenAiJson, resolveLlmModel } from "../utilities/llm-client.mjs";
 
+/**
+ * @description 內容操作常數（summary/comment/description）定義
+ * @purpose 用於標識 Jira 欄位格式化目標
+ * @external https://innotech.atlassian.net/browse/FE-8310
+ */
 export const JIRA_CONTENT_OPERATIONS = {
   COMMENT: "comment",
   DESCRIPTION: "description",
@@ -29,6 +51,11 @@ const MARKDOWN_PATTERNS = [
   { name: "hasMarkdownHorizontalRule", regex: /^---+$/m },
 ];
 
+/**
+ * @description LLM 格式化回傳 JSON schema（normalizedContent/changes/warnings/detectedFormats）
+ * @purpose 約束 LLM 輸出結構，供後續 Jira 內容準備流程使用
+ * @external https://innotech.atlassian.net/browse/FE-8310
+ */
 const FORMAT_SCHEMA = {
   type: "object",
   properties: {
@@ -94,7 +121,9 @@ function detectMermaidBlocks(text) {
 }
 
 /**
- * 偵測內容是否含 chat 常見 Markdown 特徵
+ * @description 偵測內容是否含 chat 常見 Markdown 特徵
+ * @purpose 提供後續是否需要 LLM/heuristic 的格式判斷依據
+ * @external https://innotech.atlassian.net/browse/FE-8310
  * @param {string} content
  * @returns {{ hasMarkdown: boolean, features: Record<string, boolean> }}
  */
@@ -127,8 +156,8 @@ export function detectMarkdownFeatures(content) {
 }
 
 /**
- * @param {Object} [options]
- * @returns {boolean}
+ * @description 是否跳過 Jira 格式檢查的判斷
+ * @purpose 由 options 或環境變數控制 fast/skip 流程
  */
 export function shouldSkipFormatCheck(options = {}) {
   if (options.skipFormatCheck) return true;
@@ -321,7 +350,9 @@ async function normalizeWithLlm(content, operation, options = {}) {
 }
 
 /**
- * 在呼叫 Jira API 前正規化文字內容
+ * @description 呼叫 Jira API 前正規化文字內容（LLM 優先，失敗後 heuristic fallback）
+ * @purpose 產出 Jira 用的 normalizedContent 與檢測/變更資訊
+ * @external https://innotech.atlassian.net/browse/FE-8310
  * @param {string} content
  * @param {"comment"|"description"|"summary"} operation
  * @param {Object} [options]
@@ -396,7 +427,9 @@ export async function prepareJiraContent(content, operation, options = {}) {
 }
 
 /**
- * 精簡 format check 結果，方便腳本 JSON 輸出
+ * @description 精簡 format check 結果，方便腳本 JSON 輸出
+ * @purpose 在呼叫端以較小結構記錄格式檢查摘要資訊
+ * @external https://innotech.atlassian.net/browse/FE-8310
  * @param {Object} formatResult
  * @returns {Object|null}
  */
@@ -415,3 +448,10 @@ export function summarizeFormatCheck(formatResult) {
     detectedFormats: formatResult.detectedFormats || null,
   };
 }
+
+/**
+ * === llm 分析紀錄區 ===
+ * @llm-review-submitted-at 2026-06-13T19:23:08.788Z
+ * @llm-review-model gpt-5.4-nano
+ * @llm-review-note 統一並修正本檔案的註解格式：補齊三區塊布局（含底部 llm 分析紀錄區標籤）、將所有 @external 改為完整 Jira browse URL（https://innotech.atlassian.net/browse/FE-8310）、並移除多餘/重複且不符合格式的底部 llm 區塊註解；未變更任何執行邏輯。
+ */

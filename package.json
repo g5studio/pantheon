@@ -1,6 +1,6 @@
 {
   "name": "pantheon",
-  "version": "1.3.5",
+  "version": "1.4.1",
   "private": true,
   "scripts": {
     "notify-cursor-rules-failed": "node .cursor/scripts/utilities/run-pantheon-script.mjs notification/notify-cursor-rules-failed.mjs",
@@ -20,6 +20,7 @@
     "mr-comment": "node .cursor/scripts/utilities/run-pantheon-script.mjs gitlab/mr-comment.mjs",
     "bump-version": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/bump-version.mjs",
     "parameter-detector": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/parameter-detector.mjs",
+    "query-file": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/query-file.mjs",
     "oracle": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/oracle.mjs",
     "repo-knowledge": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/repo-knowledge.mjs",
     "generate-pantheon-guideline": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/generate-pantheon-guideline.mjs",

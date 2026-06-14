@@ -1,15 +1,25 @@
 #!/usr/bin/env node
 
 /**
- * 環境變數載入器
- *
- * 用於統一管理所有腳本的環境變數載入邏輯。
- * 使用 process.cwd() 作為專案根目錄，確保無論腳本位於哪裡
- * （直接在 .cursor/scripts/ 或 .pantheon/.cursor/scripts/），
- * 都能正確找到配置文件。
- *
- * 使用方式:
- *   import { loadEnvLocal, getJiraConfig, getGitLabToken } from './utilities/env-loader.mjs';
+ * === 檔案用途區塊 ===
+ * @module script-runtime
+ * @purpose 管理 .cursor/scripts/utilities/env-loader.mjs 的註解補全與用途說明
+ * @external https://innotech.atlassian.net/browse/FE-7840
+ * @external https://innotech.atlassian.net/browse/FE-8004
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ */
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 本區塊以下宣告需標示用途與單號關聯
+ * @purpose 統一定義宣告級註解格式與單號追溯規則
+ */
+/**
+ * 檔案用途區塊
+ * @module env-loader
+ * @purpose 統一管理各腳本所需之環境變數載入與既有設定讀取。
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ * @external https://innotech.atlassian.net/browse/FE-7840
+ * @external https://innotech.atlassian.net/browse/FE-8004
  */
 
 import { readFileSync, existsSync } from "fs";
@@ -17,9 +27,10 @@ import { join, sep } from "path";
 import { execSync } from "child_process";
 
 /**
- * 獲取專案根目錄
- * 使用 process.cwd() 而非基於腳本位置計算，
- * 確保在 submodule 環境下也能正確找到配置文件。
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 取得專案根目錄；以 process.cwd() 為基準並處理 Pantheon submodule 情境下的路徑校正。
+ * @purpose FE-7892
+ * @external https://innotech.atlassian.net/browse/FE-7892
  */
 export function getProjectRoot() {
   const cwd = process.cwd();
@@ -72,16 +83,10 @@ function parseEnvContent(content) {
 }
 
 /**
- * 讀取 .env.local 文件
- * 優先級：.cursor/.env.local > 項目根目錄/.env.local
- *
- * 合併邏輯（配置項級別）：
- * - 對於每個配置項，優先使用 .cursor/.env.local 中的值
- * - 若 .cursor/.env.local 中該配置項為空值或未設置，則使用項目根目錄 .env.local 的值作為備援
- * - 這樣可以確保在 submodule 環境下，即使 .cursor/.env.local 某個配置為空，
- *   也能從主專案的 .env.local 中獲取有效值
- *
- * @returns {Object} 環境變數鍵值對（合併後的結果）
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 讀取並合併 .env.local（優先 .cursor/.env.local，其次項目根目錄 .env.local），以欄位為粒度僅在主要值非空時覆蓋備援值。
+ * @purpose FE-7892
+ * @external https://innotech.atlassian.net/browse/FE-7892
  */
 export function loadEnvLocal() {
   const projectRoot = getProjectRoot();
@@ -116,7 +121,10 @@ export function loadEnvLocal() {
 }
 
 /**
- * 引導用戶設置 Jira 配置
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 當 Jira 需要的設定缺失時，透過終端提供使用者設定步驟提示。
+ * @purpose FE-7892
+ * @external https://innotech.atlassian.net/browse/FE-7892
  */
 export function guideJiraConfig() {
   console.error("\n❌ Jira 配置缺失！\n");
@@ -152,10 +160,10 @@ export function guideJiraConfig() {
 }
 
 /**
- * 獲取 Jira 配置（從環境變數或 .env.local 讀取）
- *
- * @param {boolean} throwOnMissing - 缺失時是否拋出錯誤（預設 true）
- * @returns {Object} Jira 配置 { email, apiToken, baseUrl }
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 取得 Jira 設定（email/apiToken 由環境變數或 loadEnvLocal 讀取；baseUrl 固定為 innotech）。缺失時可選擇丟出錯誤或回傳 null。
+ * @purpose FE-7892
+ * @external https://innotech.atlassian.net/browse/FE-7892
  */
 export function getJiraConfig(throwOnMissing = true) {
   // 優先從環境變數讀取
@@ -181,9 +189,10 @@ export function getJiraConfig(throwOnMissing = true) {
 }
 
 /**
- * 從環境變數、.env.local 或 git config 獲取 GitLab token
- *
- * @returns {string|null} GitLab token 或 null
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 從環境變數、.env.local 或 git config 依序取得 GitLab token。
+ * @purpose FE-7892
+ * @external https://innotech.atlassian.net/browse/FE-7892
  */
 export function getGitLabToken() {
   // 優先級 1: 從環境變數獲取
@@ -212,9 +221,10 @@ export function getGitLabToken() {
 }
 
 /**
- * 獲取 Jira email（從環境變數或 .env.local）
- *
- * @returns {string|null} Jira email 或 null
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 取得 Jira email（由環境變數或 loadEnvLocal 讀取）。
+ * @purpose FE-7892
+ * @external https://innotech.atlassian.net/browse/FE-7892
  */
 export function getJiraEmail() {
   const envLocal = loadEnvLocal();
@@ -222,9 +232,10 @@ export function getJiraEmail() {
 }
 
 /**
- * 獲取 Compass API token（從環境變數或 .env.local）
- *
- * @returns {string|null} Compass API token 或 null
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 取得 Compass API token（由環境變數或 loadEnvLocal 讀取）。
+ * @purpose FE-7892
+ * @external https://innotech.atlassian.net/browse/FE-7892
  */
 export function getCompassApiToken() {
   const envLocal = loadEnvLocal();
@@ -232,9 +243,10 @@ export function getCompassApiToken() {
 }
 
 /**
- * 獲取 MR Reviewer（從環境變數或 .env.local）
- *
- * @returns {string|null} MR Reviewer 或 null
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 取得 MR Reviewer（由環境變數或 loadEnvLocal 讀取）。
+ * @purpose FE-7892
+ * @external https://innotech.atlassian.net/browse/FE-7892
  */
 export function getMRReviewer() {
   const envLocal = loadEnvLocal();
@@ -257,14 +269,10 @@ export function getFigmaToken(defaultToken = null) {
 }
 
 /**
- * 獲取個性化 agent 顯示名稱（從環境變數或 .env.local）
- *
- * - 未設置 / 空字串：回傳 null（視同無此功能，行為保持既有不變）
- * - 建議限制長度：預設最多 40 字元（超過則截斷）
- *
- * @param {Object} options
- * @param {number} options.maxLength - 最大長度（預設 40）
- * @returns {string|null}
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 取得個性化 agent 顯示名稱；支援以 options.maxLength 控制字串長度（預設 40），空字串或非字串時回傳 null。
+ * @purpose FE-8004
+ * @external https://innotech.atlassian.net/browse/FE-8004
  */
 export function getAgentDisplayName(options = {}) {
   const envLocal = loadEnvLocal();
@@ -282,3 +290,10 @@ export function getAgentDisplayName(options = {}) {
   if (trimmed.length > maxLength) return trimmed.slice(0, maxLength);
   return trimmed;
 }
+
+/**
+ * === llm 分析紀錄區 ===
+ * @llm-review-submitted-at 2026-06-13T19:29:34.408Z
+ * @llm-review-model gpt-5.4-nano
+ * @llm-review-note 補齊檔案用途區塊的 @external（移除空 @external 並以相關票號網址填入），並修正底部 llm 分析紀錄區區塊標題為要求格式。
+ */

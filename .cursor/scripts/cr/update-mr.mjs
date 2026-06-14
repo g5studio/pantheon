@@ -1,6 +1,44 @@
 #!/usr/bin/env node
 
 /**
+ * === 檔案用途區塊 ===
+ * @module script-runtime
+ * @purpose 管理 .cursor/scripts/cr/update-mr.mjs 的註解補全與用途說明
+ * @external https://innotech.atlassian.net/browse/FE-8177
+ * @external https://innotech.atlassian.net/browse/FE-8017
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ * @external https://innotech.atlassian.net/browse/FE-8003
+ */
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 本區塊以下宣告需標示用途與單號關聯
+ * @purpose 統一定義宣告級註解格式與單號追溯規則
+ */
+
+/**
+ * 檔案用途區塊
+ * @module update-mr.mjs
+ * @purpose 依照使用者提供的 development-report 更新既有 Merge Request（含必要段落驗證、description marker-based 合併、labels/reviewer 選擇性更新），並依規則判斷是否送出 AI review。
+ * @external https://innotech.atlassian.net/browse/FE-7910
+ */
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 腳本的宣告/常數取得與環境 token 掛鉤：包含專案根目錄、adapt.json 可用 labels 白名單、glab 與 GitLab API 的 email/身分取得、以及 AI review 提交與 notes marker 寫入。
+ * @purpose 維持 AI review 僅在偵測到 MR head SHA 有新提交時才送出，並在缺少 COMPASS_API_TOKEN 時跳過送審，其餘流程不受影響。
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ * @external https://innotech.atlassian.net/browse/FE-7910
+ */
+
+/**
+ * llm 分析紀錄區
+ * @llm-review-submitted-at 2026-06-13T17:27:18.737Z
+ * @llm-review-model gpt-5.4-nano
+ * @llm-review-note 補上三區塊註解（檔案用途區塊/宣告內容用途說明與單號關聯/llm 分析紀錄區），並符合 @module/@purpose/@external、@description/@purpose/@external、@llm-review-* 標籤規格；不影響任何執行邏輯。
+ */
+
+/**
  * 更新現有 Merge Request（專用更新腳本）
  *
  * 核心目標：
@@ -984,3 +1022,10 @@ main().catch((error) => {
   console.error(`\n❌ 發生錯誤: ${error.message}\n`);
   process.exit(1);
 });
+
+/**
+ * === llm 分析紀錄區 ===
+ * @llm-review-submitted-at 2026-06-13T19:20:23.330Z
+ * @llm-review-model gpt-5.4-nano
+ * @llm-review-note Updated only comment annotations: fixed duplicate/malformed external Jira references and normalized @external links to full Jira browse URLs per required three-section annotation layout, without changing runtime logic.
+ */
