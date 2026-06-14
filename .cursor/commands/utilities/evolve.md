@@ -18,17 +18,21 @@ description: 將專案改造成適合 Operator Agent 操作的生態（模塊架
 | 類型 | 路徑 | 說明 |
 |---|---|---|
 | 指令 | `.cursor/commands/utilities/evolve.md` | 三階段 SOP |
-| 腳本 | `.cursor/scripts/utilities/evolve.mjs` | 輔助工具（check-prereq、file-history、write-schema 等） |
+| 指令 | `.cursor/commands/utilities/analyze-project-schema.md` | 模塊架構 LLM 分析（階段一入口） |
+| 腳本 | `.cursor/scripts/utilities/evolve.mjs` | 輔助工具（check-prereq、analyze-project-schema、file-history、write-schema 等） |
 
 **目標專案運作後產生（不在 Pantheon repo 內）**：
 
 | 產物 | 路徑（相對於目標專案根目錄） | 說明 |
 |---|---|---|
 | 模塊架構 skill | `.cursor/skills/project-schema/SKILL.md` | 階段一確認後由 `write-schema` 生成 |
+| 模塊架構資料 | `project-schema.json` | 階段一分析草稿與確認後的 schema 來源 |
+| 架構預覽 | `architecture-preview.md` | 階段一由 `render-preview` 生成，供查閱與 chat 呈現 |
 | 命名報告 | `misnamed-file-report.md` | 階段三由 `write-report` 生成 |
-| 分析暫存 | `.evolve-tmp/` | 進度、schema 草稿、rename plan 等（應加入目標專案 `.gitignore`） |
+| 分析進度 | `analysis-progress.json` | 階段二逐檔分析進度 |
+| 重新命名計畫 | `rename-plan.json` | 階段三重新命名計畫 |
 
-> **重要**：`project-schema` skill 與 `.evolve-tmp/` 皆為 evolve 在**目標專案**執行時的落地產物，Pantheon 本身不預先包含這些檔案。
+> **重要**：以上產物皆為 evolve 在**目標專案**執行時的落地產物，Pantheon 本身不預先包含這些檔案。不再使用 `.evolve-tmp/` 暫存目錄。
 
 ---
 
@@ -58,43 +62,101 @@ pnpm run evolve -- check-prereq
 
 ## 1) 階段一：模塊架構分析與 project-schema 落地
 
-### 1.1 閱讀專案並分析模塊
+### 1.1 以 LLM 分析專案模塊架構
 
-AI 應系統性閱讀專案原始碼與設定檔，依**同質性**（職責、依賴方向、目錄慣例、命名前綴）分析模塊架構。
+**🚨 CRITICAL**：階段一必須透過 `analyze-project-schema` 指令生成 `project-schema.json`，不可繞過此指令手動組裝 schema。
 
-輔助列出可分析檔案：
+在目標專案執行：
+
+```bash
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs analyze-project-schema
+```
+
+若在 Pantheon repo 本身：
+
+```bash
+pnpm run analyze-project-schema
+```
+
+可選參數（與獨立指令相同）：
+
+```bash
+# 限制分析目錄
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs analyze-project-schema -- --dirs="src,.cursor"
+
+# 指定模型（預設 gpt-5.3-codex）
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs analyze-project-schema -- --model=gpt-5.3-codex
+```
+
+此指令會：
+1. 若專案尚無 `project-schema.json`，於根目錄新建
+2. 若已存在，將現有 schema 與專案現況一併提交 LLM 重新分析
+3. 預設自動執行 `render-preview`，產生 `architecture-preview.md` 與終端輸出
+
+詳見 `.cursor/commands/utilities/analyze-project-schema.md`。
+
+輔助列出可分析檔案（僅供參考，非必須）：
 
 ```bash
 node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs list-files
 ```
 
-可選參數：
-
-```bash
-# 限制目錄
-node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs list-files -- --dirs="src,.cursor"
-
-# 輸出 JSON
-node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs list-files -- --format=json
-```
-
 ### 1.2 在 chat 呈現架構圖並與用戶確認
 
-**必須**在 chat 輸出以下內容，並使用 **Answer 選項視窗**等待用戶確認：
+**🚨 CRITICAL — 三步驟強制順序（不可跳過、不可顛倒）**：
 
-#### 結構總覽表
+| 步驟 | 動作 | 說明 |
+|---|---|---|
+| 1 | 執行 analyze-project-schema | LLM 分析專案並寫入根目錄 `project-schema.json`（預設 gpt-5.3-codex） |
+| 2 | 自動生成架構預覽 | 指令預設接續 `render-preview`，產生 `architecture-preview.md` 與終端輸出 |
+| 3 | **在 chat 完整輸出架構** | 將 `render-preview` 終端輸出（表格 + Mermaid）**完整貼入本輪 chat 正文** |
+| 4 | 開啟 Answer 視窗 | **僅在步驟 1–3 全部完成後**，才使用 Answer 選項視窗詢問確認 |
+
+**禁止行為**：
+- ❌ 在 chat 尚未輸出完整架構前就呼叫 Answer 視窗
+- ❌ Answer 視窗只問「架構對不對」卻不提供任何架構內容
+- ❌ 僅在 Answer 視窗內描述架構，而不在 chat 正文呈現
+- ❌ 只執行腳本、只寫檔案，卻不在 chat 顯示架構圖與表格
+- ❌ 使用 `.evolve-tmp/` 暫存目錄（已廢止）
+- ❌ 階段一繞過 `analyze-project-schema` 手動組裝 schema
+
+#### 步驟 1–2：analyze-project-schema（含 render-preview）
+
+階段一的起點為 `analyze-project-schema`（見 1.1）。預設會自動執行 `render-preview`。
+
+若需手動補跑預覽：
+
+```bash
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs render-preview -- --input-file="./project-schema.json"
+```
+
+若在 Pantheon repo 本身：
+
+```bash
+pnpm run evolve -- render-preview --input-file=project-schema.json
+```
+
+此命令會：
+1. 生成 `architecture-preview.md`（專案根目錄，用戶可隨時開啟查閱）
+2. 在終端輸出完整預覽內容，**AI 必須將此輸出貼入 chat**
+
+#### 步驟 3：chat 必須輸出的內容
+
+**必須**將 `render-preview` 終端輸出中 `--- architecture-preview ---` 區塊的內容（或等價內容）**完整貼入 chat 正文**，包含：
+
+##### 結構總覽表
 
 | 模塊 | 路徑範圍 | 職責 | 主要依賴 |
 |---|---|---|---|
 | （依分析填寫） | | | |
 
-#### 模塊定義表
+##### 模塊定義表
 
 | 模塊 ID | 顯示名稱 | 邊界定義 | 不應包含 |
 |---|---|---|---|
 | （依分析填寫） | | | |
 
-#### Mermaid 架構圖
+##### Mermaid 架構圖
 
 ```mermaid
 flowchart TD
@@ -102,8 +164,13 @@ flowchart TD
   B --> C[共用工具]
 ```
 
-#### 確認選項
+#### 步驟 4：Answer 確認選項
 
+Answer 視窗的 prompt **必須**引導用戶先閱讀**本輪 chat 正文中的架構分析**（不可只問對不對），例如：
+
+> 請先閱讀**上方 chat 中的模塊架構分析**（含表格與 Mermaid 圖），或開啟專案根目錄的 `architecture-preview.md` 查閱完整內容，確認是否正確。
+
+選項：
 - **選項 A**：架構正確，進入階段二
 - **選項 B**：需調整（請用戶補充修正意見）
 - **選項 C**：取消 evolve 流程
@@ -113,7 +180,7 @@ flowchart TD
 用戶確認後，AI 組裝 schema JSON 並落地 skill：
 
 ```bash
-node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs write-schema -- --input-file="./.evolve-tmp/project-schema.json"
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs write-schema -- --input-file="./project-schema.json"
 ```
 
 `project-schema.json` 結構：
@@ -272,7 +339,7 @@ pnpm run read-jira-ticket -- --ticket=FE-1234
 node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs annotation-audit -- --dirs=src --format=text
 
 # 稽核 + 安全自動修復（僅修復重複 @external 與重複分隔符）
-node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs annotation-audit -- --dirs=src --fix=true --output-file=.evolve-tmp/annotation-audit.json
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs annotation-audit -- --dirs=src --fix=true --output-file=annotation-audit.json
 ```
 
 若要讓 Pantheon agent **自行呼叫 LLM 並直接回寫檔案註解**（不依賴 Cursor/Claude/Codex editor 內建編輯流程），使用：
@@ -309,9 +376,7 @@ node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs run-
 | `tickets` | 關聯工單號陣列 |
 | `commentsAdded` | 是否已補註解 |
 
-建議將追蹤資料寫入目標專案的 `.evolve-tmp/analysis-progress.json`。
-
-首次執行 evolve 時，AI 應確認目標專案 `.gitignore` 已包含 `.evolve-tmp/`（若無則追加）。
+建議將追蹤資料寫入目標專案根目錄的 `analysis-progress.json`。
 
 ---
 
@@ -332,7 +397,7 @@ node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs run-
 ### 3.2 生成 misnamed-file-report
 
 ```bash
-node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs write-report -- --input-file="./.evolve-tmp/analysis-progress.json"
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs write-report -- --input-file="./analysis-progress.json"
 ```
 
 輸出：專案根目錄 `misnamed-file-report.md`
@@ -349,13 +414,13 @@ node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs writ
 若用戶選擇執行重新命名，先 dry-run：
 
 ```bash
-node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs rename -- --input-file="./.evolve-tmp/rename-plan.json" --dry-run
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs rename -- --input-file="./rename-plan.json" --dry-run
 ```
 
 確認無誤後執行：
 
 ```bash
-node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs rename -- --input-file="./.evolve-tmp/rename-plan.json"
+node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs rename -- --input-file="./rename-plan.json"
 ```
 
 `rename-plan.json` 結構：
@@ -382,7 +447,7 @@ node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs rena
 ```mermaid
 flowchart LR
   A[adapt] --> B[adapt.json]
-  B --> C["階段一：模塊架構"]
+  B --> C["analyze-project-schema"]
   C --> D{用戶確認架構}
   D --> E[project-schema skill]
   E --> F["階段二：逐檔分析"]
@@ -399,7 +464,8 @@ flowchart LR
 | 步驟 | 指令 | 產物 |
 |---|---|---|
 | 1 | `adapt` | `adapt.json`、pantheon-mounted-workflow skill |
-| 2 | `evolve`（本指令） | `project-schema` skill、`misnamed-file-report.md`、註解補全 |
+| 2 | `analyze-project-schema` | `project-schema.json`、`architecture-preview.md` |
+| 3 | `evolve`（本指令） | `project-schema` skill、`misnamed-file-report.md`、註解補全 |
 
 ---
 
@@ -408,7 +474,7 @@ flowchart LR
 大型專案建議分批處理：
 
 1. **按模塊分批**：每次處理一個模塊，完成後向用戶報告進度
-2. **暫存進度**：使用 `.evolve-tmp/` 保存分析狀態，支援中斷後續跑
+2. **暫存進度**：使用專案根目錄的 `analysis-progress.json` 保存分析狀態，支援中斷後續跑
 3. **優先順序**：入口檔 → 核心業務 → 工具函式 → 設定檔
 
 恢復未完成的 evolve：
@@ -443,6 +509,9 @@ node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs stat
 
 - ❌ 未執行 `adapt` 就開始 `evolve`
 - ❌ 未經用戶確認架構就生成 `project-schema`
+- ❌ 階段一未在 chat 輸出架構就直接開啟 Answer 視窗
+- ❌ 階段一繞過 `analyze-project-schema` 手動組裝 schema
+- ❌ 使用已廢止的 `.evolve-tmp/` 暫存目錄
 - ❌ 未經用戶確認就執行重新命名
 - ❌ 階段二暫存註解建議但不寫入（應立即寫入）
 - ❌ 註解內容與實際程式邏輯不一致

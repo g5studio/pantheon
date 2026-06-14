@@ -52,7 +52,6 @@ const MAX_LIMIT = 200;
 const EXCLUDE_DIRS = new Set([
   ".git",
   ".pantheon",
-  ".evolve-tmp",
   "node_modules",
   "dist",
   "build",
