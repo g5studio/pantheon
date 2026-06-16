@@ -16,7 +16,7 @@ import {
   guideJiraConfig,
   loadEnvLocal,
 } from "../utilities/env-loader.mjs";
-import { callOpenAiJson, resolveLlmModel } from "../utilities/llm-client.mjs";
+import { callOpenAiJson, resolveLlmModel } from "../client/llm-client.mjs";
 
 // 使用 env-loader 提供的 projectRoot
 const projectRoot = getProjectRoot();

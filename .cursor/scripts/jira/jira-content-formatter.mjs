@@ -25,7 +25,7 @@
  */
 
 import { loadEnvLocal, getCompassApiToken } from "../utilities/env-loader.mjs";
-import { callOpenAiJson, resolveLlmModel } from "../utilities/llm-client.mjs";
+import { callOpenAiJson, resolveLlmModel } from "../client/llm-client.mjs";
 
 /**
  * @description 內容操作常數（summary/comment/description）定義

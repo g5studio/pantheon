@@ -10,7 +10,7 @@ import {
 } from "fs";
 import { basename, dirname, extname, join, relative } from "path";
 import { getProjectRoot, loadEnvLocal } from "./env-loader.mjs";
-import { callOpenAiJson, resolveLlmModel } from "./llm-client.mjs";
+import { callOpenAiJson, resolveLlmModel } from "../client/llm-client.mjs";
 
 const projectRoot = getProjectRoot();
 const ADAPT_FILE = join(projectRoot, "adapt.json");
