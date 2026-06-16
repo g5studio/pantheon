@@ -17,6 +17,25 @@ description: 自動執行 commit 和建立 MR 的完整流程
 
 **禁止**在指令文件中把可用的 package script 寫成硬編碼路徑（例如 `node .cursor/scripts/...`）。
 
+## Agent-first 外部腳本讀法（CRITICAL — [FE-8389](https://innotech.atlassian.net/browse/FE-8389)）
+
+**禁止舊讀法**：
+- ❌ 解析 stdout 中 emoji / 中文進度 log（進度在 stderr）
+- ❌ 使用 `--include-raw`、`raw.fields.*`（含 `raw.fields.subtasks`）
+- ❌ Bug 追溯只用 `--json` pretty 全文或手動 `git log`
+- ❌ 用 `--bundle=cr` 讀 Jira 後寫開發報告
+
+| 步驟 | 腳本 | 建議參數 | Agent 解析重點 |
+|---|---|---|---|
+| 讀 Jira | `read-jira-ticket` | `--format=agent` | `issueType`, `description`, `subtasks[]`, `meta` |
+| 讀子任務 | `read-jira-ticket` | `--format=agent` | **`subtasks[]`**；備援 `links[]` |
+| Bug 追溯 | `trace-bug-root-cause` | `--format=agent` | `markdownSection`, `topCandidate` |
+| Commit | `agent-commit` | `--format=agent`（非 TTY 預設） | `commit.hash`, `branch`, `pushed`, `mrCreateUrl` |
+| 建立 MR | `create-mr` | `--development-report=...` | `mr.iid`, `mr.webUrl`, `aiReview` |
+| 更新 MR | `update-mr` | `--development-report=...` | 同上 |
+
+**截斷處理**：看 `meta.truncated` / `meta.hints.nextSections`，加 `--section=` 或 `--comments-limit=all`；避免直接 `--include-raw`。
+
 **`cr multiple-ticket`** - 快速執行 commit 並建立 MR，**必須**提供多於一個 Jira ticket（預設送審，可用 `--no-review` 跳過）
 
 **CRITICAL**: `cr multiple-ticket` 指令**必須**提供多於一個 Jira ticket（當前分支單號 + 至少一個關聯單號）。如果只有一個 ticket，請使用 `cr single-ticket` 指令。
@@ -38,8 +57,8 @@ description: 自動執行 commit 和建立 MR 的完整流程
 2. **用戶語意暗示「主單與所有子任務」**：
    - 偵測關鍵字：「所有子任務」、「子項目」、「包含子任務」、「主單和子任務」、「all subtasks」、「with subtasks」等
    - → 自動詢問用戶確認
-   - → 確認後優先透過 Pantheon 內建工具讀取子任務：`pnpm run read-jira-ticket -- --ticket="<ticket-id>"`（若 host 專案無此 script，改用 `node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs jira/read-jira-ticket.mjs --ticket="<ticket-id>"`）
-   - → 從回傳 JSON 的 `raw.fields.subtasks` 提取子任務單號
+   - → 確認後優先透過 Pantheon 內建工具讀取子任務：`pnpm run read-jira-ticket -- --ticket="<ticket-id>" --format=agent`（若 host 專案無此 script，改用 `node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs jira/read-jira-ticket.mjs --ticket="<ticket-id>" --format=agent`）
+   - → 從 stdout agent JSON 的 **`subtasks[]`** 提取子任務（`ticket` + `summary`）；若為空，再從 `links[]` 篩選子任務型關聯
    - → 自動設置為 `--related-tickets` 參數
 
 3. **用戶只提供一個 ticket 且無子任務意圖**：
@@ -381,19 +400,19 @@ AI: 已設置 --no-draft 參數
 **必須執行的步驟**：
 
 1. **獲取 Jira ticket 類型**：
-   - 使用 `read-jira-ticket.mjs` 腳本讀取 ticket 資訊
-   - 檢查 `issueType` 欄位是否為 `Bug`
+   - 使用 `pnpm run read-jira-ticket -- --ticket={ticket} --format=agent` 讀取 ticket 資訊
+   - 檢查 stdout JSON 的 `issueType` 欄位是否為 `Bug`
 
 2. **追溯問題來源**（僅 Bug 類型）：
    - **必須優先**執行 `trace-bug-root-cause` 腳本（勿僅手動 `git log` 猜測）：
      ```bash
-     pnpm run trace-bug-root-cause -- --ticket={ticket} --target=main
+     pnpm run trace-bug-root-cause -- --ticket={ticket} --format=agent --target=main
      # 掛載專案若無 script：
-     node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs cr/trace-bug-root-cause.mjs --ticket={ticket} --target=main
+     node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs cr/trace-bug-root-cause.mjs --ticket={ticket} --format=agent --target=main
      ```
    - 腳本會從 fix diff 提取搜尋詞，以 `git log -S` 追溯**引入問題**的 commit，並自動排除當前修復分支 commits 與當前 Bug 單號
-   - 需要結構化資料時加 `--json`；將輸出 Markdown 區塊貼入開發報告的「造成問題的單號」
-   - 若腳本回傳「無法追溯」，可再手動 `git log -S` / `git blame` 補充，但**不得**把當前 Bug 單或 Jira `is caused by` 連結誤填為引入單號
+   - 從 stdout JSON 讀取 `markdownSection` 貼入開發報告的「造成問題的單號」；結構化欄位用 `topCandidate`、`traceable`
+   - 若 `traceable=false`，可再手動 `git log -S` / `git blame` 補充，但**不得**把當前 Bug 單或 Jira `is caused by` 連結誤填為引入單號
 
 3. **在開發報告中包含「造成問題的單號」區塊**：
    - **必須包含**以下資訊：
@@ -426,10 +445,13 @@ AI: 已設置 --no-draft 參數
 
 ```bash
 # 推薦：自動追溯（從 fix diff 找引入 commit）
-pnpm run trace-bug-root-cause -- --ticket=FE-1234 --target=main
+pnpm run trace-bug-root-cause -- --ticket=FE-1234 --format=agent --target=main
 
-# JSON 輸出（供 Agent 組裝開發報告）
-pnpm run trace-bug-root-cause -- --ticket=FE-1234 --json
+# 人工可讀 Markdown（TTY 或明確指定）
+pnpm run trace-bug-root-cause -- --ticket=FE-1234 --format=human --target=main
+
+# 完整 debug payload（legacy）
+pnpm run trace-bug-root-cause -- --ticket=FE-1234 --format=json
 
 # 手動補充（腳本無法追溯時）
 git log -S "nickName.length" --oneline --follow -- path/to/file.ts
@@ -450,7 +472,7 @@ git show <commit_hash> --stat
 如果已經獲取到所有必要信息（type, ticket, message），且**已確認代碼符合 Cursor rules**，直接使用腳本：
 
 ```bash
-pnpm run agent-commit -- --type={type} --ticket={ticket} --message="{message}" [--skip-lint] [--auto-push]
+pnpm run agent-commit -- --type={type} --ticket={ticket} --message="{message}" [--skip-lint] [--auto-push] [--format=agent]
 ```
 
 參數說明：
@@ -459,6 +481,7 @@ pnpm run agent-commit -- --type={type} --ticket={ticket} --message="{message}" [
 - `--message`: commit message (小寫，最大 64 字元)
 - `--skip-lint`: 跳過 lint 檢查（可選）
 - `--auto-push`: 自動推送到遠端（可選）
+- `--format=agent|human|json`: 輸出格式（非 TTY 預設 agent）；Agent 只解析 stdout JSON 的 `commit`、`branch`、`pushed`、`mrCreateUrl`
 
 **方法 B: 手動執行步驟**
 
@@ -899,8 +922,8 @@ pnpm run agent-commit -- --type={type} --ticket={ticket} --message="{message}" [
     2. 否，我會手動提供關聯單號"
 
 4. 用戶選擇: 1
-5. AI 執行: pnpm run read-jira-ticket -- --ticket="FE-7841"（若無 script 則改用 `.pantheon` runner）
-6. 從回傳 JSON 的 raw.fields.subtasks 提取子任務：FE-7842, FE-7843, FE-7844
+5. AI 執行: `pnpm run read-jira-ticket -- --ticket="FE-7841" --format=agent`（若無 script 則改用 `.pantheon` runner）
+6. 從 stdout agent JSON 的 **`subtasks[]`** 提取子任務：FE-7842, FE-7843, FE-7844（若為空，備援 `links[]`）
 7. AI 確認：
    "找到以下子任務：
     - FE-7842: 子任務標題 1

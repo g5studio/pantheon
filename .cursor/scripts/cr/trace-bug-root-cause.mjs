@@ -30,6 +30,13 @@
 
 import { execSync, spawnSync } from "child_process";
 import { getProjectRoot } from "../utilities/env-loader.mjs";
+import {
+  logProgress,
+  OUTPUT_FORMAT,
+  resolveOutputFormat,
+  writeScriptError,
+  writeScriptResult,
+} from "../utilities/external-output.mjs";
 
 /**
  * 宣告內容用途說明與單號關聯
@@ -77,7 +84,7 @@ function parseArgs(argv) {
     ticket: null,
     target: "main",
     files: null,
-    format: "markdown",
+    format: null,
     maxCandidates: 5,
     maxTerms: 12,
     json: false,
@@ -131,14 +138,15 @@ function parseArgs(argv) {
  * @external https://innotech.atlassian.net/browse/FE-8310
  */
 function printHelp() {
-  console.log(`
+  logProgress(`
 🔍 Bug Root Cause Tracer
 
 Find commits that likely introduced a bug (excludes current fix branch commits).
 
 Usage:
   node .cursor/scripts/cr/trace-bug-root-cause.mjs --ticket=FE-1234
-  node .cursor/scripts/cr/trace-bug-root-cause.mjs --ticket=FE-1234 --target=main --format=markdown
+  node .cursor/scripts/cr/trace-bug-root-cause.mjs --ticket=FE-1234 --target=main --format=agent
+  node .cursor/scripts/cr/trace-bug-root-cause.mjs --ticket=FE-1234 --format=human
   node .cursor/scripts/cr/trace-bug-root-cause.mjs --ticket=FE-1234 --json
   node .cursor/scripts/cr/trace-bug-root-cause.mjs --ticket=FE-1234 --files=src/a.ts,src/b.ts
 
@@ -146,9 +154,9 @@ Options:
   --ticket=FE-1234       Current Bug ticket (required; used to exclude fix commits)
   --target=main          Base branch for merge-base (default: main)
   --files=a.ts,b.ts      Limit to specific files (default: changed files vs target)
-  --format=markdown|json Output format (default: markdown)
+  --format=agent|human|json  Output format (default: non-TTY=agent, TTY=human)
   --max-candidates=5     Max candidate commits to return
-  --json                 Shorthand for --format=json
+  --json                 Shorthand for --format=json (legacy)
 `.trim());
 }
 
@@ -584,42 +592,86 @@ function formatMarkdownSection(result) {
   return section;
 }
 
+function pickCandidateFields(candidate) {
+  if (!candidate) return null;
+
+  return {
+    hash: candidate.shortHash,
+    fullHash: candidate.hash,
+    message: candidate.message,
+    authorDate: candidate.authorDate,
+    relatedTickets: candidate.relatedTickets,
+    matchedTerm: candidate.matchedTerm,
+    matchedFile: candidate.matchedFile,
+    score: candidate.score,
+    rankScore: candidate.rankScore,
+    method: candidate.method,
+  };
+}
+
+function buildAgentPayload(result) {
+  return {
+    source: "trace-bug-root-cause",
+    action: "trace",
+    ticket: result.ticket,
+    target: result.target,
+    branch: result.branch,
+    baseCommit: result.baseCommit,
+    traceable: result.traceable,
+    changedFiles: result.changedFiles,
+    searchTerms: result.searchTerms,
+    excludedFixCommitCount: result.excludedFixCommits.length,
+    topCandidate: pickCandidateFields(result.topCandidate),
+    candidates: result.candidates.map((item) => pickCandidateFields(item)),
+    markdownSection: formatMarkdownSection(result),
+    meta: {
+      truncated: false,
+      hints: result.traceable
+        ? {}
+        : {
+            reason: result.changedFiles.length
+              ? "no credible introducing commit found"
+              : "no analyzable changed files",
+          },
+    },
+  };
+}
+
 /**
  * 宣告內容用途說明與單號關聯
- * @description 程式進入點：解析參數、建構追溯結果，並依格式輸出。
- * @purpose 與 FE-8310 相關。
- * @external https://innotech.atlassian.net/browse/FE-8310
+ * @description 程式進入點：解析參數、建構追溯結果，並依 format 輸出 agent/human/json。
+ * @purpose 與 FE-8310、FE-8389 相關。
+ * @external https://innotech.atlassian.net/browse/FE-8389
  */
 function main() {
   const options = parseArgs(process.argv);
+  const outputFormat = resolveOutputFormat(options.format);
 
   if (!options.ticket) {
-    console.error("❌ 缺少必要參數 --ticket=FE-1234");
-    printHelp();
-    process.exit(1);
+    writeScriptError("缺少必要參數 --ticket=FE-1234", "MISSING_TICKET");
   }
 
+  logProgress(`Tracing bug root cause for ${options.ticket}...`);
   const result = buildTraceResult(options);
 
-  if (options.format === "json" || options.json) {
-    console.log(JSON.stringify(result, null, 2));
+  if (outputFormat === OUTPUT_FORMAT.HUMAN) {
+    writeScriptResult({ message: formatMarkdownSection(result) }, outputFormat);
     return;
   }
 
-  console.log(formatMarkdownSection(result));
+  if (outputFormat === OUTPUT_FORMAT.JSON) {
+    writeScriptResult(result, outputFormat);
+    return;
+  }
+
+  writeScriptResult(buildAgentPayload(result), outputFormat);
 }
 
 main();
 
 /**
  * llm 分析紀錄區
- * @llm-review-submitted-at 2026-06-13
- * @llm-review-model unknown
- * @llm-review-note 僅重構並補強註解區塊（不改動任何執行邏輯）。
- */
-/**
- * === llm 分析紀錄區 ===
- * @llm-review-submitted-at 2026-06-13T17:26:11.255Z
- * @llm-review-model gpt-5.4-nano
- * @llm-review-note 補上要求的三段式註解結構，並將原本 @external 註解改為宣告內容用途說明區塊格式；同時在檔案底部新增 llm 分析紀錄區。未變更任何程式運行邏輯。
+ * @llm-review-submitted-at 2026-06-14T18:00:00.000Z
+ * @llm-review-model composer-2.5-fast
+ * @llm-review-note FE-8389：接上 external-output，agent 預設 compact JSON + markdownSection；human/json 保留原行為。
  */

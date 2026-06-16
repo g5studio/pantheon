@@ -28,6 +28,11 @@ import {
   appendAgentSignature,
   stripTrailingAgentSignature,
 } from "../utilities/agent-signature.mjs";
+import {
+  logProgress,
+  resolveOutputFormat,
+  writeScriptResult,
+} from "../utilities/external-output.mjs";
 
 // 使用 env-loader 提供的 projectRoot
 const projectRoot = getProjectRoot();
@@ -129,29 +134,29 @@ function getTokenFromUser() {
       output: process.stdout,
     });
 
-    console.log("\n📝 請輸入你的 GitLab Personal Access Token");
-    console.log(
+    logProgress("\n📝 請輸入你的 GitLab Personal Access Token");
+    logProgress(
       "   獲取 token: https://gitlab.service-hub.tech/-/user_settings/personal_access_tokens",
     );
-    console.log("   需要的權限: api, write_repository\n");
+    logProgress("   需要的權限: api, write_repository\n");
 
-    console.log("💡 如何獲取 Token：");
-    console.log(
+    logProgress("💡 如何獲取 Token：");
+    logProgress(
       "   1. 前往: https://gitlab.service-hub.tech/-/user_settings/personal_access_tokens",
     );
-    console.log('   2. 點擊 "Add new token"');
-    console.log('   3. 填寫 Token name（例如: "glab-cli"）');
-    console.log("   4. 選擇 Expiration date（可選）");
-    console.log("   5. 勾選權限: api, write_repository");
-    console.log('   6. 點擊 "Create personal access token"');
-    console.log("   7. 複製生成的 token（只會顯示一次）\n");
+    logProgress('   2. 點擊 "Add new token"');
+    logProgress('   3. 填寫 Token name（例如: "glab-cli"）');
+    logProgress("   4. 選擇 Expiration date（可選）");
+    logProgress("   5. 勾選權限: api, write_repository");
+    logProgress('   6. 點擊 "Create personal access token"');
+    logProgress("   7. 複製生成的 token（只會顯示一次）\n");
 
-    console.log("💡 提示：");
-    console.log("   - 如果想永久保存 token，可以執行:");
-    console.log('     git config --global gitlab.token "YOUR_TOKEN"');
-    console.log("   - 或設置環境變數:");
-    console.log('     export GITLAB_TOKEN="YOUR_TOKEN"');
-    console.log("   - 設置後，之後就不需要每次都輸入 token 了\n");
+    logProgress("💡 提示：");
+    logProgress("   - 如果想永久保存 token，可以執行:");
+    logProgress('     git config --global gitlab.token "YOUR_TOKEN"');
+    logProgress("   - 或設置環境變數:");
+    logProgress('     export GITLAB_TOKEN="YOUR_TOKEN"');
+    logProgress("   - 設置後，之後就不需要每次都輸入 token 了\n");
 
     rl.question("Token: ", (token) => {
       rl.close();
@@ -284,7 +289,7 @@ function updateMRWithGlab(
     }
 
     if (result.stdout) {
-      console.log(result.stdout);
+      logProgress(result.stdout);
     }
 
     return result.stdout || "";
@@ -351,7 +356,7 @@ function createMRWithGlab(
     }
 
     if (result.stdout) {
-      console.log(result.stdout);
+      logProgress(result.stdout);
     }
 
     return result.stdout || "";
@@ -433,7 +438,7 @@ function getUnpushedCommits(branch) {
 function pushToRemote(branch, forceWithLease = false) {
   try {
     const forceFlag = forceWithLease ? " --force-with-lease" : "";
-    console.log(
+    logProgress(
       `🚀 正在推送 commits 到 origin/${branch}${
         forceWithLease ? "（force-with-lease）" : ""
       }...`,
@@ -447,12 +452,12 @@ function pushToRemote(branch, forceWithLease = false) {
 
 // 執行 rebase 到目標分支
 function rebaseToTargetBranch(targetBranch) {
-  console.log(`\n🔄 正在 rebase 到目標分支 ${targetBranch}...\n`);
+  logProgress(`\n🔄 正在 rebase 到目標分支 ${targetBranch}...\n`);
 
-  console.log(`📥 正在 fetch origin/${targetBranch}...`);
+  logProgress(`📥 正在 fetch origin/${targetBranch}...`);
   try {
     exec(`git fetch origin ${targetBranch}`, { silent: false });
-    console.log(`✅ fetch 完成\n`);
+    logProgress(`✅ fetch 完成\n`);
   } catch (error) {
     return {
       success: false,
@@ -461,10 +466,10 @@ function rebaseToTargetBranch(targetBranch) {
     };
   }
 
-  console.log(`🔀 正在執行 git rebase origin/${targetBranch}...`);
+  logProgress(`🔀 正在執行 git rebase origin/${targetBranch}...`);
   try {
     exec(`git rebase origin/${targetBranch}`, { silent: false });
-    console.log(`\n✅ Rebase 成功！\n`);
+    logProgress(`\n✅ Rebase 成功！\n`);
     return { success: true, error: null, hasConflict: false };
   } catch (error) {
     try {
@@ -529,7 +534,7 @@ async function renameBranch(oldBranch, newBranch) {
       }
     }
 
-    console.log(`🔄 正在重命名本地分支: ${oldBranch} -> ${newBranch}`);
+    logProgress(`🔄 正在重命名本地分支: ${oldBranch} -> ${newBranch}`);
     exec(`git branch -m ${oldBranch} ${newBranch}`);
 
     let remoteExists = false;
@@ -543,24 +548,24 @@ async function renameBranch(oldBranch, newBranch) {
     }
 
     if (remoteExists) {
-      console.log(`🔄 正在更新遠端分支...`);
+      logProgress(`🔄 正在更新遠端分支...`);
       try {
         exec(`git push origin :${oldBranch}`, { silent: true });
       } catch (error) {
-        console.log(`⚠️  無法刪除遠端舊分支，將只推送新分支`);
+        logProgress(`⚠️  無法刪除遠端舊分支，將只推送新分支`);
       }
       exec(`git push origin ${newBranch}`, { silent: true });
       exec(`git branch --set-upstream-to=origin/${newBranch} ${newBranch}`, {
         silent: true,
       });
-      console.log(`✅ 已更新遠端分支\n`);
+      logProgress(`✅ 已更新遠端分支\n`);
     } else {
-      console.log(`ℹ️  遠端分支 ${oldBranch} 不存在，只推送新分支`);
+      logProgress(`ℹ️  遠端分支 ${oldBranch} 不存在，只推送新分支`);
       exec(`git push origin ${newBranch}`, { silent: true });
       exec(`git branch --set-upstream-to=origin/${newBranch} ${newBranch}`, {
         silent: true,
       });
-      console.log(`✅ 已推送新分支\n`);
+      logProgress(`✅ 已推送新分支\n`);
     }
 
     return true;
@@ -582,8 +587,8 @@ function getCorrectTicketFromUser(oldTicket) {
       output: process.stdout,
     });
 
-    console.log(`\n❌ 分支中使用的單號 ${oldTicket} 在 Jira 中不存在\n`);
-    console.log("💡 請提供正確的單號（格式：FE-1234 或 IN-1234）\n");
+    logProgress(`\n❌ 分支中使用的單號 ${oldTicket} 在 Jira 中不存在\n`);
+    logProgress("💡 請提供正確的單號（格式：FE-1234 或 IN-1234）\n");
 
     rl.question("正確的單號: ", (newTicket) => {
       rl.close();
@@ -937,7 +942,7 @@ async function submitAIReview(mrUrl) {
     throw new Error("無法獲取 email，請設置 GitLab token 或 Jira email");
   }
 
-  console.log(`📧 使用 email: ${email} 提交 AI review`);
+  logProgress(`📧 使用 email: ${email} 提交 AI review`);
 
   const apiUrl =
     "https://mac09demac-mini.balinese-python.ts.net/api/workflows/jobs";
@@ -1421,7 +1426,7 @@ function validateAndFilterLabels(
 ) {
   if (!availableLabels || availableLabels.length === 0) {
     // 如果無法獲取可用 labels，發出警告但不阻止
-    console.log(
+    logProgress(
       `⚠️  無法獲取專案可用 labels 清單，將跳過驗證（建議檢查網路連線或 API 權限）\n`,
     );
     return { valid: labelsToValidate, invalid: [] };
@@ -1603,7 +1608,7 @@ function parseAgentVersion(versionArg) {
     return null;
   } catch (error) {
     // JSON 解析失敗
-    console.log(`⚠️  Agent 版本資訊格式錯誤，跳過版本顯示`);
+    logProgress(`⚠️  Agent 版本資訊格式錯誤，跳過版本顯示`);
     return null;
   }
 }
@@ -1707,6 +1712,9 @@ function normalizeExternalMarkdownArg(input) {
 
 async function main() {
   const args = process.argv.slice(2);
+  const outputFormat = resolveOutputFormat(
+    args.find((arg) => arg.startsWith("--format="))?.split("=")[1],
+  );
   const updateIfExists = args.includes("--update-if-exists");
   const targetBranchArg = args.find((arg) => arg.startsWith("--target="));
   const userExplicitlySetTarget = !!targetBranchArg;
@@ -1781,7 +1789,7 @@ async function main() {
       await inferTargetBranchFromAdaptAndJira(ticketForInference);
     if (inferredTarget) {
       targetBranch = inferredTarget;
-      console.log(
+      logProgress(
         `🌿 依 adapt.json git-flow + Jira 推演 target branch: ${targetBranch}\n`,
       );
     }
@@ -1817,11 +1825,11 @@ async function main() {
     process.exit(1);
   }
 
-  console.log("============================================================");
-  console.log("📋 Pre-MR Rebase Check");
-  console.log("============================================================");
-  console.log(`🌿 當前分支: ${currentBranch}`);
-  console.log(`🎯 目標分支: ${targetBranch}`);
+  logProgress("============================================================");
+  logProgress("📋 Pre-MR Rebase Check");
+  logProgress("============================================================");
+  logProgress(`🌿 當前分支: ${currentBranch}`);
+  logProgress(`🎯 目標分支: ${targetBranch}`);
 
   const rebaseResult = rebaseToTargetBranch(targetBranch);
   if (!rebaseResult.success) {
@@ -1838,7 +1846,7 @@ async function main() {
     process.exit(1);
   }
 
-  console.log("============================================================\n");
+  logProgress("============================================================\n");
 
   // 檢查是否需要 force push
   let needsForceWithLease = false;
@@ -1865,17 +1873,17 @@ async function main() {
   const unpushedCommits = getUnpushedCommits(currentBranch);
   if (unpushedCommits.length > 0 || needsForceWithLease) {
     if (needsForceWithLease) {
-      console.log("\n⚠️  Rebase 後需要強制推送更新遠端分支\n");
+      logProgress("\n⚠️  Rebase 後需要強制推送更新遠端分支\n");
     } else {
-      console.log("\n⚠️  檢測到未推送的 commits！\n");
-      console.log(`📋 未推送的 commits (${unpushedCommits.length} 個):`);
+      logProgress("\n⚠️  檢測到未推送的 commits！\n");
+      logProgress(`📋 未推送的 commits (${unpushedCommits.length} 個):`);
       unpushedCommits.slice(0, 10).forEach((commit) => {
-        console.log(`   ${commit}`);
+        logProgress(`   ${commit}`);
       });
       if (unpushedCommits.length > 10) {
-        console.log(`   ... 還有 ${unpushedCommits.length - 10} 個 commits`);
+        logProgress(`   ... 還有 ${unpushedCommits.length - 10} 個 commits`);
       }
-      console.log("");
+      logProgress("");
     }
 
     const pushResult = pushToRemote(currentBranch, needsForceWithLease);
@@ -1885,7 +1893,7 @@ async function main() {
       process.exit(1);
     }
 
-    console.log("✅ 所有 commits 已成功推送到遠端\n");
+    logProgress("✅ 所有 commits 已成功推送到遠端\n");
   }
 
   // Reviewer 設置
@@ -1915,35 +1923,35 @@ async function main() {
 
   // 驗證 Jira ticket
   if (ticket !== "N/A" && isFeatureBranch(currentBranch)) {
-    console.log(`🔍 正在檢查單號 ${ticket} 是否存在...\n`);
+    logProgress(`🔍 正在檢查單號 ${ticket} 是否存在...\n`);
     const ticketCheck = await checkJiraTicketExists(ticket);
 
     if (ticketCheck.error) {
-      console.log(`⚠️  無法檢查單號是否存在: ${ticketCheck.error}\n`);
-      console.log(`   將繼續使用分支中的單號 ${ticket}\n`);
+      logProgress(`⚠️  無法檢查單號是否存在: ${ticketCheck.error}\n`);
+      logProgress(`   將繼續使用分支中的單號 ${ticket}\n`);
     } else if (!ticketCheck.exists) {
       const correctTicket = await getCorrectTicketFromUser(ticket);
 
-      console.log(`\n🔍 正在驗證單號 ${correctTicket} 是否存在...\n`);
+      logProgress(`\n🔍 正在驗證單號 ${correctTicket} 是否存在...\n`);
       const correctTicketCheck = await checkJiraTicketExists(correctTicket);
 
       if (correctTicketCheck.error) {
-        console.log(`⚠️  無法驗證單號是否存在: ${correctTicketCheck.error}\n`);
-        console.log(`   將繼續使用提供的單號 ${correctTicket}\n`);
+        logProgress(`⚠️  無法驗證單號是否存在: ${correctTicketCheck.error}\n`);
+        logProgress(`   將繼續使用提供的單號 ${correctTicket}\n`);
       } else if (!correctTicketCheck.exists) {
         console.error(`\n❌ 提供的單號 ${correctTicket} 也不存在於 Jira 中\n`);
         console.error(`   請確認單號是否正確，然後重新執行命令\n`);
         process.exit(1);
       } else {
-        console.log(`✅ 單號 ${correctTicket} 驗證成功\n`);
+        logProgress(`✅ 單號 ${correctTicket} 驗證成功\n`);
       }
 
       const oldBranch = currentBranch;
       const newBranch = oldBranch.replace(ticket, correctTicket);
 
       if (oldBranch === newBranch) {
-        console.log(`⚠️  分支名稱中未找到單號，無法自動重命名\n`);
-        console.log(`   請手動重命名分支後重新執行命令\n`);
+        logProgress(`⚠️  分支名稱中未找到單號，無法自動重命名\n`);
+        logProgress(`   請手動重命名分支後重新執行命令\n`);
         process.exit(1);
       }
 
@@ -1951,19 +1959,19 @@ async function main() {
         await renameBranch(oldBranch, newBranch);
         currentBranch = newBranch;
         ticket = correctTicket;
-        console.log(`✅ 分支已重命名為: ${newBranch}\n`);
+        logProgress(`✅ 分支已重命名為: ${newBranch}\n`);
       } catch (error) {
         console.error(`\n❌ 重命名分支失敗: ${error.message}\n`);
         console.error(`   請手動重命名分支後重新執行命令\n`);
         process.exit(1);
       }
     } else {
-      console.log(`✅ 單號 ${ticket} 驗證成功\n`);
+      logProgress(`✅ 單號 ${ticket} 驗證成功\n`);
     }
   }
 
   // 獲取 assignee
-  console.log("👤 正在獲取當前用戶信息...\n");
+  logProgress("👤 正在獲取當前用戶信息...\n");
   const assigneeId = await getGitLabUserId();
   let assignee = null;
   if (assigneeId) {
@@ -1982,15 +1990,15 @@ async function main() {
     } else {
       assignee = assigneeId.toString();
     }
-    console.log(`✅ 已設置 assignee: ${assignee}\n`);
+    logProgress(`✅ 已設置 assignee: ${assignee}\n`);
   } else {
-    console.log("⚠️  無法獲取當前用戶信息，將不設置 assignee\n");
+    logProgress("⚠️  無法獲取當前用戶信息，將不設置 assignee\n");
   }
 
   // 獲取 MR title
   let mrTitle = commitMessage;
   if (ticket !== "N/A") {
-    console.log(`📋 正在獲取 Jira ticket ${ticket} 的 title...\n`);
+    logProgress(`📋 正在獲取 Jira ticket ${ticket} 的 title...\n`);
     const jiraTitle = await getJiraTicketTitle(ticket);
     if (jiraTitle) {
       const commitMatch = commitMessage.match(/^(\w+)\([^)]+\):\s*(.+)$/);
@@ -2000,9 +2008,9 @@ async function main() {
       } else {
         mrTitle = `${ticket}: ${jiraTitle}`;
       }
-      console.log(`✅ 已使用 Jira ticket title: ${mrTitle}\n`);
+      logProgress(`✅ 已使用 Jira ticket title: ${mrTitle}\n`);
     } else {
-      console.log(
+      logProgress(
         `⚠️  無法獲取 Jira ticket ${ticket} 的 title，將使用 commit message 作為 MR title\n`,
       );
     }
@@ -2045,7 +2053,7 @@ async function main() {
   if (externalDevelopmentPlan) {
     if (externalDevelopmentPlan.raw) {
       // 外部傳入完整計劃，直接使用
-      console.log("📋 使用外部傳入的完整開發計劃\n");
+      logProgress("📋 使用外部傳入的完整開發計劃\n");
       developmentPlanSectionToAppend = externalDevelopmentPlan.raw;
       description = description
         ? `${description}\n\n${externalDevelopmentPlan.raw}`
@@ -2056,7 +2064,7 @@ async function main() {
         externalDevelopmentPlan,
       );
       if (planSection) {
-        console.log("📋 檢測到開發計劃，將添加到 MR description\n");
+        logProgress("📋 檢測到開發計劃，將添加到 MR description\n");
         developmentPlanSectionToAppend = planSection;
         description = description
           ? `${description}\n\n${planSection}`
@@ -2068,7 +2076,7 @@ async function main() {
     if (startTaskInfo) {
       const planSection = generateDevelopmentPlanSection(startTaskInfo);
       if (planSection) {
-        console.log("📋 檢測到開發計劃，將添加到 MR description\n");
+        logProgress("📋 檢測到開發計劃，將添加到 MR description\n");
         developmentPlanSectionToAppend = planSection;
         description = description
           ? `${description}\n\n${planSection}`
@@ -2082,7 +2090,7 @@ async function main() {
   // - 開發計劃（--development-plan）：開發前的計劃步驟
   // - 開發報告（--development-report）：開發完成後的報告，包含影響範圍、根本原因、改動差異等
   if (externalDevelopmentReport) {
-    console.log("📊 使用外部傳入的開發報告\n");
+    logProgress("📊 使用外部傳入的開發報告\n");
     developmentReportSectionToAppend = externalDevelopmentReport;
     description = description
       ? `${description}\n\n${externalDevelopmentReport}`
@@ -2093,7 +2101,7 @@ async function main() {
   if (startTaskInfo) {
     const relatedTicketsSection = generateRelatedTicketsSection(startTaskInfo);
     if (relatedTicketsSection) {
-      console.log("📋 添加關聯單資訊到 MR description\n");
+      logProgress("📋 添加關聯單資訊到 MR description\n");
       relatedTicketsSectionToAppend = relatedTicketsSection;
       description = description
         ? `${description}\n\n${relatedTicketsSection}`
@@ -2110,7 +2118,7 @@ async function main() {
   if (agentVersionInfo) {
     const versionSection = generateAgentVersionSection(agentVersionInfo);
     if (versionSection) {
-      console.log("🤖 檢測到 Agent 版本資訊，將添加到 MR description 最下方\n");
+      logProgress("🤖 檢測到 Agent 版本資訊，將添加到 MR description 最下方\n");
       agentVersionSectionToAppend = versionSection;
       description = description
         ? `${description}\n\n${versionSection}`
@@ -2122,7 +2130,7 @@ async function main() {
   description = appendAgentSignature(description);
 
   // 根據 Jira ticket 決定 labels（不再自動分析 v3/v4，由外部傳入）
-  console.log("🔍 分析 Jira ticket 信息...\n");
+  logProgress("🔍 分析 Jira ticket 信息...\n");
   let labels = [];
   const adaptAllowedLabelSet = getAdaptAllowedLabelSet();
 
@@ -2135,7 +2143,7 @@ async function main() {
   if (labelResult.releaseBranch) {
     const originalTargetBranch = targetBranch;
     targetBranch = labelResult.releaseBranch;
-    console.log(
+    logProgress(
       `   → 檢測到 Hotfix，自動設置 target branch: ${originalTargetBranch} → ${targetBranch}\n`,
     );
   }
@@ -2151,7 +2159,7 @@ async function main() {
   }
 
   if (labels.length > 0) {
-    console.log(`🏷️  自動產生的 labels: ${labels.join(", ")}\n`);
+    logProgress(`🏷️  自動產生的 labels: ${labels.join(", ")}\n`);
   }
 
   // 獲取專案可用 labels 清單並驗證外部傳入的 labels
@@ -2175,7 +2183,7 @@ async function main() {
 
   // 驗證並過濾外部傳入的 labels
   if (externalLabels.length > 0) {
-    console.log(`🏷️  外部傳入的 labels: ${externalLabels.join(", ")}`);
+    logProgress(`🏷️  外部傳入的 labels: ${externalLabels.join(", ")}`);
     const validationResult = validateAndFilterLabels(
       externalLabels,
       availableLabelsData,
@@ -2193,25 +2201,25 @@ async function main() {
     }
 
     if (validationResult.invalid.length > 0) {
-      console.log(
+      logProgress(
         `\n⚠️  已過濾 ${validationResult.invalid.length} 個不存在的 labels，僅使用有效的 labels\n`,
       );
     }
 
-    console.log(`🏷️  最終 labels: ${labels.join(", ")}\n`);
+    logProgress(`🏷️  最終 labels: ${labels.join(", ")}\n`);
   } else if (labels.length > 0) {
-    console.log(`🏷️  將添加 labels: ${labels.join(", ")}\n`);
+    logProgress(`🏷️  將添加 labels: ${labels.join(", ")}\n`);
   }
 
   // Hotfix target branch 確認
   const hasHotfixLabel = labels.includes("Hotfix");
   const isReleaseBranch = /^release\//.test(targetBranch);
   if (hasHotfixLabel && !isReleaseBranch && userExplicitlySetTarget) {
-    console.log(
+    logProgress(
       "⚠️  檢測到 Hotfix label，但用戶明確指定的 target branch 不是 release/*\n",
     );
-    console.log(`   當前 target branch: ${targetBranch}`);
-    console.log(`   Hotfix 通常應該合併到 release/* 分支\n`);
+    logProgress(`   當前 target branch: ${targetBranch}`);
+    logProgress(`   Hotfix 通常應該合併到 release/* 分支\n`);
 
     await new Promise((resolve) => {
       const rl = readline.createInterface({
@@ -2226,7 +2234,7 @@ async function main() {
           const confirmed =
             answer.toLowerCase() === "y" || answer.toLowerCase() === "yes";
           if (!confirmed) {
-            console.log(
+            logProgress(
               "\n❌ 已取消建立 MR。請確認 target branch 是否正確。\n",
             );
             process.exit(0);
@@ -2249,7 +2257,7 @@ async function main() {
     if (isGlabAuthenticated(hostname)) {
       existingMRId = findExistingMRWithGlab(currentBranch);
       if (existingMRId) {
-        console.log(`\n🔍 發現現有 MR: !${existingMRId}\n`);
+        logProgress(`\n🔍 發現現有 MR: !${existingMRId}\n`);
         existingMR = { iid: existingMRId };
         existingMRDetails = getMRDetailsWithGlab(existingMRId);
       }
@@ -2268,7 +2276,7 @@ async function main() {
         );
         if (existingMR) {
           existingMRId = existingMR.iid;
-          console.log(`\n🔍 發現現有 MR: !${existingMRId}\n`);
+          logProgress(`\n🔍 發現現有 MR: !${existingMRId}\n`);
         }
       }
       if (existingMR && existingMRId && !existingMRDetails) {
@@ -2309,7 +2317,7 @@ async function main() {
       process.exit(1);
     }
 
-    console.log(
+    logProgress(
       `\n🔁 已存在 MR（!${existingMRId}），將改用 update-mr 更新...\n`,
     );
 
@@ -2387,22 +2395,22 @@ async function main() {
           return r.id ? `User ID: ${r.id}` : "Unknown";
         })
         .join(", ");
-      console.log(`ℹ️  現有 MR 已有 reviewer: ${existingReviewers}`);
-      console.log(`   用戶未明確指定 reviewer，將保留現有 reviewer\n`);
+      logProgress(`ℹ️  現有 MR 已有 reviewer: ${existingReviewers}`);
+      logProgress(`   用戶未明確指定 reviewer，將保留現有 reviewer\n`);
     }
   }
 
-  console.log("\n🔨 建立 Merge Request...\n");
+  logProgress("\n🔨 建立 Merge Request...\n");
 
-  console.log(`🌿 來源分支: ${currentBranch}`);
-  console.log(`🎯 目標分支: ${targetBranch}`);
-  console.log(`📝 標題: ${mrTitle}`);
-  console.log(`📋 Draft: ${draft ? "是" : "否"}`);
-  console.log(`👤 Reviewer: ${reviewer}`);
+  logProgress(`🌿 來源分支: ${currentBranch}`);
+  logProgress(`🎯 目標分支: ${targetBranch}`);
+  logProgress(`📝 標題: ${mrTitle}`);
+  logProgress(`📋 Draft: ${draft ? "是" : "否"}`);
+  logProgress(`👤 Reviewer: ${reviewer}`);
   if (assignee) {
-    console.log(`👤 Assignee: ${assignee}`);
+    logProgress(`👤 Assignee: ${assignee}`);
   }
-  console.log("");
+  logProgress("");
 
   // 使用 glab CLI
   if (hasGlab()) {
@@ -2410,54 +2418,54 @@ async function main() {
     const sshConfigured = isSSHConfigured(hostname);
 
     if (sshConfigured) {
-      console.log("✅ 檢測到 SSH 已配置，將使用 SSH 進行 Git 操作\n");
+      logProgress("✅ 檢測到 SSH 已配置，將使用 SSH 進行 Git 操作\n");
     }
 
     if (!isGlabAuthenticated(hostname)) {
-      console.log("🔐 檢測到 glab 尚未登入，需要進行認證...\n");
+      logProgress("🔐 檢測到 glab 尚未登入，需要進行認證...\n");
 
       if (sshConfigured) {
-        console.log(
+        logProgress(
           "💡 你的 SSH 已配置，只需要 Personal Access Token 進行 API 調用",
         );
-        console.log("   Git 操作將自動使用 SSH 協議\n");
+        logProgress("   Git 操作將自動使用 SSH 協議\n");
       }
 
       let token = getGitLabToken();
 
       if (!token) {
-        console.log("📝 首次使用需要設置 GitLab Personal Access Token\n");
+        logProgress("📝 首次使用需要設置 GitLab Personal Access Token\n");
 
         try {
           token = await getTokenFromUser();
         } catch (error) {
           console.error("❌ 無法獲取 token");
-          console.log("\n💡 你也可以稍後設置 token 並重新執行：");
-          console.log('   export GITLAB_TOKEN="YOUR_TOKEN"');
-          console.log('   pnpm run create-mr --reviewer="@william.chiang"\n');
-          console.log("嘗試使用 API token 方式...\n");
+          logProgress("\n💡 你也可以稍後設置 token 並重新執行：");
+          logProgress('   export GITLAB_TOKEN="YOUR_TOKEN"');
+          logProgress('   pnpm run create-mr --reviewer="@william.chiang"\n');
+          logProgress("嘗試使用 API token 方式...\n");
         }
       }
 
       if (token) {
-        console.log("🔑 使用 token 登入 glab...");
+        logProgress("🔑 使用 token 登入 glab...");
         try {
           loginGlabWithToken(hostname, token, sshConfigured);
-          console.log("✅ 登入成功！\n");
+          logProgress("✅ 登入成功！\n");
           if (sshConfigured) {
-            console.log("✅ Git 操作將使用 SSH 協議\n");
+            logProgress("✅ Git 操作將使用 SSH 協議\n");
           }
         } catch (error) {
           console.error(`❌ 登入失敗: ${error.message}\n`);
-          console.log("嘗試使用 API token 方式...\n");
+          logProgress("嘗試使用 API token 方式...\n");
         }
       }
     } else if (sshConfigured) {
-      console.log("✅ Git 操作將使用 SSH 協議\n");
+      logProgress("✅ Git 操作將使用 SSH 協議\n");
     }
 
     if (isGlabAuthenticated(hostname)) {
-      console.log("✅ 使用 GitLab CLI (glab) 建立 MR...\n");
+      logProgress("✅ 使用 GitLab CLI (glab) 建立 MR...\n");
       try {
         const result = createMRWithGlab(
           currentBranch,
@@ -2470,7 +2478,7 @@ async function main() {
           labels,
         );
 
-        console.log("\n✅ MR 建立成功！\n");
+        logProgress("\n✅ MR 建立成功！\n");
 
         const mrUrlMatch = result.match(
           /https:\/\/[^\s]+merge_requests\/(\d+)/,
@@ -2478,25 +2486,25 @@ async function main() {
         if (mrUrlMatch) {
           const mrUrl = mrUrlMatch[0];
           const mrId = mrUrlMatch[1];
-          console.log(`🔗 MR 連結: [MR !${mrId}](${mrUrl})`);
-          console.log(`📊 MR ID: !${mrId}`);
+          logProgress(`🔗 MR 連結: [MR !${mrId}](${mrUrl})`);
+          logProgress(`📊 MR ID: !${mrId}`);
 
           const jiraTickets = extractJiraTickets(description);
           if (jiraTickets.length > 0) {
             const jiraLinks = formatJiraTicketsAsLinks(jiraTickets);
-            console.log(`🎫 關聯 Jira: ${jiraLinks}`);
+            logProgress(`🎫 關聯 Jira: ${jiraLinks}`);
           }
-          console.log("");
+          logProgress("");
 
           if (skipReview) {
-            console.log("⏭️  跳過 AI review（--no-review）\n");
+            logProgress("⏭️  跳過 AI review（--no-review）\n");
           } else if (!getCompassApiToken()) {
-            console.log("⏭️  跳過 AI review（缺少 COMPASS_API_TOKEN）\n");
+            logProgress("⏭️  跳過 AI review（缺少 COMPASS_API_TOKEN）\n");
           } else {
-            console.log("🤖 正在提交 AI review...");
+            logProgress("🤖 正在提交 AI review...");
             try {
               await submitAIReview(mrUrl);
-              console.log("✅ AI review 已提交\n");
+              logProgress("✅ AI review 已提交\n");
 
               try {
                 const projectInfoForNote = getProjectInfo();
@@ -2508,7 +2516,7 @@ async function main() {
                   mrId,
                   headSha,
                 );
-                console.log(`🧷 已寫入 AI_REVIEW_SHA 狀態: ${headSha}\n`);
+                logProgress(`🧷 已寫入 AI_REVIEW_SHA 狀態: ${headSha}\n`);
               } catch (error) {
                 console.error(
                   `⚠️  AI_REVIEW_SHA 狀態寫入失敗（不影響 MR 建立）: ${error.message}\n`,
@@ -2519,17 +2527,17 @@ async function main() {
             }
           }
         } else {
-          console.log(result);
+          logProgress(result);
           if (!skipReview) {
-            console.log("⚠️  無法提取 MR URL，跳過 AI review 提交\n");
+            logProgress("⚠️  無法提取 MR URL，跳過 AI review 提交\n");
           } else {
-            console.log("⏭️  跳過 AI review（--no-review）\n");
+            logProgress("⏭️  跳過 AI review（--no-review）\n");
           }
         }
         return;
       } catch (error) {
         console.error(`\n❌ glab 執行失敗: ${error.message}\n`);
-        console.log("嘗試使用 API token 方式...\n");
+        logProgress("嘗試使用 API token 方式...\n");
       }
     }
   }
@@ -2568,19 +2576,19 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`📍 項目: ${projectInfo.fullPath}`);
+  logProgress(`📍 項目: ${projectInfo.fullPath}`);
 
   // 查找 reviewer ID
   let reviewerId = null;
   if (reviewer) {
     if (/^\d+$/.test(reviewer)) {
       reviewerId = parseInt(reviewer, 10);
-      console.log(`✅ 使用用戶 ID: ${reviewerId}\n`);
+      logProgress(`✅ 使用用戶 ID: ${reviewerId}\n`);
     } else {
-      console.log(`🔍 查找用戶: ${reviewer}...`);
+      logProgress(`🔍 查找用戶: ${reviewer}...`);
       reviewerId = await findUserId(token, projectInfo.host, reviewer);
       if (reviewerId) {
-        console.log(`✅ 找到用戶 ID: ${reviewerId}\n`);
+        logProgress(`✅ 找到用戶 ID: ${reviewerId}\n`);
       } else {
         console.error(`\n❌ 未找到用戶: ${reviewer}`);
         console.error(`\n💡 請在 Cursor chat 中選擇 reviewer：`);
@@ -2596,7 +2604,7 @@ async function main() {
   }
 
   // create-mr 僅用於建立新 MR（更新請用 update-mr）
-  console.log("🚀 正在建立 MR...");
+  logProgress("🚀 正在建立 MR...");
   try {
     const mr = await createMR(
       token,
@@ -2612,35 +2620,19 @@ async function main() {
       labels,
     );
 
-    console.log("\n✅ MR 建立成功！\n");
-    console.log(`🔗 MR 連結: [MR !${mr.iid}](${mr.web_url})`);
-    console.log(`📊 MR ID: !${mr.iid}`);
-    console.log(`📝 標題: ${mr.title}`);
-    console.log(`📋 狀態: ${mr.work_in_progress ? "Draft" : "Open"}`);
-    if (labels.length > 0) {
-      console.log(`🏷️  Labels: ${labels.join(", ")}`);
-    }
-    if (mr.reviewers && mr.reviewers.length > 0) {
-      console.log(
-        `👤 Reviewers: ${mr.reviewers.map((r) => r.username).join(", ")}`,
-      );
-    }
-    const jiraTickets = extractJiraTickets(description);
-    if (jiraTickets.length > 0) {
-      const jiraLinks = formatJiraTicketsAsLinks(jiraTickets);
-      console.log(`🎫 關聯 Jira: ${jiraLinks}`);
-    }
-    console.log("");
-
+    let aiReviewStatus = "skipped";
     if (skipReview) {
-      console.log("⏭️  跳過 AI review（--no-review）\n");
+      logProgress("⏭️  跳過 AI review（--no-review）\n");
+      aiReviewStatus = "skipped-no-review";
     } else if (!getCompassApiToken()) {
-      console.log("⏭️  跳過 AI review（缺少 COMPASS_API_TOKEN）\n");
+      logProgress("⏭️  跳過 AI review（缺少 COMPASS_API_TOKEN）\n");
+      aiReviewStatus = "skipped-missing-token";
     } else {
-      console.log("🤖 正在提交 AI review...");
+      logProgress("🤖 正在提交 AI review...");
       try {
         await submitAIReview(mr.web_url);
-        console.log("✅ AI review 已提交\n");
+        logProgress("✅ AI review 已提交\n");
+        aiReviewStatus = "submitted";
 
         try {
           const headSha = exec("git rev-parse HEAD", { silent: true }).trim();
@@ -2651,7 +2643,7 @@ async function main() {
             mr.iid,
             headSha,
           );
-          console.log(`🧷 已寫入 AI_REVIEW_SHA 狀態: ${headSha}\n`);
+          logProgress(`🧷 已寫入 AI_REVIEW_SHA 狀態: ${headSha}\n`);
         } catch (error) {
           console.error(
             `⚠️  AI_REVIEW_SHA 狀態寫入失敗（不影響 MR 建立）: ${error.message}\n`,
@@ -2659,8 +2651,33 @@ async function main() {
         }
       } catch (error) {
         console.error(`⚠️  AI review 提交失敗: ${error.message}\n`);
+        aiReviewStatus = "failed";
       }
     }
+
+    const jiraTickets = extractJiraTickets(description);
+    const reviewers =
+      mr.reviewers?.map((reviewer) => reviewer.username).filter(Boolean) || [];
+
+    writeScriptResult(
+      {
+        source: "gitlab",
+        action: "create-mr",
+        mr: {
+          iid: mr.iid,
+          id: mr.id,
+          webUrl: mr.web_url,
+          title: mr.title,
+          draft: Boolean(mr.work_in_progress),
+          labels,
+          reviewers,
+          jiraTickets,
+        },
+        aiReview: aiReviewStatus,
+        message: `MR !${mr.iid} created: ${mr.web_url}`,
+      },
+      outputFormat,
+    );
   } catch (error) {
     console.error(`\n❌ ${error.message}\n`);
     process.exit(1);

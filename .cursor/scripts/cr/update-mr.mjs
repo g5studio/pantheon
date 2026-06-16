@@ -67,6 +67,11 @@ import {
   appendAgentSignature,
   stripTrailingAgentSignature,
 } from "../utilities/agent-signature.mjs";
+import {
+  logProgress,
+  resolveOutputFormat,
+  writeScriptResult,
+} from "../utilities/external-output.mjs";
 
 const projectRoot = getProjectRoot();
 
@@ -708,6 +713,9 @@ function upsertDevelopmentReport(existingDescription, reportMarkdown) {
 async function main() {
   const hostname = "gitlab.service-hub.tech";
   const args = process.argv.slice(2);
+  const outputFormat = resolveOutputFormat(
+    args.find((arg) => arg.startsWith("--format="))?.split("=")[1],
+  );
 
   if (args.includes("--review") || args.includes("--force-review")) {
     console.error("\n❌ update-mr 已移除 --review / --force-review\n");
@@ -847,7 +855,7 @@ async function main() {
       process.exit(1);
     }
     // 如果 glab 已登入但沒 token，仍可嘗試要求用戶輸入 token 以走 API（避免 glab update flags 差異）
-    console.log(
+    logProgress(
       "\n🔐 請輸入 GitLab Personal Access Token 以更新 MR（需要 api 權限）\n"
     );
     const rl = readline.createInterface({
@@ -878,7 +886,7 @@ async function main() {
       console.error(`\n❌ 找不到 reviewer: ${requestedReviewer}\n`);
       process.exit(1);
     }
-    console.log(`\n👤 將更新 reviewer: ${requestedReviewer}\n`);
+    logProgress(`\n👤 將更新 reviewer: ${requestedReviewer}\n`);
   }
 
   // 🚨 CRITICAL: update-mr 若要新增 labels，必須先通過 adapt.json 可用性白名單
@@ -893,9 +901,9 @@ async function main() {
     labelsToAdd = adaptCheck.valid;
 
     if (labelsToAdd.length > 0) {
-      console.log(`\n🏷️  將新增 labels: ${labelsToAdd.join(", ")}\n`);
+      logProgress(`\n🏷️  將新增 labels: ${labelsToAdd.join(", ")}\n`);
     } else {
-      console.log("\n🏷️  未提供任何可用 labels（或已全數被過濾），將略過 labels 更新\n");
+      logProgress("\n🏷️  未提供任何可用 labels（或已全數被過濾），將略過 labels 更新\n");
     }
   }
 
@@ -909,23 +917,34 @@ async function main() {
     reviewerId
   );
 
-  console.log("\n✅ MR 更新成功！\n");
-  console.log(`🔗 MR 連結: [MR !${updated.iid}](${updated.web_url})`);
-  console.log(`📊 MR ID: !${updated.iid}`);
+  logProgress("\n✅ MR 更新成功！\n");
+
+  writeScriptResult(
+    {
+      source: "gitlab",
+      action: "update-mr",
+      mr: {
+        iid: updated.iid,
+        webUrl: updated.web_url,
+      },
+      message: `MR !${updated.iid} updated: ${updated.web_url}`,
+    },
+    outputFormat,
+  );
 
   // AI review 規則（根源級）：
   // - 用戶可用 --no-review 明確跳過
   // - 未明確跳過時預設要送審，但前提是「MR head SHA 相對於上次已送審狀態」有變化
   // - 沒有 new commit 時不可送審（無繞過參數）
   if (skipReview) {
-    console.log("\n⏭️  跳過 AI review（--no-review）\n");
+    logProgress("\n⏭️  跳過 AI review（--no-review）\n");
     return;
   }
 
   // 若未配置 COMPASS_API_TOKEN，視為環境不支援 AI review：僅跳過送審，其餘流程照常
   // 並且不進行任何 new commit / SHA / marker 判斷（避免不必要的耦合）
   if (!getCompassApiToken()) {
-    console.log("\n⏭️  跳過 AI review（缺少 COMPASS_API_TOKEN）\n");
+    logProgress("\n⏭️  跳過 AI review（缺少 COMPASS_API_TOKEN）\n");
     return;
   }
 
@@ -958,7 +977,7 @@ async function main() {
   }
 
   if (lastReviewedSha && lastReviewedSha === mrHeadSha) {
-    console.log(
+    logProgress(
       "\n⏭️  未偵測到 new commit（MR head SHA 與上次已送審 SHA 相同），跳過 AI review\n"
     );
     return;
@@ -984,10 +1003,10 @@ async function main() {
     process.exit(1);
   }
 
-  console.log("🤖 偵測到 new commit，正在提交 AI review...");
+  logProgress("🤖 偵測到 new commit，正在提交 AI review...");
   try {
     await submitAIReview(mrWebUrl);
-    console.log("✅ AI review 已提交\n");
+    logProgress("✅ AI review 已提交\n");
   } catch (error) {
     console.error(`\n❌ AI review 提交失敗: ${error.message}\n`);
     process.exit(1);
@@ -1001,7 +1020,7 @@ async function main() {
       mrIid,
       mrHeadSha
     );
-    console.log(`🧷 已更新 AI_REVIEW_SHA 狀態: ${mrHeadSha}\n`);
+    logProgress(`🧷 已更新 AI_REVIEW_SHA 狀態: ${mrHeadSha}\n`);
   } catch (error) {
     console.error(`\n❌ 無法寫入 AI_REVIEW_SHA 狀態: ${error.message}\n`);
     process.exit(1);
