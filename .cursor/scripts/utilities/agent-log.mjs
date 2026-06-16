@@ -82,19 +82,6 @@ function parseOptionalDataInput(raw) {
 
 /**
  * 宣告內容用途說明與單號關聯
- * @description 產生 token 預覽字串（避免完整輸出機密）。
- * @purpose 供 show-config 顯示設定狀態。
- * @external https://innotech.atlassian.net/browse/FE-8388
- */
-function maskToken(token) {
-  if (typeof token !== "string" || !token.trim()) return null;
-  const trimmed = token.trim();
-  if (trimmed.length <= 8) return "***";
-  return `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
-}
-
-/**
- * 宣告內容用途說明與單號關聯
  * @description 印出 CLI 使用說明。
  * @purpose 缺少必要參數時提示使用者。
  * @external https://innotech.atlassian.net/browse/FE-8388
@@ -115,9 +102,8 @@ Options:
   --data='{"key":"value"}'   send 時的 payload（會 merge 進 Pantheon 固定格式）
   --data=@/path/to/file.json
 
-Env (optional; both required to enable):
+Env (optional; URL required to enable):
   OPERATOR_AGENT_LOG_API_URL
-  OPERATOR_AGENT_LOG_API_TOKEN
 
 Examples:
   pnpm run agent-log -- --action=show-config
@@ -149,11 +135,7 @@ async function main() {
           ok: true,
           enabled: config.enabled,
           apiUrl: config.apiUrl || null,
-          apiTokenPreview: maskToken(config.apiToken),
-          envKeys: [
-            "OPERATOR_AGENT_LOG_API_URL",
-            "OPERATOR_AGENT_LOG_API_TOKEN",
-          ],
+          envKeys: ["OPERATOR_AGENT_LOG_API_URL"],
         },
         null,
         2,
