@@ -39,12 +39,17 @@ import {
 } from "fs";
 import { extname, join, relative } from "path";
 import { getProjectRoot } from "./env-loader.mjs";
+import {
+  CODEGRAPH_NPX_PREFIX,
+  ensureCodegraphIndex,
+  resolveCodegraphRuntime,
+} from "./codegraph-setup.mjs";
 
 const projectRoot = getProjectRoot();
 const INDEX_FILE_NAME = "query-file-index.json";
 const indexFilePath = join(projectRoot, INDEX_FILE_NAME);
 const codegraphDirPath = join(projectRoot, ".codegraph");
-const codegraphNpxPrefix = "npx -y @colbymchenry/codegraph";
+const codegraphNpxPrefix = CODEGRAPH_NPX_PREFIX;
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 200;
@@ -343,53 +348,8 @@ function runCommand(command) {
   }).trim();
 }
 
-function hasCodegraphCli() {
-  try {
-    runCommand("codegraph --version");
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function hasCodegraphIndex() {
   return existsSync(codegraphDirPath);
-}
-
-function hasCodegraphNpx() {
-  try {
-    runCommand(`${codegraphNpxPrefix} --version`);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function resolveCodegraphRuntime() {
-  if (hasCodegraphCli()) {
-    return { available: true, mode: "cli", prefix: "codegraph" };
-  }
-  if (hasCodegraphNpx()) {
-    return { available: true, mode: "npx", prefix: codegraphNpxPrefix };
-  }
-  return { available: false, mode: null, prefix: null };
-}
-
-function ensureCodegraphIndex(runtime) {
-  if (!runtime?.available || !runtime.prefix) {
-    return { ok: false, initialized: false };
-  }
-  if (hasCodegraphIndex()) {
-    return { ok: true, initialized: false };
-  }
-
-  try {
-    runCommand(`${runtime.prefix} init`);
-  } catch {
-    return { ok: false, initialized: false };
-  }
-
-  return { ok: hasCodegraphIndex(), initialized: hasCodegraphIndex() };
 }
 
 function looksLikeSourcePath(value) {
@@ -556,8 +516,11 @@ function main() {
   }
 
   const pathFilters = parsePathFilters(args.path);
-  const codegraphRuntime = resolveCodegraphRuntime();
-  const codegraphInitResult = ensureCodegraphIndex(codegraphRuntime);
+  const codegraphRuntime = resolveCodegraphRuntime(projectRoot);
+  const codegraphInitResult = ensureCodegraphIndex(
+    projectRoot,
+    codegraphRuntime,
+  );
   const canUseCodegraph = codegraphRuntime.available && codegraphInitResult.ok;
   const useCodegraph =
     args.provider === "codegraph"

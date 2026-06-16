@@ -34,6 +34,7 @@ import {
 } from "fs";
 import { execSync } from "child_process";
 import { dirname, join } from "path";
+import { fileURLToPath, pathToFileURL } from "url";
 
 /**
  * 宣告內容用途說明與單號關聯
@@ -342,52 +343,44 @@ function updateGitignore(cwd, installFolderName) {
 /**
  * 宣告內容用途說明與單號關聯
  *
- * @description 自動準備 CodeGraph（best effort，不阻斷主流程）。
- * @purpose 讓掛載 Pantheon 的專案在執行 descend/oracle 後可直接受益於外部工具查詢。
+ * @description 在 pull 最新 Pantheon 後動態載入 codegraph-setup 模組並執行 init。
+ * @purpose 確保 pantheon:oracle 即使從舊版 oracle.mjs 啟動，仍會使用最新 CodeGraph setup 邏輯（與 descend 一致）。
  * @external https://innotech.atlassian.net/browse/FE-8384
  */
-function setupCodegraph(cwd) {
-  const codegraphDir = join(cwd, ".codegraph");
+async function runCodegraphSetup(cwd) {
+  console.log("");
+  console.log("🔍 自動準備 CodeGraph...");
 
-  if (existsSync(codegraphDir)) {
-    log.success("CodeGraph 已初始化（.codegraph 已存在）");
+  const setupModuleCandidates = [
+    join(
+      cwd,
+      ".pantheon",
+      ".cursor",
+      "scripts",
+      "utilities",
+      "codegraph-setup.mjs",
+    ),
+    join(dirname(fileURLToPath(import.meta.url)), "codegraph-setup.mjs"),
+  ];
+
+  const setupModulePath = setupModuleCandidates.find((candidate) =>
+    existsSync(candidate),
+  );
+
+  if (!setupModulePath) {
+    log.warning("找不到 codegraph-setup 模組，跳過 CodeGraph 初始化");
     return;
   }
 
-  console.log("");
-  log.info("檢查並初始化 CodeGraph...");
-
-  const hasCodegraphCli = !!exec("codegraph --version", {
-    cwd,
-    silent: true,
-    throwOnError: false,
-  });
-
-  if (hasCodegraphCli) {
-    try {
-      exec("codegraph init", { cwd, silent: true });
-      if (existsSync(codegraphDir)) {
-        log.success("已完成 CodeGraph 初始化（使用本機 codegraph CLI）");
-        return;
-      }
-    } catch (error) {
-      log.warning(`本機 codegraph CLI 初始化失敗：${error.message}`);
-    }
-  }
-
   try {
-    exec("npx -y @colbymchenry/codegraph init", { cwd, silent: true });
-    if (existsSync(codegraphDir)) {
-      log.success("已完成 CodeGraph 初始化（使用 npx @colbymchenry/codegraph）");
-      return;
-    }
+    const { setupCodegraph } = await import(pathToFileURL(setupModulePath).href);
+    setupCodegraph({ cwd, log });
   } catch (error) {
-    log.warning(`npx CodeGraph 初始化失敗：${error.message}`);
+    log.warning(`CodeGraph 初始化失敗：${error.message}`);
+    log.warning(
+      "查詢流程會自動回退到本地索引模式（不影響 Oracle 同步）",
+    );
   }
-
-  log.warning(
-    "CodeGraph 初始化未完成，查詢流程會自動回退到本地索引模式（不影響 Oracle 同步）",
-  );
 }
 
 /**
@@ -566,9 +559,9 @@ async function main() {
   updateGitignore(cwd, installFolderName);
 
   // ========================================
-  // 7. 自動準備 CodeGraph（best effort）
+  // 7. 自動準備 CodeGraph（best effort，pull 後動態載入最新 setup 模組）
   // ========================================
-  setupCodegraph(cwd);
+  await runCodegraphSetup(cwd);
 
   // ========================================
   // 8. 檢查並建立環境變數配置檔

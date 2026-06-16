@@ -68,8 +68,8 @@ npm run pantheon:oracle
 
 | 腳本 | 功能 | 平台支援 |
 |---|---|---|
-| `pantheon:descend` | 初始化 Pantheon 並複製安裝 tooling（透過 git clone） | Windows / macOS / Linux |
-| `pantheon:oracle` | 更新 Pantheon 到最新版本，重建本地安裝內容，自動建立 `.env.local` | Windows / macOS / Linux |
+| `pantheon:descend` | 初始化 Pantheon 並複製安裝 tooling（透過 git clone），自動準備 CodeGraph（best effort），檢查並建立 `.env.local`（如不存在） | Windows / macOS / Linux |
+| `pantheon:oracle` | 更新 Pantheon 到最新版本，重建本地安裝內容，自動準備 CodeGraph（best effort），檢查並建立 `.env.local`（如不存在） | Windows / macOS / Linux |
 
 ### 執行效果
 
@@ -78,13 +78,15 @@ npm run pantheon:oracle
 2. 將 Pantheon 的 `commands`、`scripts`、`skills` 複製安裝到 `.cursor/*/{deities}/` 與 `.agents/*/{deities}/` 下
 3. 將 `.cursor/rules/{deities}/` 安裝到目標專案，保留 Cursor 規則能力
 4. 自動將 `.pantheon/`、`.cursor/.env.local`、`.cursor/.../{deities}/`、`.agents/.../{deities}/` 加入目標專案 `.gitignore`
-5. 自動建立 `.cursor/.env.local` 環境變數配置檔（從模板）
+5. 自動準備 CodeGraph（best effort）
+6. 檢查並建立 `.cursor/.env.local` 環境變數配置檔（如不存在，從模板建立）
 
 `pantheon:oracle` 執行後會：
 1. 拉取 Pantheon 最新內容
 2. 重建 `.cursor` 與 `.agents` 下的 Pantheon 安裝內容
 3. 更新或確認 `.gitignore`
-4. 檢查並建立 `.env.local`（如不存在）
+4. 自動準備 CodeGraph（best effort，與 `pantheon:descend` 相同邏輯）
+5. 檢查並建立 `.env.local`（如不存在）
 
 ## 掛載使用說明
 
