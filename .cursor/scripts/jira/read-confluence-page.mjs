@@ -1,61 +1,41 @@
 #!/usr/bin/env node
 
 /**
- * === 宣告內容用途說明與單號關聯 ===
- * @description 本區塊以下宣告需標示用途與單號關聯
- * @purpose 統一定義宣告級註解格式與單號追溯規則
- */
-/**
+ * 檔案用途區塊
  * @module read-confluence-page
- * @purpose 讀取 Confluence 頁面內容，並透過 Jira API token（Basic Auth）呼叫 Confluence REST API。
- * @external https://innotech.atlassian.net/browse/FE-7893
- */
-
-/**
- * === 宣告內容用途說明與單號關聯 ===
- * @description 讀取流程支援用
- */
-/**
- * 宣告內容用途說明與單號關聯
- * @description 讀取 Confluence 頁面內容
- * @purpose 使用 Jira API token 透過 Confluence API 訪問頁面
+ * @purpose 讀取 Confluence 頁面並以 Agent-first 格式輸出
+ * @external https://innotech.atlassian.net/browse/FE-8389
  */
 
 import { getJiraConfig } from "../utilities/env-loader.mjs";
+import {
+  buildMeta,
+  logProgress,
+  parseExternalOutputArgs,
+  truncateText,
+  writeScriptError,
+  writeScriptResult,
+} from "../utilities/external-output.mjs";
 
-// 從 Confluence URL 解析空間和頁面 ID
 /**
- * 宣告內容用途說明與單號關聯
- * @description 解析 Confluence URL 以取得 spaceKey 與 pageId。
- * @purpose 協助後續呼叫 Confluence REST API。
- * @external https://innotech.atlassian.net/browse/FE-7893
+ * @description 解析 Confluence URL
+ * @external https://innotech.atlassian.net/browse/FE-8389
  */
-function parseConfluenceUrl(url) {
-  // 格式: https://innotech.atlassian.net/wiki/spaces/{spaceKey}/pages/{pageId}/...
-  /**
-   * 宣告內容用途說明與單號關聯
-   * @description 以正則擷取 URL 中的 spaceKey 與 pageId。
-   * @purpose 支援固定路徑格式解析。
-   * @external https://innotech.atlassian.net/browse/FE-7893
-   */
-  const match = url.match(/\/wiki\/spaces\/([^\/]+)\/pages\/(\d+)(?:\/|$)/);
-  if (match) {
-    return {
-      spaceKey: match[1],
-      pageId: match[2],
-    };
-  }
-  return null;
+export function parseConfluenceUrl(url) {
+  const match = url.match(/\/wiki\/spaces\/([^/]+)\/pages\/(\d+)(?:\/|$)/);
+  if (!match) return null;
+
+  return {
+    spaceKey: match[1],
+    pageId: match[2],
+  };
 }
 
-// 提取 ADF 格式的文本內容
 /**
- * 宣告內容用途說明與單號關聯
- * @description 將 ADF（Atlassian Document Format）內容轉換成純文字。
- * @purpose 讓頁面內容可直接輸出或後續處理。
- * @external https://innotech.atlassian.net/browse/FE-7893
+ * @description ADF 轉純文字
+ * @external https://innotech.atlassian.net/browse/FE-8389
  */
-function extractTextFromADF(content) {
+export function extractTextFromADF(content) {
   if (!content) return "";
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
@@ -73,47 +53,23 @@ function extractTextFromADF(content) {
   return "";
 }
 
-// 讀取 Confluence 頓面
 /**
- * 宣告內容用途說明與單號關聯
- * @description 依 Confluence URL 解析後呼叫 Confluence REST API，取得頁面標題、空間與內容。
- * @purpose 供 CLI 輸出結構化頁面結果（含 raw 原始資料）。
- * @external https://innotech.atlassian.net/browse/FE-7893
+ * @description 讀取 Confluence 頁面
+ * @external https://innotech.atlassian.net/browse/FE-8389
  */
-async function readConfluencePage(url) {
-  /**
-   * 宣告內容用途說明與單號關聯
-   * @description 取得 Jira/Confluence 呼叫所需設定（如 email、apiToken、baseUrl）。
-   * @purpose 支援 Basic Auth 與 API 端點組裝。
-   * @external https://innotech.atlassian.net/browse/FE-7893
-   */
+export async function readConfluencePage(url, userOptions = {}) {
+  const options = {
+    maxChars: 8000,
+    includeRaw: false,
+    ...userOptions,
+  };
+
   const config = getJiraConfig();
-  /**
-   * 宣告內容用途說明與單號關聯
-   * @description 將 email 與 apiToken 組合成 Basic Auth 的 base64 字串。
-   * @purpose 用於呼叫 Confluence REST API 的授權 header。
-   */
-  const auth = Buffer.from(`${config.email}:${config.apiToken}`).toString(
-    "base64"
-  );
-  // 注意：此處僅調整尾端斜線，避免拼接 URL 出現雙斜線
-  /**
-   * 宣告內容用途說明與單號關聯
-   * @description 讓 baseUrl 不以 "/" 結尾，以避免組 URL 時出現雙斜線。
-   * @purpose 確保 API URL 正確串接。
-   * @external https://innotech.atlassian.net/browse/FE-7893
-   */
+  const auth = Buffer.from(`${config.email}:${config.apiToken}`).toString("base64");
   const baseUrl = config.baseUrl.endsWith("/")
     ? config.baseUrl.slice(0, -1)
     : config.baseUrl;
 
-  // 解析 URL
-  /**
-   * 宣告內容用途說明與單號關聯
-   * @description 解析傳入的 Confluence URL，取得 spaceKey 與 pageId。
-   * @purpose 進一步組裝 REST API 端點。
-   * @external https://innotech.atlassian.net/browse/FE-7893
-   */
   const parsed = parseConfluenceUrl(url);
   if (!parsed) {
     throw new Error(
@@ -121,122 +77,113 @@ async function readConfluencePage(url) {
     );
   }
 
-  /**
-   * 宣告內容用途說明與單號關聯
-   * @description 解構解析結果中的 spaceKey 與 pageId。
-   * @purpose 供後續取得頁面內容。
-   * @external https://innotech.atlassian.net/browse/FE-7893
-   */
   const { spaceKey, pageId } = parsed;
-
-  // 使用 Confluence REST API 獲取頁面內容
-  // API 端點: /wiki/rest/api/content/{id}?expand=body.storage,version
   const apiUrl = `${baseUrl}/wiki/rest/api/content/${pageId}?expand=body.storage,body.view,version,space`;
 
-  try {
-    const response = await fetch(apiUrl, {
-      headers: {
-        Authorization: `Basic ${auth}`,
-        Accept: "application/json",
-      },
-    });
+  const response = await fetch(apiUrl, {
+    headers: {
+      Authorization: `Basic ${auth}`,
+      Accept: "application/json",
+    },
+  });
 
-    if (!response.ok) {
-      if (response.status === 404) {
-        throw new Error(`找不到 Confluence 頁面: ${pageId}`);
-      } else if (response.status === 401 || response.status === 403) {
-        throw new Error("Jira API Token 已過期或無權限，請聯繫 william.chiang");
-      } else {
-        throw new Error(
-          `獲取 Confluence 頁面失敗: ${response.status} ${response.statusText}`
-        );
-      }
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error(`找不到 Confluence 頁面: ${pageId}`);
     }
-
-    const data = await response.json();
-
-    // 提取頁面信息
-    const title = data.title || "無標題";
-    const space = data.space?.name || spaceKey;
-    const version = data.version?.number || 1;
-
-    // 提取內容（優先使用 storage 格式，如果沒有則使用 view 格式）
-    let content = "";
-    if (data.body?.storage?.value) {
-      // Storage 格式（ADF - Atlassian Document Format）
-      try {
-        const adfContent = JSON.parse(data.body.storage.value);
-        content = extractTextFromADF(adfContent);
-      } catch (e) {
-        // 如果不是 JSON，可能是 HTML 或其他格式
-        content = data.body.storage.value;
-      }
-    } else if (data.body?.view?.value) {
-      // View 格式（HTML）
-      content = data.body.view.value;
-    } else if (data.body?.storage?.representation === "wiki") {
-      // Wiki 格式
-      content = data.body.storage.value || "";
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("Jira API Token 已過期或無權限，請聯繫 william.chiang");
     }
-
-    return {
-      url,
-      pageId,
-      spaceKey,
-      space,
-      title,
-      version,
-      content,
-      raw: data, // 保留原始數據以便進一步處理
-    };
-  } catch (error) {
-    if (error.message.includes("Jira API Token")) {
-      throw error;
-    }
-    throw new Error(`讀取 Confluence 頁面失敗: ${error.message}`);
+    throw new Error(`獲取 Confluence 頁面失敗: ${response.status} ${response.statusText}`);
   }
+
+  const data = await response.json();
+
+  let contentRaw = "";
+  if (data.body?.storage?.value) {
+    try {
+      const adfContent = JSON.parse(data.body.storage.value);
+      contentRaw = extractTextFromADF(adfContent);
+    } catch {
+      contentRaw = data.body.storage.value;
+    }
+  } else if (data.body?.view?.value) {
+    contentRaw = data.body.view.value;
+  } else if (data.body?.storage?.representation === "wiki") {
+    contentRaw = data.body.storage.value || "";
+  }
+
+  const contentResult = truncateText(contentRaw, options.maxChars);
+
+  const payload = {
+    source: "confluence",
+    url,
+    pageId,
+    spaceKey,
+    space: data.space?.name || spaceKey,
+    title: data.title || "無標題",
+    version: data.version?.number || 1,
+    content: contentResult.text,
+    meta: buildMeta({
+      truncated: contentResult.truncated,
+      contentTotalChars: contentResult.totalChars,
+      contentReturnedChars: contentResult.returnedChars,
+      hasMoreContent: contentResult.truncated,
+      hints: contentResult.truncated ? { nextSections: ["content"] } : {},
+    }),
+  };
+
+  if (options.includeRaw) {
+    payload.raw = data;
+  }
+
+  return payload;
 }
 
-// 主函數
-/**
- * 宣告內容用途說明與單號關聯
- * @description 作為 CLI 入口：接收 Confluence URL，呼叫 readConfluencePage 並輸出 JSON。
- * @purpose 支援命令列取得指定頁面內容。
- * @external https://innotech.atlassian.net/browse/FE-7893
- */
+function showHelp() {
+  logProgress(`
+Confluence 頁面讀取工具（Agent-first Output）
+
+用法:
+  node read-confluence-page.mjs <confluence-url>
+  node read-confluence-page.mjs <url> --format=agent --max-chars=12000
+
+參數:
+  --format=agent|human|json  輸出格式
+  --include-raw              包含完整 API payload
+  --max-chars=<n>            content 上限（預設 8000）
+  --help                     顯示說明
+`);
+}
+
 async function main() {
-  /**
-   * 宣告內容用途說明與單號關聯
-   * @description 從命令列參數取得 Confluence 頁面 URL。
-   * @purpose 作為 readConfluencePage 的輸入。
-   * @external https://innotech.atlassian.net/browse/FE-7893
-   */
-  const url = process.argv[2];
+  const args = parseExternalOutputArgs(process.argv.slice(2));
+
+  if (args.help) {
+    showHelp();
+    process.exit(0);
+  }
+
+  const url = args.positional[0] || args.url;
 
   if (!url) {
-    console.error("❌ 請提供 Confluence 頁面 URL");
-    console.error("\n使用方法:");
-    console.error("  node read-confluence-page.mjs <confluence-url>");
-    console.error("\n範例:");
-    console.error(
-      '  node read-confluence-page.mjs "https://innotech.atlassian.net/wiki/spaces/Frontend/pages/4078010378/Agent+Operator+Guideline"'
-    );
-    process.exit(1);
+    writeScriptError("請提供 Confluence 頁面 URL", "MISSING_URL");
   }
 
   try {
-    const result = await readConfluencePage(url);
-    console.log(JSON.stringify(result, null, 2));
+    logProgress(`Reading Confluence page ${url}...`);
+    const result = await readConfluencePage(url, args);
+    writeScriptResult(result, args.resolvedFormat);
   } catch (error) {
-    console.error(JSON.stringify({ error: error.message }, null, 2));
-    process.exit(1);
+    writeScriptError(error.message, "READ_CONFLUENCE_FAILED");
   }
 }
 
 main();
+
 /**
- * === llm 分析紀錄區 ===
- * @llm-review-submitted-at 2026-06-13T17:55:15.864Z
- * @llm-review-model gpt-5.4-nano
- * @llm-review-note 將檔案註解調整為三段式布局：補齊並移除底部重複/錯置的 llm 區塊字串；修正 malformed 之 @external（auth 區塊不再帶未對應票號）；並將多處標題/區塊註解格式統一為指定的 @module/@purpose/@external、@description/@purpose 及 llm 分析記錄格式。未變更任何執行邏輯。
+ * llm 分析紀錄區
+ * @llm-review-submitted-at 2026-06-14T12:00:00.000Z
+ * @llm-review-model composer-2.5-fast
+ * @llm-review-note FE-8389 Phase 1：移除預設 raw、截斷/meta、format 支援。
  */

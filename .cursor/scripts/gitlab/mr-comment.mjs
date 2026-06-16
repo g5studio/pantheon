@@ -37,6 +37,13 @@
 import { execSync } from "child_process";
 import { getProjectRoot, getGitLabToken } from "../utilities/env-loader.mjs";
 import { appendAgentSignature } from "../utilities/agent-signature.mjs";
+import {
+  logProgress,
+  resolveOutputFormat,
+  truncateText,
+  writeScriptError,
+  writeScriptResult,
+} from "../utilities/external-output.mjs";
 
 /**
  * @description 取得專案根目錄供執行命令使用
@@ -353,36 +360,69 @@ GitLab MR 留言與回覆腳本
  * @purpose 供 list-discussions 模式展示討論摘要
  * @external https://innotech.atlassian.net/browse/FE-7892
  */
-function formatDiscussion(discussion, verbose = false) {
+function formatDiscussionRecord(discussion, options = {}) {
   const notes = discussion.notes || [];
   const firstNote = notes[0];
-
   if (!firstNote) return null;
 
+  const maxBodyChars = Number.isFinite(options.maxBodyChars)
+    ? options.maxBodyChars
+    : options.verbose
+      ? firstNote.body.length
+      : 500;
+
+  const limitedNotes = options.maxNotesPerDiscussion
+    ? notes.slice(0, options.maxNotesPerDiscussion)
+    : notes;
+
+  return {
+    id: discussion.id,
+    resolved: Boolean(discussion.resolved),
+    author: firstNote.author?.username || "Unknown",
+    createdAt: firstNote.created_at,
+    position: firstNote.position
+      ? {
+          path: firstNote.position.new_path || firstNote.position.old_path,
+          line: firstNote.position.new_line || firstNote.position.old_line,
+        }
+      : null,
+    body: truncateText(firstNote.body, maxBodyChars).text,
+    replyCount: Math.max(notes.length - 1, 0),
+    notes: limitedNotes.map((note) => ({
+      id: note.id,
+      author: note.author?.username || "Unknown",
+      createdAt: note.created_at,
+      body: truncateText(note.body, maxBodyChars).text,
+    })),
+  };
+}
+
+/**
+ * @description 將單一 discussion 轉為可讀的輸出字串（human 模式）
+ * @external https://innotech.atlassian.net/browse/FE-8389
+ */
+function formatDiscussion(discussion, verbose = false) {
+  const record = formatDiscussionRecord(discussion, {
+    verbose,
+    maxBodyChars: verbose ? 200 : 0,
+  });
+  if (!record) return null;
+
   const lines = [];
-  const isResolved = discussion.resolved;
-  const resolvedIcon = isResolved ? "✅" : "💬";
+  const resolvedIcon = record.resolved ? "✅" : "💬";
 
-  lines.push(`${resolvedIcon} Discussion ID: ${discussion.id}`);
-  lines.push(`   作者: ${firstNote.author?.username || "Unknown"}`);
-  lines.push(
-    `   時間: ${new Date(firstNote.created_at).toLocaleString("zh-TW")}`
-  );
+  lines.push(`${resolvedIcon} Discussion ID: ${record.id}`);
+  lines.push(`   作者: ${record.author}`);
+  lines.push(`   時間: ${new Date(record.createdAt).toLocaleString("zh-TW")}`);
 
-  if (firstNote.position) {
-    const pos = firstNote.position;
-    lines.push(`   位置: ${pos.new_path}:${pos.new_line || pos.old_line}`);
+  if (record.position?.path) {
+    lines.push(`   位置: ${record.position.path}:${record.position.line}`);
   }
 
-  if (verbose) {
-    lines.push(
-      `   內容: ${firstNote.body.substring(0, 200)}${
-        firstNote.body.length > 200 ? "..." : ""
-      }`
-    );
-
-    if (notes.length > 1) {
-      lines.push(`   回覆數: ${notes.length - 1}`);
+  if (verbose && record.body) {
+    lines.push(`   內容: ${record.body}`);
+    if (record.replyCount > 0) {
+      lines.push(`   回覆數: ${record.replyCount}`);
     }
   }
 
@@ -396,6 +436,7 @@ function formatDiscussion(discussion, verbose = false) {
  */
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  const outputFormat = resolveOutputFormat(args.format);
 
   // 顯示幫助
   if (args.help) {
@@ -430,41 +471,82 @@ async function main() {
 
   // 獲取項目信息
   const projectInfo = getProjectInfo();
-  console.log(`📍 項目: ${projectInfo.fullPath}`);
-  console.log(`🔗 MR: !${mrIid}\n`);
+  logProgress(`📍 項目: ${projectInfo.fullPath}`);
+  logProgress(`🔗 MR: !${mrIid}\n`);
 
   // 列出討論模式
   if (args["list-discussions"]) {
-    console.log("📋 獲取討論列表...\n");
+    logProgress("📋 獲取討論列表...\n");
 
-    const discussions = await listDiscussions(
+    let discussions = await listDiscussions(
       token,
       projectInfo.host,
       projectInfo.projectPath,
       mrIid
     );
 
+    if (args["unresolved-only"]) {
+      discussions = discussions.filter((item) => !item.resolved);
+    }
+
     if (discussions.length === 0) {
-      console.log("此 MR 尚無任何討論。");
+      writeScriptResult(
+        {
+          source: "gitlab",
+          action: "list-discussions",
+          mrIid,
+          discussions: [],
+          counts: { total: 0, unresolved: 0, resolved: 0 },
+          message: "此 MR 尚無符合條件的討論",
+        },
+        outputFormat,
+      );
       return;
     }
 
-    const unresolvedCount = discussions.filter(
-      (d) => !d.resolved && d.notes?.length > 0
-    ).length;
-    const resolvedCount = discussions.filter((d) => d.resolved).length;
+    const unresolvedCount = discussions.filter((item) => !item.resolved).length;
+    const resolvedCount = discussions.filter((item) => item.resolved).length;
 
-    console.log(
-      `共 ${discussions.length} 個討論（💬 未解決: ${unresolvedCount}，✅ 已解決: ${resolvedCount}）\n`
-    );
+    const records = discussions
+      .map((discussion) =>
+        formatDiscussionRecord(discussion, {
+          verbose: args.verbose,
+          maxBodyChars: Number(args["max-body-chars"]) || 500,
+          maxNotesPerDiscussion: args["max-notes-per-discussion"]
+            ? Number(args["max-notes-per-discussion"])
+            : null,
+        }),
+      )
+      .filter(Boolean);
 
-    for (const discussion of discussions) {
-      const formatted = formatDiscussion(discussion, args.verbose);
-      if (formatted) {
-        console.log(formatted);
-        console.log("");
+    if (outputFormat === "human") {
+      console.log(
+        `共 ${discussions.length} 個討論（💬 未解決: ${unresolvedCount}，✅ 已解決: ${resolvedCount}）\n`,
+      );
+      for (const discussion of discussions) {
+        const formatted = formatDiscussion(discussion, args.verbose);
+        if (formatted) {
+          console.log(formatted);
+          console.log("");
+        }
       }
+      return;
     }
+
+    writeScriptResult(
+      {
+        source: "gitlab",
+        action: "list-discussions",
+        mrIid,
+        counts: {
+          total: discussions.length,
+          unresolved: unresolvedCount,
+          resolved: resolvedCount,
+        },
+        discussions: records,
+      },
+      outputFormat,
+    );
 
     return;
   }
@@ -484,7 +566,7 @@ async function main() {
 
   // 回覆討論模式
   if (args.discussion) {
-    console.log(`💬 回覆討論 ${args.discussion}...\n`);
+    logProgress(`💬 回覆討論 ${args.discussion}...\n`);
 
     const note = await replyToDiscussion(
       token,
@@ -495,18 +577,25 @@ async function main() {
       message
     );
 
-    console.log("✅ 回覆成功！\n");
-    console.log(`📝 Note ID: ${note.id}`);
-    console.log(`👤 作者: ${note.author?.username || "Unknown"}`);
-    console.log(
-      `🕐 時間: ${new Date(note.created_at).toLocaleString("zh-TW")}`
+    writeScriptResult(
+      {
+        source: "gitlab",
+        action: "reply-discussion",
+        mrIid,
+        discussionId: args.discussion,
+        noteId: note.id,
+        author: note.author?.username || "Unknown",
+        createdAt: note.created_at,
+        message: `Replied to discussion ${args.discussion}`,
+      },
+      outputFormat,
     );
     return;
   }
 
   // 在特定代碼行建立討論
   if (args.file && args.line) {
-    console.log(`💬 在 ${args.file}:${args.line} 建立討論...\n`);
+    logProgress(`💬 在 ${args.file}:${args.line} 建立討論...\n`);
 
     // 獲取 MR 信息以取得 diff refs
     const mrInfo = await getMRInfo(
@@ -541,15 +630,24 @@ async function main() {
       position
     );
 
-    console.log("✅ 討論建立成功！\n");
-    console.log(`📝 Discussion ID: ${discussion.id}`);
-    console.log(`📍 位置: ${args.file}:${args.line}`);
+    writeScriptResult(
+      {
+        source: "gitlab",
+        action: "create-discussion",
+        mrIid,
+        discussionId: discussion.id,
+        file: args.file,
+        line: args.line,
+        message: `Discussion created at ${args.file}:${args.line}`,
+      },
+      outputFormat,
+    );
     return;
   }
 
   // 建立新討論（無特定位置）
   if (args["as-discussion"]) {
-    console.log("💬 建立新討論...\n");
+    logProgress("💬 建立新討論...\n");
 
     const discussion = await createDiscussion(
       token,
@@ -559,16 +657,22 @@ async function main() {
       message
     );
 
-    console.log("✅ 討論建立成功！\n");
-    console.log(`📝 Discussion ID: ${discussion.id}`);
-    console.log(
-      `👤 作者: ${discussion.notes?.[0]?.author?.username || "Unknown"}`
+    writeScriptResult(
+      {
+        source: "gitlab",
+        action: "create-discussion",
+        mrIid,
+        discussionId: discussion.id,
+        author: discussion.notes?.[0]?.author?.username || "Unknown",
+        message: `Discussion ${discussion.id} created`,
+      },
+      outputFormat,
     );
     return;
   }
 
   // 新增簡單留言（note）
-  console.log("💬 新增留言...\n");
+  logProgress("💬 新增留言...\n");
 
   const note = await createNote(
     token,
@@ -578,14 +682,21 @@ async function main() {
     message
   );
 
-  console.log("✅ 留言成功！\n");
-  console.log(`📝 Note ID: ${note.id}`);
-  console.log(`👤 作者: ${note.author?.username || "Unknown"}`);
-  console.log(`🕐 時間: ${new Date(note.created_at).toLocaleString("zh-TW")}`);
-
-  // 輸出 MR 連結
   const mrUrl = `${projectInfo.host}/${projectInfo.fullPath}/-/merge_requests/${mrIid}`;
-  console.log(`\n🔗 MR 連結: ${mrUrl}`);
+
+  writeScriptResult(
+    {
+      source: "gitlab",
+      action: "create-note",
+      mrIid,
+      noteId: note.id,
+      author: note.author?.username || "Unknown",
+      createdAt: note.created_at,
+      mrUrl,
+      message: `Note created on MR !${mrIid}`,
+    },
+    outputFormat,
+  );
 }
 
 main().catch((error) => {

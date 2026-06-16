@@ -1,62 +1,69 @@
 #!/usr/bin/env node
 
 /**
- * === 檔案用途區塊 ===
- * @module script-runtime
- * @purpose 管理 .cursor/scripts/jira/read-jira-ticket.mjs 的註解補全與用途說明
- * @external https://innotech.atlassian.net/browse/FE-7892
- * @external https://innotech.atlassian.net/browse/FE-7893
- */
-/**
- * === 宣告內容用途說明與單號關聯 ===
- * @description 本區塊以下宣告需標示用途與單號關聯
- * @purpose 統一定義宣告級註解格式與單號追溯規則
- */
-/**
  * 檔案用途區塊
  * @module read-jira-ticket
- * @purpose 透過 Jira REST API 讀取指定 ticket（ticket ID 或 browse URL）的摘要、欄位與評論，並將結果輸出為 JSON。
- * @external https://innotech.atlassian.net/browse/FE-7893
+ * @purpose 讀取 Jira ticket 並以 Agent-first 格式輸出（支援截斷、section、bundle）
+ * @external https://innotech.atlassian.net/browse/FE-8389
  */
 
 import { getJiraConfig } from "../utilities/env-loader.mjs";
+import {
+  applyBundleDefaults,
+  buildMeta,
+  commentLooksLikeRdNote,
+  isSystemComment,
+  logProgress,
+  parseExternalOutputArgs,
+  pickJiraSections,
+  sliceCommentsByLimit,
+  truncateText,
+  writeScriptError,
+  writeScriptResult,
+} from "../utilities/external-output.mjs";
 
-// 從 Jira URL 解析 ticket ID
+const JIRA_FIELD_WHITELIST = [
+  "summary",
+  "description",
+  "status",
+  "issuetype",
+  "priority",
+  "assignee",
+  "reporter",
+  "labels",
+  "components",
+  "fixVersions",
+  "duedate",
+  "comment",
+  "issuelinks",
+  "subtasks",
+  "created",
+  "updated",
+].join(",");
+
 /**
- * 宣告內容用途說明與單號關聯
- * @description 解析輸入的 Jira URL 或 ticket ID，取得標準 ticket Key（如 FE-1234）。
- * @purpose 供後續 Jira API 查詢使用。
- * @external https://innotech.atlassian.net/browse/FE-7893
+ * @description 解析 Jira URL 或 ticket key
+ * @external https://innotech.atlassian.net/browse/FE-8389
  */
-function parseJiraUrl(url) {
-  // 格式: https://innotech.atlassian.net/browse/{ticket} 或直接是 ticket ID
+export function parseJiraUrl(url) {
   if (!url.includes("/")) {
-    // 直接是 ticket ID
     return url.toUpperCase();
   }
 
   const match = url.match(/\/browse\/([A-Z0-9]+-\d+)/);
-  if (match) {
-    return match[1];
-  }
+  if (match) return match[1];
 
-  // 嘗試直接匹配 ticket 格
   const ticketMatch = url.match(/([A-Z0-9]+-\d+)/);
-  if (ticketMatch) {
-    return ticketMatch[1];
-  }
+  if (ticketMatch) return ticketMatch[1];
 
   return null;
 }
 
-// 提取 ADF 格式的文本內容
 /**
- * 宣告內容用途說明與單號關聯
- * @description 將 Jira 回傳的 ADF（Atlassian Document Format）內容遞迴轉換為純文字字串。
- * @purpose 用於 description 與 comments 的 body 文字抽取。
- * @external https://innotech.atlassian.net/browse/FE-7893
+ * @description ADF 轉純文字
+ * @external https://innotech.atlassian.net/browse/FE-8389
  */
-function extractTextFromADF(content) {
+export function extractTextFromADF(content) {
   if (!content) return "";
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
@@ -74,125 +81,216 @@ function extractTextFromADF(content) {
   return "";
 }
 
-// 讀取 Jira ticket
-/**
- * 宣告內容用途說明與單號關聯
- * @description 使用 Jira API 取得指定 issue 的欄位與評論，並整理輸出（含 summary、狀態、指派、優先度、descriptionText、commentsList 與 raw）。
- * @purpose 供 CLI 執行並序列化 JSON 給下游使用。
- * @external https://innotech.atlassian.net/browse/FE-7893
- */
-async function readJiraTicket(ticketOrUrl) {
-  const config = getJiraConfig();
-  const auth = Buffer.from(`${config.email}:${config.apiToken}`).toString(
-    "base64"
+function mapIssueLinks(issuelinks = []) {
+  return issuelinks
+    .map((link) => {
+      const inward = link.inwardIssue;
+      const outward = link.outwardIssue;
+      const linked = inward || outward;
+      if (!linked) return null;
+
+      return {
+        type: link.type?.name || "relates to",
+        direction: inward ? "inward" : "outward",
+        ticket: linked.key,
+        summary: linked.fields?.summary || "",
+      };
+    })
+    .filter(Boolean);
+}
+
+function mapSubtasks(subtasks = []) {
+  return subtasks
+    .map((item) => ({
+      ticket: item.key,
+      summary: item.fields?.summary || "",
+      status: item.fields?.status?.name || "",
+    }))
+    .filter((item) => item.ticket);
+}
+
+function filterComments(comments, options) {
+  let list = [...comments];
+
+  if (options.commentsSince) {
+    const since = new Date(options.commentsSince).getTime();
+    list = list.filter((comment) => new Date(comment.created).getTime() >= since);
+  }
+
+  if (options.skipSystemComments) {
+    list = list.filter((comment) => !isSystemComment(comment));
+  }
+
+  list.sort((a, b) => new Date(b.created).getTime() - new Date(a.created).getTime());
+
+  const totalCount = list.length;
+  const { comments: sliced, hasMoreComments } = sliceCommentsByLimit(
+    list,
+    options.commentsLimit,
   );
+  const hasRdNotes = list.some((comment) => commentLooksLikeRdNote(comment.body));
+
+  return {
+    comments: sliced,
+    commentCount: totalCount,
+    commentsReturned: sliced.length,
+    hasMoreComments: totalCount > sliced.length,
+    hasRdNotes,
+  };
+}
+
+/**
+ * @description 讀取 Jira ticket 並組裝 agent payload
+ * @external https://innotech.atlassian.net/browse/FE-8389
+ */
+export async function readJiraTicket(ticketOrUrl, userOptions = {}) {
+  const options = applyBundleDefaults({
+    maxChars: 8000,
+    commentsLimit: 20,
+    skipSystemComments: false,
+    includeRaw: false,
+    ...userOptions,
+  });
+
+  const config = getJiraConfig();
+  const auth = Buffer.from(`${config.email}:${config.apiToken}`).toString("base64");
   const baseUrl = config.baseUrl.endsWith("/")
     ? config.baseUrl.slice(0, -1)
     : config.baseUrl;
 
-  // 解析 ticket ID
-  const ticket = parseJiraUrl(ticketOrUrl) || ticketOrUrl.toUpperCase();
+  const ticket = parseJiraUrl(ticketOrUrl) || String(ticketOrUrl).toUpperCase();
 
   if (!/^[A-Z0-9]+-\d+$/.test(ticket)) {
     throw new Error(`無效的 Jira ticket 格式: ${ticketOrUrl}`);
   }
 
-  // 使用 Jira REST API 獲取 ticket 信息
-  const apiUrl = `${baseUrl}/rest/api/3/issue/${ticket}?expand=renderedFields,comments`;
+  const apiUrl = `${baseUrl}/rest/api/3/issue/${ticket}?fields=${JIRA_FIELD_WHITELIST}`;
 
-  try {
-    const response = await fetch(apiUrl, {
-      headers: {
-        Authorization: `Basic ${auth}`,
-        Accept: "application/json",
-      },
-    });
+  const response = await fetch(apiUrl, {
+    headers: {
+      Authorization: `Basic ${auth}`,
+      Accept: "application/json",
+    },
+  });
 
-    if (!response.ok) {
-      if (response.status === 404) {
-        throw new Error(`找不到 Jira ticket: ${ticket}`);
-      } else if (response.status === 401 || response.status === 403) {
-        throw new Error("Jira API Token 已過期或無權限，請聯繫 william.chiang");
-      } else {
-        throw new Error(
-          `獲取 Jira ticket 失敗: ${response.status} ${response.statusText}`
-        );
-      }
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error(`找不到 Jira ticket: ${ticket}`);
     }
-
-    const data = await response.json();
-    const fields = data.fields || {};
-
-    // 提取基本信息
-    const summary = fields.summary || "無標題";
-    const description = fields.description || "";
-    const issueType = fields.issuetype?.name || "未知類型";
-    const status = fields.status?.name || "未知狀態";
-    const assignee = fields.assignee?.displayName || "未分配";
-    const priority = fields.priority?.name || "未設置";
-    const comments = fields.comment || {};
-
-    // 提取描述文本
-    const descriptionText =
-      typeof description === "string"
-        ? description
-        : extractTextFromADF(description);
-
-    // 提取評論文本
-    const commentsList = (comments.comments || []).map((comment) => ({
-      author: comment.author?.displayName || "未知",
-      created: comment.created,
-      body: extractTextFromADF(comment.body),
-    }));
-
-    return {
-      ticket,
-      url: `${baseUrl}/browse/${ticket}`,
-      summary,
-      issueType,
-      status,
-      assignee,
-      priority,
-      description: descriptionText,
-      comments: commentsList,
-      raw: data, // 保留原始數據以便進一步處理
-    };
-  } catch (error) {
-    if (error.message.includes("Jira API Token")) {
-      throw error;
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("Jira API Token 已過期或無權限，請聯繫 william.chiang");
     }
-    throw new Error(`讀取 Jira ticket 失敗: ${error.message}`);
+    throw new Error(`獲取 Jira ticket 失敗: ${response.status} ${response.statusText}`);
   }
+
+  const data = await response.json();
+  const fields = data.fields || {};
+
+  const descriptionRaw =
+    typeof fields.description === "string"
+      ? fields.description
+      : extractTextFromADF(fields.description);
+
+  const descriptionResult = truncateText(descriptionRaw, options.maxChars);
+
+  const commentsRaw = (fields.comment?.comments || []).map((comment) => ({
+    author: comment.author?.displayName || "未知",
+    created: comment.created,
+    body: extractTextFromADF(comment.body),
+  }));
+
+  const commentResult = filterComments(commentsRaw, options);
+
+  const payload = {
+    source: "jira",
+    ticket,
+    url: `${baseUrl}/browse/${ticket}`,
+    summary: fields.summary || "無標題",
+    issueType: fields.issuetype?.name || "未知類型",
+    status: fields.status?.name || "未知狀態",
+    assignee: fields.assignee?.displayName || "未分配",
+    reporter: fields.reporter?.displayName || null,
+    priority: fields.priority?.name || "未設置",
+    labels: fields.labels || [],
+    components: (fields.components || []).map((item) => item.name),
+    fixVersions: (fields.fixVersions || []).map((item) => item.name),
+    dueDate: fields.duedate || null,
+    created: fields.created || null,
+    updated: fields.updated || null,
+    description: descriptionResult.text,
+    comments: commentResult.comments,
+    links: mapIssueLinks(fields.issuelinks || []),
+    subtasks: mapSubtasks(fields.subtasks || []),
+    meta: buildMeta({
+      truncated: descriptionResult.truncated || commentResult.hasMoreComments,
+      descriptionTotalChars: descriptionResult.totalChars,
+      descriptionReturnedChars: descriptionResult.returnedChars,
+      commentCount: commentResult.commentCount,
+      commentsReturned: commentResult.commentsReturned,
+      hasMoreComments: commentResult.hasMoreComments,
+      hasMoreDescription: descriptionResult.truncated,
+      hasRdNotes: commentResult.hasRdNotes,
+      bundleApplied: options.bundleApplied || null,
+    }),
+  };
+
+  if (options.includeRaw) {
+    payload.raw = data;
+  }
+
+  return pickJiraSections(payload, options.section);
 }
 
-// 主函數
-/**
- * 宣告內容用途說明與單號關聯
- * @description CLI 入口：讀取命令列參數（ticket ID 或 URL），呼叫 readJiraTicket 並印出 JSON；必要時輸出使用說明或錯誤。
- * @purpose 作為 script 的直接執行入口。
- * @external https://innotech.atlassian.net/browse/FE-7893
- */
+function showHelp() {
+  logProgress(`
+Jira Ticket 讀取工具（Agent-first Output）
+
+用法:
+  node read-jira-ticket.mjs FE-1234
+  node read-jira-ticket.mjs --ticket=FE-1234 --format=agent
+  node read-jira-ticket.mjs FE-1234 --section=comments --comments-limit=5
+  node read-jira-ticket.mjs FE-1234 --bundle=start-task
+
+參數:
+  --ticket=<ID>              Ticket ID 或 URL（也可 positional）
+  --format=agent|human|json  輸出格式（預設：非 TTY=agent，TTY=human）
+  --include-raw              包含完整 Jira API payload
+  --max-chars=<n>            description 上限（預設 8000）
+  --comments-limit=<n|all>   comment 數量上限（預設 20；0=不取；all=不設限）
+  --comments-since=<ISO>     只取此時間之後的 comments
+  --skip-system-comments     過濾 bot/系統留言
+  --section=summary|description|comments|links|metadata|all
+  --bundle=start-task|cr|rd-context（start-task/rd-context 留言不設限；cr 不含留言）
+  --help                     顯示說明
+
+輸出欄位:
+  subtasks[]                 子任務列表（ticket, summary, status）；CR 多 ticket 流程優先使用
+  links[]                    關聯單（含部分子任務關係）；subtasks 為空時可備援
+  meta.hints.nextSections    若資料被截斷，提示需展開的 section
+`);
+}
+
 async function main() {
-  const ticketOrUrl = process.argv[2];
+  const args = parseExternalOutputArgs(process.argv.slice(2));
+
+  if (args.help) {
+    showHelp();
+    process.exit(0);
+  }
+
+  const ticketOrUrl =
+    args.ticket || args.positional[0] || args.positional.find((item) => /[A-Z0-9]+-\d+/.test(item));
 
   if (!ticketOrUrl) {
-    console.error("❌ 請提供 Jira ticket ID 或 URL");
-    console.error("\n使用方法:");
-    console.error("  node read-jira-ticket.mjs <ticket-id-or-url>");
-    console.error("\n範例:");
-    console.error('  node read-jira-ticket.mjs "FE-1234"');
-    console.error(
-      '  node read-jira-ticket.mjs "https://innotech.atlassian.net/browse/FE-1234"'
-    );
-    process.exit(1);
+    writeScriptError("請提供 Jira ticket ID 或 URL", "MISSING_TICKET");
   }
 
   try {
-    const result = await readJiraTicket(ticketOrUrl);
-    console.log(JSON.stringify(result, null, 2));
+    logProgress(`Reading Jira ticket ${ticketOrUrl}...`);
+    const result = await readJiraTicket(ticketOrUrl, args);
+    writeScriptResult(result, args.resolvedFormat);
   } catch (error) {
-    console.error(JSON.stringify({ error: error.message }, null, 2));
-    process.exit(1);
+    writeScriptError(error.message, "READ_JIRA_FAILED");
   }
 }
 
@@ -200,13 +298,7 @@ main();
 
 /**
  * llm 分析紀錄區
- * @llm-review-submitted-at 2026-06-13
- * @llm-review-model annotation-refactor-engine
- * @llm-review-note 已將檔案頂部/宣告/底部三段式註解補齊，並依輸入中的 declarationOrigins 對應 FE-7893 用於宣告區 @external。
- */
-/**
- * === llm 分析紀錄區 ===
- * @llm-review-submitted-at 2026-06-13T19:24:01.504Z
- * @llm-review-model gpt-5.4-nano
- * @llm-review-note 調整並補齊註解：將宣告區/檔案用途區塊的 @external 皆改為完整 Jira browse URL 格式，並確保宣告級註解使用符合規格之三段式標題與欄位不涉及執行邏輯。
+ * @llm-review-submitted-at 2026-06-14T12:00:00.000Z
+ * @llm-review-model composer-2.5-fast
+ * @llm-review-note FE-8389 Phase 1/2：移除預設 raw、fields 白名單、截斷/meta、format/section/bundle。
  */
