@@ -28,7 +28,8 @@
     "evolve": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs",
     "analyze-project-schema": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs analyze-project-schema",
     "agent-signature": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/agent-signature.mjs",
-    "llm-client": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/llm-client.mjs",
-    "env-loader": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/env-loader.mjs"
+    "llm-client": "node .cursor/scripts/utilities/run-pantheon-script.mjs client/llm-client.mjs",
+    "env-loader": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/env-loader.mjs",
+    "agent-log": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/agent-log.mjs"
   }
 }

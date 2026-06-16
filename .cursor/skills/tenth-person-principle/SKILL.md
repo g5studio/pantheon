@@ -17,7 +17,7 @@ description: >-
 - 用戶明確要求「第十人原則」檢查
 - 用戶要求以「另外九個人都錯了」的視角審查方案、代碼或文件
 
-搭配指令：`.cursor/commands/operator/tenth-person-check.md`
+搭配指令：`.cursor/commands/utilities/tenth-person-check.md`
 
 ---
 

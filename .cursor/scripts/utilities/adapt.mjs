@@ -28,7 +28,7 @@ import {
 } from "fs";
 import { dirname, join } from "path";
 import { getProjectRoot, loadEnvLocal, getGitLabToken } from "./env-loader.mjs";
-import { callOpenAiJson, resolveLlmModel } from "./llm-client.mjs";
+import { callOpenAiJson, resolveLlmModel } from "../client/llm-client.mjs";
 
 /**
  * Absolute repository root directory resolved from env-loader.
