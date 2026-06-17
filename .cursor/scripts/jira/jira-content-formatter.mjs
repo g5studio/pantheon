@@ -327,6 +327,7 @@ async function normalizeWithLlm(content, operation, options = {}) {
   };
 
   const result = await callOpenAiJson({
+    action: "jira-content-formatter",
     apiKey,
     customOpenAiApiUrl,
     compassApiToken,

@@ -224,6 +224,7 @@ function buildLlmLogContext({
   forceCompassProxy = false,
   hasApiKey = false,
   endpoint = null,
+  action = null,
 }) {
   const provider = forceCompassProxy
     ? "compass"
@@ -232,6 +233,7 @@ function buildLlmLogContext({
       : "api-domain";
 
   return {
+    action: typeof action === "string" ? action.trim() || null : null,
     provider,
     model: typeof model === "string" ? model : null,
     endpoint,
@@ -394,6 +396,7 @@ export async function callOpenAiChatCompletions({
   compassApiToken = null,
   compassOperatorProxyUrl = null,
   forceCompassProxy = false,
+  action = null,
 }) {
   const effectiveApiKey =
     typeof apiKey === "string" && apiKey.trim()
@@ -411,6 +414,7 @@ export async function callOpenAiChatCompletions({
     model,
     forceCompassProxy,
     hasApiKey: Boolean(effectiveApiKey),
+    action,
     endpoint: forceCompassProxy
       ? "compass-operator-proxy"
       : kind === "responses"
@@ -555,6 +559,7 @@ export async function callOpenAiJson({
   compassApiToken = null,
   compassOperatorProxyUrl = null,
   forceCompassProxy = false,
+  action = null,
   model,
   system,
   input,
@@ -587,6 +592,7 @@ export async function callOpenAiJson({
     model,
     forceCompassProxy,
     hasApiKey: Boolean(effectiveApiKey),
+    action,
     endpoint: forceCompassProxy ? "compass-operator-proxy" : "chat/completions",
   });
 
@@ -601,6 +607,7 @@ export async function callOpenAiJson({
     compassApiToken,
     compassOperatorProxyUrl,
     forceCompassProxy,
+    action,
   });
 
   const parseContext = {

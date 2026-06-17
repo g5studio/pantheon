@@ -1386,6 +1386,7 @@ async function cmdRunAnnotationPass(args) {
 
       const llmResp = await Promise.race([
         callOpenAiJson({
+          action: "evolve",
           model,
           system:
             "You are an annotation refactoring engine. Return ONLY JSON. " +
@@ -1866,6 +1867,7 @@ async function cmdAnalyzeProjectSchema(args) {
 
   const llmResp = await Promise.race([
     callOpenAiJson({
+      action: "evolve",
       model,
       system:
         "You are a software architecture analyst. Return ONLY JSON matching the schema. " +

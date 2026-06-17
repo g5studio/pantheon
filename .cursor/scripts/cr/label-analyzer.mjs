@@ -490,6 +490,7 @@ async function suggestLabelsWithLlm({
 
   console.log(`🤖 正在請 LLM 建議 labels... (model=${model})`);
   const resp = await callOpenAiJson({
+    action: "label-analyzer",
     apiKey,
     customOpenAiApiUrl,
     compassApiToken,

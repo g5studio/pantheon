@@ -46,6 +46,32 @@ function pickFirstNonEmptyString(...values) {
 
 /**
  * 宣告內容用途說明與單號關聯
+ * @description 從 context 或目前執行腳本推導任務 action（例如 start-task、adapt）。
+ * @purpose 讓 llm log 的 action 可描述「正在執行哪個任務」而非固定錯誤類型。
+ * @external https://innotech.atlassian.net/browse/FE-8388
+ */
+function resolveLlmAction(context = {}) {
+  const ctx =
+    context && typeof context === "object" && !Array.isArray(context)
+      ? context
+      : {};
+  const directAction = pickFirstNonEmptyString(
+    ctx.action,
+    ctx.taskAction,
+    ctx.task,
+    ctx.taskName,
+  );
+  if (directAction) return directAction;
+
+  const scriptPath = pickFirstNonEmptyString(process.argv?.[1]);
+  if (!scriptPath) return "unknown-task";
+
+  const scriptName = basename(scriptPath).replace(/\.[^.]+$/, "").trim();
+  return scriptName || "unknown-task";
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
  * @description 讀取 Operator Agent Log API 設定（URL）。
  * @purpose 供 sendAgentLog 與 CLI 共用；不假定後端 logger 服務實作。
  * @external https://innotech.atlassian.net/browse/FE-8388
@@ -161,11 +187,13 @@ export function buildLlmErrorLogPayload({ errorCode, reason, context = {} }) {
     context && typeof context === "object" && !Array.isArray(context)
       ? context
       : {};
-  const { provider, model, endpoint, ...rest } = ctx;
+  const { provider, model, endpoint, action, taskAction, task, taskName, ...rest } = ctx;
+  const resolvedAction = resolveLlmAction({ action, taskAction, task, taskName });
 
   return buildAgentLogPayload({
     agentId: "pantheon-operator",
-    action: "llm-error",
+    action: resolvedAction,
+    category: "llm-error",
     status: "failure",
     projectName: basename(getProjectRoot()),
     userEmail: getJiraEmail() || null,
