@@ -1,6 +1,6 @@
 {
   "name": "pantheon",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "private": true,
   "scripts": {
     "notify-cursor-rules-failed": "node .cursor/scripts/utilities/run-pantheon-script.mjs notification/notify-cursor-rules-failed.mjs",
@@ -26,8 +26,10 @@
     "generate-pantheon-guideline": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/generate-pantheon-guideline.mjs",
     "adapt": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs && node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/generate-pantheon-guideline.mjs",
     "evolve": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs",
+    "analyze-project-schema": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs analyze-project-schema",
     "agent-signature": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/agent-signature.mjs",
-    "llm-client": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/llm-client.mjs",
-    "env-loader": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/env-loader.mjs"
+    "llm-client": "node .cursor/scripts/utilities/run-pantheon-script.mjs client/llm-client.mjs",
+    "env-loader": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/env-loader.mjs",
+    "agent-log": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/agent-log.mjs"
   }
 }

@@ -28,7 +28,7 @@ import {
 } from "fs";
 import { dirname, join } from "path";
 import { getProjectRoot, loadEnvLocal, getGitLabToken } from "./env-loader.mjs";
-import { callOpenAiJson, resolveLlmModel } from "./llm-client.mjs";
+import { callOpenAiJson, resolveLlmModel } from "../client/llm-client.mjs";
 
 /**
  * Absolute repository root directory resolved from env-loader.
@@ -1557,6 +1557,7 @@ async function main() {
 
   const llmOutput = await attemptLlmJsonCall({
     callArgs: {
+      action: "adapt",
       apiKey: provider === "openai" ? openaiKey : null,
       customOpenAiApiUrl: provider === "api-domain" ? customOpenAiApiUrl : null,
       compassApiToken: provider === "compass" ? compassApiToken : null,
@@ -1619,6 +1620,7 @@ async function main() {
   if (invalidLabelCases.length > 0) {
     const repairResp = await attemptLlmJsonCall({
       callArgs: {
+        action: "adapt",
         apiKey: provider === "openai" ? openaiKey : null,
         customOpenAiApiUrl:
           provider === "api-domain" ? customOpenAiApiUrl : null,
@@ -1657,6 +1659,7 @@ async function main() {
   if (!codingStandardCheck.ok) {
     const repairResp = await attemptLlmJsonCall({
       callArgs: {
+        action: "adapt",
         apiKey: provider === "openai" ? openaiKey : null,
         customOpenAiApiUrl:
           provider === "api-domain" ? customOpenAiApiUrl : null,
@@ -1689,6 +1692,7 @@ async function main() {
   if (!gitFlowCheck.ok) {
     const repairResp = await attemptLlmJsonCall({
       callArgs: {
+        action: "adapt",
         apiKey: provider === "openai" ? openaiKey : null,
         customOpenAiApiUrl:
           provider === "api-domain" ? customOpenAiApiUrl : null,

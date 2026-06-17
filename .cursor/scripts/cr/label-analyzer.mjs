@@ -16,7 +16,7 @@ import {
   guideJiraConfig,
   loadEnvLocal,
 } from "../utilities/env-loader.mjs";
-import { callOpenAiJson, resolveLlmModel } from "../utilities/llm-client.mjs";
+import { callOpenAiJson, resolveLlmModel } from "../client/llm-client.mjs";
 
 // 使用 env-loader 提供的 projectRoot
 const projectRoot = getProjectRoot();
@@ -490,6 +490,7 @@ async function suggestLabelsWithLlm({
 
   console.log(`🤖 正在請 LLM 建議 labels... (model=${model})`);
   const resp = await callOpenAiJson({
+    action: "label-analyzer",
     apiKey,
     customOpenAiApiUrl,
     compassApiToken,

@@ -70,8 +70,9 @@ run_terminal_cmd with required_permissions: ["network"]
 
 ### 6. 自動準備 CodeGraph（best effort）
 
-在不改變使用者操作習慣前提下，`oracle` 會嘗試自動準備 CodeGraph 查詢能力：
+在不改變使用者操作習慣前提下，`oracle` 會嘗試自動準備 CodeGraph 查詢能力（與 `descend` 共用同一套 `codegraph-setup.mjs` 邏輯）：
 
+- 在 pull 最新 Pantheon 後**動態載入** `.pantheon/.cursor/scripts/utilities/codegraph-setup.mjs`，確保即使從舊版 oracle 啟動也會執行最新 setup
 - 優先使用本機 `codegraph` CLI（若已安裝）
 - 若本機 CLI 不可用，改用 `npx @colbymchenry/codegraph`
 - 若初始化失敗，不中斷 oracle 同步流程，後續查詢會自動回退

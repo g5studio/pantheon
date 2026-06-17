@@ -5,7 +5,10 @@
  * @external https://innotech.atlassian.net/browse/FE-8017
  * @external https://innotech.atlassian.net/browse/FE-8138
  * @external https://innotech.atlassian.net/browse/FE-8007
+ * @external https://innotech.atlassian.net/browse/FE-8388
  */
+
+import { reportLlmError } from "./agent-log-client.mjs";
 
 /**
  * === 宣告內容用途說明與單號關聯 ===
@@ -159,6 +162,82 @@ function extractResponsesText(json) {
 function shouldFallbackToResponses(error) {
   const msg = String(error?.message || "");
   return /v1\/responses|only supported in v1\/responses|not a chat model/i.test(msg);
+}
+
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 由 Error 物件推導標準化 llmErrorCode（HTTP status、timeout、json-parse 等）。
+ * @purpose 供 reportLlmFailure 填入 agent log payload。
+ * @external https://innotech.atlassian.net/browse/FE-8388
+ */
+function deriveLlmErrorCode(error) {
+  const msg = String(error?.message || "");
+  const name = String(error?.name || "");
+
+  if (name === "AbortError" || /llm-timeout/i.test(msg)) return "timeout";
+
+  const llmHttp = msg.match(/LLM API 失敗:\s*(\d{3})/);
+  if (llmHttp) return llmHttp[1];
+
+  const compassHttp = msg.match(/Compass operator-proxy 失敗:\s*(\d{3})/);
+  if (compassHttp) return compassHttp[1];
+
+  if (/Compass operator-proxy 失敗/i.test(msg)) return "compass-api-error";
+  if (/Compass operator-proxy 回傳格式錯誤/i.test(msg))
+    return "invalid-response-format";
+  if (/LLM 回傳為空/i.test(msg)) return "empty-response";
+  if (/無法從 LLM 回傳中解析 JSON/i.test(msg)) return "json-parse-error";
+  if (/LLM output 必須是 JSON object/i.test(msg)) return "invalid-json-output";
+  if (
+    error?.cause?.code === "ECONNREFUSED" ||
+    /fetch failed|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|ECONNRESET/i.test(msg)
+  ) {
+    return "network-error";
+  }
+
+  return "unknown";
+}
+
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 非阻塞上報 LLM 錯誤後 rethrow，供 callOpenAi* 集中使用。
+ * @purpose HTTP / JSON 解析失敗時寫入 Ares agent-logs。
+ * @external https://innotech.atlassian.net/browse/FE-8388
+ */
+function reportLlmFailure(error, context = {}) {
+  const reason = error instanceof Error ? error.message : String(error);
+  reportLlmError({
+    errorCode: deriveLlmErrorCode(error),
+    reason,
+    context,
+  });
+}
+
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 依呼叫參數建立 agent log 用的 provider / model / endpoint 上下文。
+ * @purpose 統一 llm-client 各出口的上報 metadata。
+ * @external https://innotech.atlassian.net/browse/FE-8388
+ */
+function buildLlmLogContext({
+  model,
+  forceCompassProxy = false,
+  hasApiKey = false,
+  endpoint = null,
+  action = null,
+}) {
+  const provider = forceCompassProxy
+    ? "compass"
+    : hasApiKey
+      ? "openai"
+      : "api-domain";
+
+  return {
+    action: typeof action === "string" ? action.trim() || null : null,
+    provider,
+    model: typeof model === "string" ? model : null,
+    endpoint,
+  };
 }
 
 function normalizeMessagesForOperatorProxy(messages) {
@@ -324,6 +403,7 @@ export async function callOpenAiChatCompletions({
   compassApiToken = null,
   compassOperatorProxyUrl = null,
   forceCompassProxy = false,
+  action = null,
 }) {
   const effectiveApiKey =
     typeof apiKey === "string" && apiKey.trim()
@@ -336,38 +416,52 @@ export async function callOpenAiChatCompletions({
     throw new Error("messages 必須是非空 array");
   }
 
-  if (forceCompassProxy) {
-    const effectiveCompassApiToken =
-      typeof compassApiToken === "string" && compassApiToken.trim()
-        ? compassApiToken.trim()
-        : (process.env.COMPASS_API_TOKEN || "").trim();
-    const { system, content } = normalizeMessagesForOperatorProxy(messages);
-    const compassResp = await callCompassOperatorProxy({
-      compassApiToken: effectiveCompassApiToken,
-      url: compassOperatorProxyUrl,
-      content,
-      system,
-      provider: "openai",
-      model,
-      responseFormat,
-    });
-
-    const result =
-      typeof compassResp?.result === "string" ? compassResp.result : "";
-    return {
-      choices: [{ message: { content: result } }],
-      _provider: "compass",
-    };
-  }
-
-  const headers = {
-    "Content-Type": "application/json",
-  };
-  if (effectiveApiKey) headers.Authorization = `Bearer ${effectiveApiKey}`;
-
   const kind = resolveApiKind({ url, model });
+  const logContext = buildLlmLogContext({
+    model,
+    forceCompassProxy,
+    hasApiKey: Boolean(effectiveApiKey),
+    action,
+    endpoint: forceCompassProxy
+      ? "compass-operator-proxy"
+      : kind === "responses"
+        ? "responses"
+        : "chat/completions",
+  });
+  let activeEndpoint = logContext.endpoint;
 
-  const callChatCompletions = async () => {
+  try {
+    if (forceCompassProxy) {
+      const effectiveCompassApiToken =
+        typeof compassApiToken === "string" && compassApiToken.trim()
+          ? compassApiToken.trim()
+          : (process.env.COMPASS_API_TOKEN || "").trim();
+      const { system, content } = normalizeMessagesForOperatorProxy(messages);
+      const compassResp = await callCompassOperatorProxy({
+        compassApiToken: effectiveCompassApiToken,
+        url: compassOperatorProxyUrl,
+        content,
+        system,
+        provider: "openai",
+        model,
+        responseFormat,
+      });
+
+      const result =
+        typeof compassResp?.result === "string" ? compassResp.result : "";
+      return {
+        choices: [{ message: { content: result } }],
+        _provider: "compass",
+        _endpoint: "compass-operator-proxy",
+      };
+    }
+
+    const headers = {
+      "Content-Type": "application/json",
+    };
+    if (effectiveApiKey) headers.Authorization = `Bearer ${effectiveApiKey}`;
+
+    const callChatCompletions = async () => {
     const effectiveUrl = resolveApiUrlForKind({
       kind: "chat",
       url,
@@ -434,17 +528,27 @@ export async function callOpenAiChatCompletions({
     };
   };
 
-  if (kind === "responses") return await callResponses();
-  if (kind === "completions") {
-    throw new Error("目前 llm-client 尚未支援以 completions endpoint 進行結構化請求");
-  }
-
-  try {
-    return await callChatCompletions();
-  } catch (error) {
-    if (shouldFallbackToResponses(error)) {
+    if (kind === "responses") {
       return await callResponses();
     }
+    if (kind === "completions") {
+      throw new Error(
+        "目前 llm-client 尚未支援以 completions endpoint 進行結構化請求",
+      );
+    }
+
+    try {
+      return await callChatCompletions();
+    } catch (error) {
+      if (shouldFallbackToResponses(error)) {
+        activeEndpoint = "responses";
+        const result = await callResponses();
+        return { ...result, _endpoint: "responses" };
+      }
+      throw error;
+    }
+  } catch (error) {
+    reportLlmFailure(error, { ...logContext, endpoint: activeEndpoint });
     throw error;
   }
 }
@@ -462,6 +566,7 @@ export async function callOpenAiJson({
   compassApiToken = null,
   compassOperatorProxyUrl = null,
   forceCompassProxy = false,
+  action = null,
   model,
   system,
   input,
@@ -486,6 +591,18 @@ export async function callOpenAiJson({
     };
   }
 
+  const effectiveApiKey =
+    typeof apiKey === "string" && apiKey.trim()
+      ? apiKey.trim()
+      : (process.env.OPENAI_API_KEY || "").trim();
+  const jsonLogContext = buildLlmLogContext({
+    model,
+    forceCompassProxy,
+    hasApiKey: Boolean(effectiveApiKey),
+    action,
+    endpoint: forceCompassProxy ? "compass-operator-proxy" : "chat/completions",
+  });
+
   const data = await callOpenAiChatCompletions({
     apiKey,
     customOpenAiApiUrl,
@@ -497,20 +614,31 @@ export async function callOpenAiJson({
     compassApiToken,
     compassOperatorProxyUrl,
     forceCompassProxy,
+    action,
   });
 
-  const content = data?.choices?.[0]?.message?.content;
-  const obj = coerceJsonObjectFromModel(content);
+  const parseContext = {
+    ...jsonLogContext,
+    endpoint: data?._endpoint || jsonLogContext.endpoint,
+  };
 
-  if (!isPlainObject(obj)) {
-    throw new Error("LLM output 必須是 JSON object");
+  try {
+    const content = data?.choices?.[0]?.message?.content;
+    const obj = coerceJsonObjectFromModel(content);
+
+    if (!isPlainObject(obj)) {
+      throw new Error("LLM output 必須是 JSON object");
+    }
+
+    return obj;
+  } catch (error) {
+    reportLlmFailure(error, parseContext);
+    throw error;
   }
-
-  return obj;
 }
 /**
  * === llm 分析紀錄區 ===
  * @llm-review-submitted-at 2026-06-13T19:31:57.607Z
  * @llm-review-model gpt-5.4-nano
- * @llm-review-note 已將檔案/宣告/llm 分析區塊註解調整為三段式格式，並修正宣告區塊的 @external Jira URL 為完整 browse 網址、移除不符合格式/重複的註解；未變更任何 runtime logic。
+ * @llm-review-note LLM HTTP 與 JSON 解析失敗時非阻塞上報 Ares agent-logs（FE-8388）；不記錄 evolve 外層 timeout。
  */
