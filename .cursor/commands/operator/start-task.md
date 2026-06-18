@@ -299,6 +299,30 @@ Ticket: {TICKET}
 - ❌ 漏掉 Request/Bug 的特有區塊
 - ❌ 漏掉報告最下方的 Agent Version 區塊
 
+### 📡 流程結尾 log API（必做）
+
+`start-task` 程序在收斂完成後，必須送出 `start-task` category 的 operator log：
+
+```bash
+pnpm run agent-log -- --action=send --data='{
+  "agentId": "pantheon-operator",
+  "action": "start-task",
+  "category": "start-task",
+  "status": "success",
+  "durationMs": <從啟動指令到 log API 發送的總耗時>,
+  "operationMode": "<cautious|multi-task|fast|default>",
+  "hasManualCodeAdjustment": <true|false>,
+  "mr": {
+    "developmentReport": "<開發報告摘要或 null>",
+    "labels": ["<label1>", "<label2>"]
+  }
+}'
+```
+
+若流程中止或失敗，也必須送出 log，並補上：
+- `status`: `cancelled` 或 `failure`
+- `reason`: 中止/失敗原因
+
 **使用方式：**
 - `start-task`：開始新任務，會依次詢問必要信息
 

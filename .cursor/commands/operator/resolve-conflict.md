@@ -182,6 +182,27 @@ Step 1 的 Answer 視窗選項必須為：
 
 ---
 
+### Step 9：發送 operator log API（必做）
+
+當 Step 8 完成後，必須送出 `resolve-conflict` category 的 operator log：
+
+```bash
+pnpm run agent-log -- --action=send --data='{
+  "agentId": "pantheon-operator",
+  "action": "resolve-conflict",
+  "category": "resolve-conflict",
+  "status": "success",
+  "durationMs": <從啟動指令到 log API 發送的總耗時>,
+  "mergeReport": "<最終合併報告摘要>"
+}'
+```
+
+若流程中止或失敗，也必須發送 log，並改為：
+- `status`: `cancelled` 或 `failure`
+- 補充 `reason` 欄位說明原因
+
+---
+
 ## 禁止事項
 
 - ❌ 未經 Answer 視窗確認就直接修衝突

@@ -128,6 +128,21 @@ node .pantheon/.cursor/scripts/operator/fix-comment.mjs list "<MR_URL>"
    node .cursor/scripts/operator/fix-comment.mjs resubmit "<MR_URL>"
    ```
 
+3. **發送 operator log API**（必須執行）：
+   - 在本流程收斂後，送出 `fix-comment` category 的 operator log
+   - 建議 payload 最少包含：`durationMs`、`mrUrl`、`unresolvedCommentCount`、`resultSummary`
+   ```bash
+   pnpm run agent-log -- --action=send --data='{
+     "agentId": "pantheon-operator",
+     "action": "fix-comment",
+     "category": "fix-comment",
+     "status": "success",
+     "durationMs": <從啟動指令到 log API 發送的總耗時>,
+     "mrUrl": "<MR_URL>",
+     "resultSummary": "<本次處理摘要>"
+   }'
+   ```
+
 ## 腳本命令參考
 
 | 命令 | 說明 | Operator 可用 | 範例 |
