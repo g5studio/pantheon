@@ -29,6 +29,40 @@ function safeJsonParse(text) {
   }
 }
 
+function normalizeIsoTime(value) {
+  if (typeof value !== "string" || !value.trim()) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString();
+}
+
+function normalizeDurationMs(value) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  if (value < 0) return 0;
+  return Math.round(value);
+}
+
+function normalizeAgentLogTimingFields(data) {
+  const occurredAt =
+    normalizeIsoTime(data.occurredAt) || new Date().toISOString();
+  const startedAt = normalizeIsoTime(data.startedAt) || occurredAt;
+
+  let durationMs = normalizeDurationMs(data.durationMs);
+  if (durationMs === null) {
+    const occurredTime = new Date(occurredAt).getTime();
+    const startedTime = new Date(startedAt).getTime();
+    const inferred = occurredTime - startedTime;
+    durationMs = inferred >= 0 ? inferred : 0;
+  }
+
+  return {
+    ...data,
+    startedAt,
+    occurredAt,
+    durationMs,
+  };
+}
+
 /**
  * 宣告內容用途說明與單號關聯
  * @description 從字串候選值中取得第一個非空值。
@@ -131,10 +165,11 @@ export async function sendAgentLog(payload = null) {
     };
   }
 
-  const data =
+  const payloadData =
     payload && typeof payload === "object" && !Array.isArray(payload)
       ? payload
       : buildAgentLogPayload();
+  const data = normalizeAgentLogTimingFields(payloadData);
 
   const response = await fetch(config.apiUrl, {
     method: "POST",
