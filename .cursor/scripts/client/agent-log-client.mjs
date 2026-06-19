@@ -106,7 +106,9 @@ export function isAgentLogEnabled() {
  * @external https://innotech.atlassian.net/browse/FE-8388
  */
 export function buildAgentLogPayload(overrides = {}) {
-  const base = {};
+  const base = {
+    agentDisplayName: getAgentDisplayName() || null,
+  };
   if (overrides && typeof overrides === "object" && !Array.isArray(overrides)) {
     return { ...base, ...overrides };
   }
