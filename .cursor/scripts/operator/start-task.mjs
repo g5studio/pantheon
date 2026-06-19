@@ -5,8 +5,14 @@
  */
 
 import { execSync, spawnSync } from "child_process";
+import { basename } from "path";
 import readline from "readline";
 import { getProjectRoot, getJiraConfig } from "../utilities/env-loader.mjs";
+import {
+  buildAgentLogPayload,
+  isAgentLogEnabled,
+  sendAgentLog,
+} from "../client/agent-log-client.mjs";
 
 // 使用 env-loader 提供的 projectRoot
 const projectRoot = getProjectRoot();
@@ -180,10 +186,67 @@ function remoteBranchExists(branchName) {
   }
 }
 
+async function reportStartTaskLog({
+  startedAtIso,
+  durationMs,
+  status,
+  reason,
+  ticket,
+  sourceBranch,
+  featureBranch,
+  operationMode,
+  planConfirmed,
+}) {
+  if (!isAgentLogEnabled()) return;
+  const payload = buildAgentLogPayload({
+    agentId: "pantheon-operator",
+    action: "start-task",
+    category: "start-task",
+    status,
+    projectName: basename(projectRoot),
+    startedAt: startedAtIso,
+    occurredAt: new Date().toISOString(),
+    durationMs,
+    ticket: ticket || null,
+    sourceBranch: sourceBranch || null,
+    featureBranch: featureBranch || null,
+    operationMode: operationMode || "default",
+    hasManualCodeAdjustment: false,
+    planConfirmed: Boolean(planConfirmed),
+    mr: {
+      developmentReport: null,
+      labels: [],
+    },
+    ...(reason ? { reason } : {}),
+  });
+
+  try {
+    const result = await sendAgentLog(payload);
+    if (!result.ok && !result.skipped) {
+      console.warn(`⚠️  start-task log API 發送失敗: ${result.error || "unknown"}`);
+    }
+  } catch (error) {
+    console.warn(
+      `⚠️  start-task log API 發送異常: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+}
+
 async function main() {
   console.log("\n🚀 開始新任務\n");
+  const startedAt = new Date();
+  const startedAtIso = startedAt.toISOString();
+  const startedAtMs = Date.now();
+  const operationMode = "default";
+  let processStatus = "success";
+  let reason = "";
 
   let ticket = "";
+  let sourceBranchTrimmed = "";
+  let featureBranch = "";
+  let planConfirmed = false;
   while (!ticket) {
     ticket = await question(
       "📋 請提供 Jira 單號（格式: FE-1234, IN-5678，必填）: "
@@ -198,9 +261,9 @@ async function main() {
     }
   }
 
-  const sourceBranch =
+  const sourceBranchInput =
     (await question("🌿 請指定來源分支（預設: main）: ")) || "main";
-  const sourceBranchTrimmed = sourceBranch.trim();
+  sourceBranchTrimmed = sourceBranchInput.trim();
 
   console.log("\n📦 正在執行 Git 操作...\n");
 
@@ -222,7 +285,7 @@ async function main() {
 
     exec(`git pull origin ${sourceBranchTrimmed}`);
 
-    const featureBranch = `feature/${ticket}`;
+    featureBranch = `feature/${ticket}`;
 
     if (branchExists(featureBranch)) {
       const switchBranch = await question(
@@ -231,7 +294,9 @@ async function main() {
       if (switchBranch.toLowerCase() === "y") {
         exec(`git checkout ${featureBranch}`);
       } else {
-        process.exit(0);
+        processStatus = "cancelled";
+        reason = "feature-branch-exists-user-declined-switch";
+        return;
       }
     } else {
       exec(`git checkout -b ${featureBranch}`);
@@ -239,7 +304,9 @@ async function main() {
     }
   } catch (error) {
     console.error(`\n❌ Git 操作失敗: ${error.message}\n`);
-    process.exit(1);
+    processStatus = "failure";
+    reason = error instanceof Error ? error.message : String(error);
+    return;
   }
 
   console.log(`📖 正在讀取 Jira ticket ${ticket}...\n`);
@@ -264,6 +331,7 @@ async function main() {
 
     const confirm = await question("❓ 請確認計劃是否正確？(y/N): ");
     if (confirm.toLowerCase() === "y") {
+      planConfirmed = true;
       console.log("\n✅ 計劃已確認，可以開始開發！\n");
 
       const startTaskInfo = {
@@ -302,9 +370,25 @@ async function main() {
       }
     } else {
       console.log("\n💡 如需調整計劃，請告知具體需求\n");
+      processStatus = "cancelled";
+      reason = "plan-not-confirmed";
     }
   } catch (error) {
     console.error(`\n⚠️  無法讀取 Jira ticket: ${error.message}\n`);
+    processStatus = "failure";
+    reason = error instanceof Error ? error.message : String(error);
+  } finally {
+    await reportStartTaskLog({
+      startedAtIso,
+      durationMs: Date.now() - startedAtMs,
+      status: processStatus,
+      reason,
+      ticket,
+      sourceBranch: sourceBranchTrimmed,
+      featureBranch,
+      operationMode,
+      planConfirmed,
+    });
   }
 }
 

@@ -274,6 +274,25 @@ node .pantheon/.cursor/scripts/jira/add-jira-comment.mjs <TICKET> "<報告內容
 - 在 chat 中提示用戶：「報告已留言到 Jira，現在轉進 start-task 流程（視同謹慎模式）開始修復」
 - 後續交互依照 [`start-task.md`](mdc:.cursor/commands/operator/start-task.md) 與 [`operation-modes.mdc`](mdc:.cursor/rules/operator/start-task/operation-modes.mdc) 的謹慎模式規範執行
 
+### 8. 發送 operator log API（必做）
+
+完成 reverse-engineering 程序（包含留言 Jira 與轉接前置）後，必須送出 `reverse-engineering` category 的 operator log：
+
+```bash
+pnpm run agent-log -- --action=send --data='{
+  "agentId": "pantheon-operator",
+  "action": "reverse-engineering",
+  "category": "reverse-engineering",
+  "status": "success",
+  "durationMs": <從啟動指令到 log API 發送的總耗時>,
+  "ticket": "<JIRA_TICKET>"
+}'
+```
+
+若流程中止或失敗，也必須送 log，並補上：
+- `status`: `cancelled` 或 `failure`
+- `reason`: 中止/失敗原因
+
 詳細執行規範請參考：
 - [reverse-engineering-execution.mdc](mdc:.cursor/rules/operator/reverse-engineering-execution.mdc)
 
