@@ -1,0 +1,62 @@
+---
+description: Coding Standard - AI comment requirements for new declarations and comment updates, including usage, ticket linkage, and modification intent.
+alwaysApply: true
+---
+
+# Coding Standard - AI Comment Ticket & Intent
+
+## Purpose
+
+統一 AI Agent 在新增宣告與調整既有註解時的註解品質，確保註解可追蹤「用圖」與「關聯單號」，並能快速理解本次改動意圖。
+
+## Scope
+
+- 適用於 AI Agent 對任何程式語言進行「新增宣告」與「既有註解區塊調整」的情境。
+- 宣告包含但不限於：function、class、interface、type、constant、hook、model、component。
+
+## Core Rules
+
+### 1. 新增宣告時的註解要求
+
+- **Must**: AI Agent 新增任何宣告時，必須同時補上符合專案既有規範的註解。
+- **Must**: 若專案已有註解規範，必須優先沿用該規範（例如 JSDoc/TSDoc、區塊順序、標籤命名）。
+- **Fallback**: 若專案沒有明確規範，使用常見且可讀的註解風格（建議 JSDoc 風格）。
+- **Must include**:
+  - `用圖`：說明該宣告的用途或使用情境。
+  - `關聯單號`：對應 Jira/Issue/Ticket 編號（可多筆）。
+
+### 2. 調整既有註解區塊時的要求
+
+- **Must**: 只要 AI Agent 修改了既有註解內容（新增/改寫/補充任一行），該行必須明確帶出 `關聯單號`。
+- **Must**: 同一行註解需在單號後方以 ` - ` 接上「本次修改意圖」；不要只寫單號。
+- **Must**: 若使用 `@external`，格式應為：`@external <完整連結> - <修改意圖>`，並確保可追溯到對應單號。
+- **Must**: 若為一般行內註解，建議格式：`// <TICKET>: <修改意圖>`（例如 `// FE-8425: 登出即清除 token，避免背景流程誤判`）。
+- **Must**: 不得移除原本仍有效的業務語意，只能增補或校正。
+
+### 3. 關聯資訊一致性
+
+- **Must**: `關聯單號` 應與當前分支、commit scope 或任務單一致。
+- **Must**: 若一次修改涉及多個單號，註解需完整列出，不可只留主要單號。
+
+## Recommended Comment Template
+
+```js
+/**
+ * 用圖: <描述用途或使用情境>
+ * 關聯單號: <FE-1234, IN-5678>
+ * 本次修改意圖: <本次調整目的，僅在調整既有註解時必填>
+ */
+
+/**
+ * @external https://innotech.atlassian.net/browse/FE-8425 - 登出即生效，避免未確認彈窗造成狀態殘留
+ */
+
+// FE-8425: 不等待 dialog confirm，收到 logout 指令立即清除 token
+```
+
+## Enforcement
+
+- AI Agent 在提交前應自檢：
+  - 是否每個新增宣告都有對應註解
+  - 註解是否包含 `用圖`、`關聯單號`
+  - 若有調整既有註解，是否補上 `本次修改意圖`
