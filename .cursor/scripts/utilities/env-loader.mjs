@@ -257,6 +257,9 @@ function pickFirstEnvString(...values) {
 }
 
 export const DEFAULT_REVIEWER_AGENT_API_URL =
+  "https://mac09demac-mini.balinese-python.ts.net";
+
+export const DEFAULT_COMMUNICATOR_AGENT_API_URL =
   "https://manageds-virtual-machine.balinese-python.ts.net";
 
 /**
@@ -290,7 +293,7 @@ export function getCompassApiToken() {
 /**
  * === 宣告內容用途說明與單號關聯 ===
  * @description 取得 Reviewer Agent API base URL。
- * @purpose 未設定 REVIEWER_AGENT_API_URL 時預設 manageds-virtual-machine。
+ * @purpose 未設定 REVIEWER_AGENT_API_URL 時預設 mac09demac-mini（Compass Reviewer）。
  * @external https://innotech.atlassian.net/browse/FE-8429
  */
 export function getReviewerAgentApiBaseUrl() {
