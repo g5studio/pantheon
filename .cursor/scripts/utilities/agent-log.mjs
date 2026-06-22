@@ -3,7 +3,7 @@
 /**
  * 檔案用途區塊
  * @module agent-log
- * @purpose Operator Agent Log CLI：show-config / ping / send。
+ * @purpose Operator / Master Control Agent Log CLI：show-config / ping / send。
  * @external https://innotech.atlassian.net/browse/FE-8388
  */
 
@@ -88,7 +88,7 @@ function parseOptionalDataInput(raw) {
  */
 function printUsage() {
   console.error(`
-Operator Agent Log CLI
+Operator / Master Control Agent Log CLI
 
 Usage:
   pnpm run agent-log -- --action=<action> [options]
@@ -103,7 +103,7 @@ Options:
   --data=@/path/to/file.json
 
 Env (optional; URL required to enable):
-  OPERATOR_AGENT_LOG_API_URL
+  MASTER_CONTROL_AGENT_API_URL
 
 Examples:
   pnpm run agent-log -- --action=show-config
@@ -135,7 +135,7 @@ async function main() {
           ok: true,
           enabled: config.enabled,
           apiUrl: config.apiUrl || null,
-          envKeys: ["OPERATOR_AGENT_LOG_API_URL"],
+          envKeys: ["MASTER_CONTROL_AGENT_API_URL"],
         },
         null,
         2,

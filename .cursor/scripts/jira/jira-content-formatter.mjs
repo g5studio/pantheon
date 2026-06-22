@@ -291,12 +291,6 @@ async function normalizeWithLlm(content, operation, options = {}) {
   const envLocal = loadEnvLocal();
   const model = resolveLlmModel({
     explicitModel: options.model,
-    envLocal,
-    envKeys: [
-      "JIRA_FORMAT_LLM_MODEL",
-      "LABEL_ANALYZER_LLM_MODEL",
-      "OPENAI_MODEL",
-    ],
     defaultModel: "gpt-5.4-nano",
   });
 

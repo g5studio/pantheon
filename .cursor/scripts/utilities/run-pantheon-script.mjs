@@ -33,6 +33,7 @@
  * Examples:
  *   node .cursor/scripts/utilities/run-pantheon-script.mjs cr/create-mr.mjs -- --target=main
  *   node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/agent-log.mjs -- --action=show-config
+ *   node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/agent-communicator.mjs -- --action=show-config
  *
  * Notes:
  * - <script> can be:
@@ -62,6 +63,7 @@ Usage:
 Script path formats:
   - cr/create-mr.mjs
   - utilities/agent-log.mjs
+  - utilities/agent-communicator.mjs
   - client/llm-client.mjs
   - .cursor/scripts/cr/create-mr.mjs
   - /abs/path/to/script.mjs

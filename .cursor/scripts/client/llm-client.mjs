@@ -9,6 +9,10 @@
  */
 
 import { reportLlmError } from "./agent-log-client.mjs";
+import {
+  getReviewerAgentApiToken,
+  getReviewerAgentOperatorProxyUrl,
+} from "../utilities/env-loader.mjs";
 
 /**
  * === 宣告內容用途說明與單號關聯 ===
@@ -279,19 +283,18 @@ async function callCompassOperatorProxy({
   const effectiveCompassApiToken =
     typeof compassApiToken === "string" && compassApiToken.trim()
       ? compassApiToken.trim()
-      : (process.env.COMPASS_API_TOKEN || "").trim();
+      : (getReviewerAgentApiToken() || "").trim();
 
   if (!effectiveCompassApiToken) {
     throw new Error(
-      "缺少 COMPASS_API_TOKEN（Compass operator-proxy 需要認證）",
+      "缺少 REVIEWER_AGENT_API_TOKEN（Compass operator-proxy 需要認證；舊名 COMPASS_API_TOKEN 仍相容）",
     );
   }
 
   const effectiveUrl =
     typeof url === "string" && url.trim()
       ? url.trim()
-      : process.env.COMPASS_OPERATOR_PROXY_URL ||
-        "https://mac09demac-mini.balinese-python.ts.net/api/workflows/operator-proxy";
+      : getReviewerAgentOperatorProxyUrl();
 
   const requestBody = {
     content,
@@ -339,30 +342,228 @@ async function callCompassOperatorProxy({
 
 /**
  * === 宣告內容用途說明與單號關聯 ===
- * @description 決定要使用的 LLM model（依顯式參數、環境變數清單、最後才用預設值）。
- * @purpose 讓呼叫端可用最少設定指定 model。
+ * @description 決定要使用的 LLM model（僅 CLI 顯式參數或內建 defaultModel；不讀 env）。
+ * @purpose 各工具預設 model 固定於程式，避免 .env.local 分散覆寫。
  * @external https://innotech.atlassian.net/browse/FE-8007
  */
 export function resolveLlmModel({
   explicitModel,
-  envLocal,
-  envKeys = [],
+  envLocal: _envLocal,
+  envKeys: _envKeys = [],
   defaultModel = "gpt-5.4-nano",
 }) {
   if (typeof explicitModel === "string" && explicitModel.trim())
     return explicitModel.trim();
 
-  for (const k of envKeys) {
-    const fromProcess = process.env[k];
-    if (typeof fromProcess === "string" && fromProcess.trim())
-      return fromProcess.trim();
+  return defaultModel;
+}
 
-    const fromEnvLocal = envLocal?.[k];
-    if (typeof fromEnvLocal === "string" && fromEnvLocal.trim())
-      return fromEnvLocal.trim();
+function pickFirstNonEmptyString(...values) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return "";
+}
+
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 依 env 與顯式設定決定 LLM provider（openai / api-domain / compass）。
+ * @purpose 集中 provider 選路邏輯，避免各 caller 自行判斷 Compass / domain。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+export function resolveLlmProvider({
+  explicitProvider = null,
+  envLocal = {},
+  providerEnvKeys = [],
+  openaiApiKey = null,
+  compassApiToken = null,
+} = {}) {
+  const apiKey = pickFirstNonEmptyString(
+    openaiApiKey,
+    process.env.OPENAI_API_KEY,
+    envLocal.OPENAI_API_KEY,
+  );
+  const compassToken = pickFirstNonEmptyString(
+    compassApiToken,
+    getReviewerAgentApiToken(),
+  );
+
+  let explicit = pickFirstNonEmptyString(explicitProvider);
+  if (!explicit) {
+    for (const key of providerEnvKeys) {
+      const fromEnv = pickFirstNonEmptyString(process.env[key], envLocal[key]);
+      if (fromEnv) {
+        explicit = fromEnv;
+        break;
+      }
+    }
   }
 
-  return defaultModel;
+  let provider;
+  let degradedReason = null;
+
+  if (explicit) {
+    const want = explicit.toLowerCase();
+    if (want === "openai") {
+      if (apiKey) {
+        provider = "openai";
+      } else {
+        provider = "api-domain";
+        degradedReason =
+          "指定 openai provider 但缺少 OPENAI_API_KEY，將改走 CUSTOM_OPENAI_API_URL";
+      }
+    } else if (
+      want === "api-domain" ||
+      want === "openai-domain" ||
+      want === "domain"
+    ) {
+      provider = "api-domain";
+    } else if (want === "compass") {
+      if (compassToken) {
+        provider = "compass";
+      } else {
+        provider = apiKey ? "openai" : "api-domain";
+        degradedReason =
+          "指定 compass provider 但缺少 REVIEWER_AGENT_API_TOKEN，已改用其他 provider";
+      }
+    } else if (want === "auto") {
+      provider = apiKey ? "openai" : "api-domain";
+    } else {
+      provider = apiKey ? "openai" : "api-domain";
+      degradedReason = `未知 llm provider：${explicit}，改用 ${provider}`;
+    }
+  } else {
+    provider = apiKey ? "openai" : "api-domain";
+  }
+
+  return {
+    provider,
+    apiKey: apiKey || null,
+    compassApiToken: compassToken || null,
+    degradedReason,
+  };
+}
+
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 將 provider 決策轉為 callOpenAiJson / callOpenAiChatCompletions 參數。
+ * @purpose 統一 LLM 連線設定，caller 只需傳 envLocal 與 provider/model env keys。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+export function resolveLlmCallParams({
+  envLocal = {},
+  explicitProvider = null,
+  providerEnvKeys = [],
+  customOpenAiApiUrl = null,
+  customOpenAiApiUrlEnvKeys = ["CUSTOM_OPENAI_API_URL"],
+  openaiApiKey = null,
+  compassApiToken = null,
+} = {}) {
+  const providerResult = resolveLlmProvider({
+    explicitProvider,
+    envLocal,
+    providerEnvKeys,
+    openaiApiKey,
+    compassApiToken,
+  });
+  const { provider, apiKey, compassApiToken: compassToken, degradedReason } =
+    providerResult;
+
+  const resolvedCustomUrl = pickFirstNonEmptyString(
+    customOpenAiApiUrl,
+    ...customOpenAiApiUrlEnvKeys.flatMap((key) => [
+      process.env[key],
+      envLocal[key],
+    ]),
+    DEFAULT_CUSTOM_OPENAI_API_URL,
+  );
+  const compassOperatorProxyUrl = getReviewerAgentOperatorProxyUrl();
+
+  return {
+    provider,
+    degradedReason: degradedReason || null,
+    forceCompassProxy: provider === "compass",
+    apiKey: provider === "openai" ? apiKey : null,
+    customOpenAiApiUrl: provider === "api-domain" ? resolvedCustomUrl : null,
+    compassApiToken: provider === "compass" ? compassToken : null,
+    compassOperatorProxyUrl:
+      provider === "compass" ? compassOperatorProxyUrl : null,
+  };
+}
+
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 檢查 resolveLlmCallParams 產物是否具備最低連線條件。
+ * @purpose 供 caller 在 invoke 前決定是否 fallback。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+export function isLlmCallReady(callParams = {}) {
+  if (callParams.provider === "compass") {
+    return Boolean(callParams.compassApiToken);
+  }
+  if (callParams.provider === "openai") {
+    return Boolean(callParams.apiKey);
+  }
+  if (callParams.provider === "api-domain") {
+    return Boolean(callParams.customOpenAiApiUrl);
+  }
+  return false;
+}
+
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 高階 LLM JSON 呼叫：自動 resolve provider、model 與連線參數。
+ * @purpose 讓 caller 只關心 system/input/schema，不需自行組 Compass / domain 邏輯。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+export async function callLlmJson({
+  action,
+  envLocal = {},
+  explicitProvider = null,
+  providerEnvKeys = [],
+  explicitModel = null,
+  defaultModel = "gpt-5.4-nano",
+  customOpenAiApiUrl = null,
+  system,
+  input,
+  temperature = 0.2,
+  schema = null,
+  schemaName = "structured_output",
+} = {}) {
+  const callParams = resolveLlmCallParams({
+    envLocal,
+    explicitProvider,
+    providerEnvKeys,
+    customOpenAiApiUrl,
+  });
+  const model = resolveLlmModel({
+    explicitModel,
+    defaultModel,
+  });
+
+  const result = await callOpenAiJson({
+    action,
+    model,
+    system,
+    input,
+    temperature,
+    schema,
+    schemaName,
+    apiKey: callParams.apiKey,
+    customOpenAiApiUrl: callParams.customOpenAiApiUrl,
+    compassApiToken: callParams.compassApiToken,
+    compassOperatorProxyUrl: callParams.compassOperatorProxyUrl,
+    forceCompassProxy: callParams.forceCompassProxy,
+  });
+
+  return {
+    result,
+    model,
+    provider: callParams.provider,
+    degradedReason: callParams.degradedReason,
+  };
 }
 
 /**
@@ -435,7 +636,7 @@ export async function callOpenAiChatCompletions({
       const effectiveCompassApiToken =
         typeof compassApiToken === "string" && compassApiToken.trim()
           ? compassApiToken.trim()
-          : (process.env.COMPASS_API_TOKEN || "").trim();
+          : (getReviewerAgentApiToken() || "").trim();
       const { system, content } = normalizeMessagesForOperatorProxy(messages);
       const compassResp = await callCompassOperatorProxy({
         compassApiToken: effectiveCompassApiToken,
@@ -640,5 +841,5 @@ export async function callOpenAiJson({
  * === llm 分析紀錄區 ===
  * @llm-review-submitted-at 2026-06-13T19:31:57.607Z
  * @llm-review-model gpt-5.4-nano
- * @llm-review-note LLM HTTP 與 JSON 解析失敗時非阻塞上報 Ares agent-logs（FE-8388）；不記錄 evolve 外層 timeout。
+ * @llm-review-note 新增 resolveLlmProvider / resolveLlmCallParams / callLlmJson，集中 provider 選路（FE-8429）。
  */

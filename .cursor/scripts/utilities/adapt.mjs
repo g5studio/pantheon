@@ -27,7 +27,13 @@ import {
   writeFileSync,
 } from "fs";
 import { dirname, join } from "path";
-import { getProjectRoot, loadEnvLocal, getGitLabToken } from "./env-loader.mjs";
+import {
+  getProjectRoot,
+  loadEnvLocal,
+  getGitLabToken,
+  getReviewerAgentApiToken,
+  getReviewerAgentOperatorProxyUrl,
+} from "./env-loader.mjs";
 import { callOpenAiJson, resolveLlmModel } from "../client/llm-client.mjs";
 
 /**
@@ -1492,12 +1498,8 @@ async function main() {
     typeof args["llm-model"] === "string" ? args["llm-model"] : null;
 
   const openaiKey = process.env.OPENAI_API_KEY || env.OPENAI_API_KEY || null;
-  const compassApiToken =
-    process.env.COMPASS_API_TOKEN || env.COMPASS_API_TOKEN || null;
-  const compassOperatorProxyUrl =
-    process.env.COMPASS_OPERATOR_PROXY_URL ||
-    env.COMPASS_OPERATOR_PROXY_URL ||
-    null;
+  const compassApiToken = getReviewerAgentApiToken();
+  const compassOperatorProxyUrl = getReviewerAgentOperatorProxyUrl();
   const customOpenAiApiUrl =
     process.env.CUSTOM_OPENAI_API_URL ||
     env.CUSTOM_OPENAI_API_URL ||
@@ -1531,7 +1533,7 @@ async function main() {
         provider = "compass";
       } else {
         provider = openaiKey ? "openai" : "api-domain";
-        degradedReason = "指定 compass provider 但缺少 COMPASS_API_TOKEN";
+        degradedReason = "指定 compass provider 但缺少 REVIEWER_AGENT_API_TOKEN";
       }
     } else {
       provider = openaiKey ? "openai" : "api-domain";
@@ -1544,7 +1546,7 @@ async function main() {
   const model = resolveLlmModel({
     explicitModel,
     envLocal: env,
-    envKeys: ["ADAPT_LLM_MODEL", "AI_MODEL", "LLM_MODEL", "OPENAI_MODEL"],
+    defaultModel: "gpt-5.3-codex",
   });
 
   if (degradedReason) {

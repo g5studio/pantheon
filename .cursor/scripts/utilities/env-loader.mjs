@@ -233,13 +233,119 @@ export function getJiraEmail() {
 
 /**
  * === 宣告內容用途說明與單號關聯 ===
- * @description 取得 Compass API token（由環境變數或 loadEnvLocal 讀取）。
- * @purpose FE-7892
+ * @description 移除 base URL 尾端斜線。
+ * @purpose 供 Reviewer / Communicator API base URL 正規化。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+function normalizeEnvBaseUrl(url) {
+  return String(url || "").trim().replace(/\/+$/, "");
+}
+
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 從候選字串中取得第一個非空值。
+ * @purpose env 讀取與 legacy fallback 共用。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+function pickFirstEnvString(...values) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return "";
+}
+
+export const DEFAULT_REVIEWER_AGENT_API_URL =
+  "https://manageds-virtual-machine.balinese-python.ts.net";
+
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 取得 Reviewer Agent API token（支援舊名 COMPASS_API_TOKEN）。
+ * @purpose AI review 與 compass provider LLM 認證。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+export function getReviewerAgentApiToken() {
+  const envLocal = loadEnvLocal();
+  return (
+    pickFirstEnvString(
+      process.env.REVIEWER_AGENT_API_TOKEN,
+      envLocal.REVIEWER_AGENT_API_TOKEN,
+      process.env.COMPASS_API_TOKEN,
+      envLocal.COMPASS_API_TOKEN,
+    ) || null
+  );
+}
+
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 取得 Compass API token（legacy alias）。
+ * @purpose 維持既有 import 向下兼容。
  * @external https://innotech.atlassian.net/browse/FE-7892
  */
 export function getCompassApiToken() {
+  return getReviewerAgentApiToken();
+}
+
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 取得 Reviewer Agent API base URL。
+ * @purpose 未設定 REVIEWER_AGENT_API_URL 時預設 manageds-virtual-machine。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+export function getReviewerAgentApiBaseUrl() {
   const envLocal = loadEnvLocal();
-  return process.env.COMPASS_API_TOKEN || envLocal.COMPASS_API_TOKEN || null;
+  const configured = pickFirstEnvString(
+    process.env.REVIEWER_AGENT_API_URL,
+    envLocal.REVIEWER_AGENT_API_URL,
+  );
+  return normalizeEnvBaseUrl(
+    configured || DEFAULT_REVIEWER_AGENT_API_URL,
+  );
+}
+
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 取得 AI review jobs endpoint URL。
+ * @purpose create-mr / update-mr 提交 code-review 任務。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+export function getReviewerAgentJobsUrl() {
+  return `${getReviewerAgentApiBaseUrl()}/api/workflows/jobs`;
+}
+
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 取得 operator-proxy endpoint URL。
+ * @purpose compass LLM provider；優先沿用 COMPASS_OPERATOR_PROXY_URL 完整 URL。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+export function getReviewerAgentOperatorProxyUrl() {
+  const envLocal = loadEnvLocal();
+  const legacyFullUrl = pickFirstEnvString(
+    process.env.COMPASS_OPERATOR_PROXY_URL,
+    envLocal.COMPASS_OPERATOR_PROXY_URL,
+  );
+  if (legacyFullUrl) return legacyFullUrl;
+  return `${getReviewerAgentApiBaseUrl()}/api/workflows/operator-proxy`;
+}
+
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 取得 Master Control Agent Log API URL（支援舊名 OPERATOR_AGENT_LOG_API_URL）。
+ * @purpose llm-client 錯誤上報與 agent-log CLI 共用。
+ * @external https://innotech.atlassian.net/browse/FE-8388
+ */
+export function getMasterControlAgentApiUrl() {
+  const envLocal = loadEnvLocal();
+  return (
+    pickFirstEnvString(
+      process.env.MASTER_CONTROL_AGENT_API_URL,
+      envLocal.MASTER_CONTROL_AGENT_API_URL,
+      process.env.OPERATOR_AGENT_LOG_API_URL,
+      envLocal.OPERATOR_AGENT_LOG_API_URL,
+    ) || null
+  );
 }
 
 /**
@@ -295,5 +401,5 @@ export function getAgentDisplayName(options = {}) {
  * === llm 分析紀錄區 ===
  * @llm-review-submitted-at 2026-06-13T19:29:34.408Z
  * @llm-review-model gpt-5.4-nano
- * @llm-review-note 補齊檔案用途區塊的 @external（移除空 @external 並以相關票號網址填入），並修正底部 llm 分析紀錄區區塊標題為要求格式。
+ * @llm-review-note 新增 MASTER_CONTROL_AGENT_API_URL，保留 OPERATOR_AGENT_LOG_API_URL 向下兼容。
  */

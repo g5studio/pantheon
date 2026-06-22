@@ -74,7 +74,7 @@ node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs -- --
 - LLM 分析（至少一種；`--no-llm` 可跳過）
   - `OPENAI_API_KEY`（openai provider）
   - `CUSTOM_OPENAI_API_URL`（openai-compatible API domain，預設：`http://service-hub-ai.balinese-python.ts.net/v1`）
-  - `ADAPT_LLM_MODEL`（可選，未指定時預設使用 `gpt-5.2`）
+  - 預設 model：`gpt-5.3-codex`（程式內建；可用 CLI `--llm-model` 覆寫，不支援 env 設定）
 
 > 若未設置 `OPENAI_API_KEY`，`adapt` 會改走 `CUSTOM_OPENAI_API_URL`（若未設定則使用預設 domain）。
 >

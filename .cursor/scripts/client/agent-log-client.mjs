@@ -11,8 +11,8 @@ import { basename } from "path";
 import {
   getAgentDisplayName,
   getJiraEmail,
+  getMasterControlAgentApiUrl,
   getProjectRoot,
-  loadEnvLocal,
 } from "../utilities/env-loader.mjs";
 
 /**
@@ -106,16 +106,12 @@ function resolveLlmAction(context = {}) {
 
 /**
  * 宣告內容用途說明與單號關聯
- * @description 讀取 Operator Agent Log API 設定（URL）。
+ * @description 讀取 Master Control Agent Log API 設定（URL）。
  * @purpose 供 sendAgentLog 與 CLI 共用；不假定後端 logger 服務實作。
  * @external https://innotech.atlassian.net/browse/FE-8388
  */
 export function getAgentLogConfig() {
-  const envLocal = loadEnvLocal();
-  const apiUrl = pickFirstNonEmptyString(
-    process.env.OPERATOR_AGENT_LOG_API_URL,
-    envLocal.OPERATOR_AGENT_LOG_API_URL,
-  );
+  const apiUrl = getMasterControlAgentApiUrl() || "";
 
   return {
     apiUrl,
@@ -126,7 +122,7 @@ export function getAgentLogConfig() {
 /**
  * 宣告內容用途說明與單號關聯
  * @description 判斷自動 agent log 是否已啟用。
- * @purpose 未設定 OPERATOR_AGENT_LOG_API_URL 時回傳 false。
+ * @purpose 未設定 MASTER_CONTROL_AGENT_API_URL 時回傳 false。
  * @external https://innotech.atlassian.net/browse/FE-8388
  */
 export function isAgentLogEnabled() {
@@ -262,5 +258,5 @@ export function reportLlmError({ errorCode, reason, context = {} }) {
  * llm 分析紀錄區
  * @llm-review-submitted-at 2026-06-17T00:00:00.000Z
  * @llm-review-model gpt-5.4-nano
- * @llm-review-note 新增 buildLlmErrorLogPayload 與 reportLlmError，供 llm-client 上報 LLM 錯誤。
+ * @llm-review-note 改用 MASTER_CONTROL_AGENT_API_URL；保留 OPERATOR_AGENT_LOG_API_URL 向下兼容。
  */
