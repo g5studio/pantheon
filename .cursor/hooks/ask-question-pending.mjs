@@ -142,6 +142,13 @@ export function sendNotificationNow({ projectName, message, cwd }) {
     return false;
   }
 
+  if (result.status !== 0) {
+    console.error(
+      `[ask-question-pending] notify exited with code ${result.status}`,
+    );
+    return false;
+  }
+
   return true;
 }
 
@@ -183,6 +190,18 @@ export function scheduleAskQuestionNotification({
   const now = Date.now();
 
   const hookScript = join(__dirname, "notify-on-ask-question.mjs");
+
+  writePendingState(cwd, {
+    id: pendingId,
+    status: "pending",
+    scheduledAt: now,
+    notifyAt: now + cooldownMs,
+    cooldownMs,
+    projectName,
+    message,
+    cwd,
+  });
+
   const child = spawn(
     process.execPath,
     [hookScript, "--run-scheduler", `--pending-id=${pendingId}`, `--cwd=${cwd}`],
@@ -199,15 +218,8 @@ export function scheduleAskQuestionNotification({
   child.unref();
 
   writePendingState(cwd, {
-    id: pendingId,
-    status: "pending",
-    scheduledAt: now,
-    notifyAt: now + cooldownMs,
-    cooldownMs,
+    ...readPendingState(cwd),
     schedulerPid: child.pid,
-    projectName,
-    message,
-    cwd,
   });
 
   return pendingId;
@@ -232,7 +244,7 @@ export async function runNotificationScheduler({ pendingId, cwd }) {
     process.exit(0);
   }
 
-  sendNotificationNow({
+  const sent = sendNotificationNow({
     projectName: latest.projectName,
     message: latest.message,
     cwd: latest.cwd,
@@ -240,8 +252,8 @@ export async function runNotificationScheduler({ pendingId, cwd }) {
 
   writePendingState(cwd, {
     ...latest,
-    status: "sent",
-    sentAt: Date.now(),
+    status: sent ? "sent" : "failed",
+    ...(sent ? { sentAt: Date.now() } : { failedAt: Date.now() }),
   });
 
   process.exit(0);
@@ -251,5 +263,5 @@ export async function runNotificationScheduler({ pendingId, cwd }) {
  * llm 分析紀錄區
  * @llm-review-submitted-at 2026-06-23T00:00:00.000Z
  * @llm-review-model composer-2.5-fast
- * @llm-review-note 新增 30 秒冷卻排程與取消邏輯，避免使用者仍在 chat 時重複通知。
+ * @llm-review-note 先寫入 pending state 再 spawn scheduler，並依 notify 結果寫入 sent/failed。
  */
