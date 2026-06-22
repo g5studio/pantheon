@@ -32,11 +32,9 @@ function resolveCwd(input) {
   if (typeof input.cwd === "string" && input.cwd.trim()) {
     return input.cwd.trim();
   }
-  if (
-    Array.isArray(input.workspace_roots) &&
-    typeof input.workspace_roots[0] === "string"
-  ) {
-    return input.workspace_roots[0];
+  if (Array.isArray(input.workspace_roots)) {
+    const root = String(input.workspace_roots[0] || "").trim();
+    if (root) return root;
   }
   return process.cwd();
 }
@@ -76,5 +74,5 @@ main();
  * llm 分析紀錄區
  * @llm-review-submitted-at 2026-06-23T00:00:00.000Z
  * @llm-review-model composer-2.5-fast
- * @llm-review-note 使用者選 Answer 或 Agent 執行下一個 tool 時取消 pending 通知。
+ * @llm-review-note resolveCwd 驗證 workspace_roots 非空 trimmed 路徑，避免空 cwd 寫錯 state 檔。
  */

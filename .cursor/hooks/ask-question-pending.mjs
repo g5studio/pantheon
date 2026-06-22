@@ -191,7 +191,7 @@ export function scheduleAskQuestionNotification({
 
   const hookScript = join(__dirname, "notify-on-ask-question.mjs");
 
-  writePendingState(cwd, {
+  const pendingState = {
     id: pendingId,
     status: "pending",
     scheduledAt: now,
@@ -200,7 +200,9 @@ export function scheduleAskQuestionNotification({
     projectName,
     message,
     cwd,
-  });
+  };
+
+  writePendingState(cwd, pendingState);
 
   const child = spawn(
     process.execPath,
@@ -217,10 +219,7 @@ export function scheduleAskQuestionNotification({
   );
   child.unref();
 
-  writePendingState(cwd, {
-    ...readPendingState(cwd),
-    schedulerPid: child.pid,
-  });
+  writePendingState(cwd, { ...pendingState, schedulerPid: child.pid });
 
   return pendingId;
 }
@@ -263,5 +262,5 @@ export async function runNotificationScheduler({ pendingId, cwd }) {
  * llm 分析紀錄區
  * @llm-review-submitted-at 2026-06-23T00:00:00.000Z
  * @llm-review-model composer-2.5-fast
- * @llm-review-note 先寫入 pending state 再 spawn scheduler，並依 notify 結果寫入 sent/failed。
+ * @llm-review-note 重用記憶體 pendingState 補寫 schedulerPid，避免 re-read 為 null 時 crash。
  */
