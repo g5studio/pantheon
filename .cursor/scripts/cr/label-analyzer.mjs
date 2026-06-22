@@ -15,6 +15,8 @@ import {
   getJiraConfig,
   guideJiraConfig,
   loadEnvLocal,
+  getReviewerAgentApiToken,
+  getReviewerAgentOperatorProxyUrl,
 } from "../utilities/env-loader.mjs";
 import { callOpenAiJson, resolveLlmModel } from "../client/llm-client.mjs";
 
@@ -423,12 +425,8 @@ async function suggestLabelsWithLlm({
     process.env.CUSTOM_OPENAI_API_URL ||
     envLocal.CUSTOM_OPENAI_API_URL ||
     "http://service-hub-ai.balinese-python.ts.net/v1";
-  const compassApiToken =
-    process.env.COMPASS_API_TOKEN || envLocal.COMPASS_API_TOKEN || null;
-  const compassOperatorProxyUrl =
-    process.env.COMPASS_OPERATOR_PROXY_URL ||
-    envLocal.COMPASS_OPERATOR_PROXY_URL ||
-    null;
+  const compassApiToken = getReviewerAgentApiToken();
+  const compassOperatorProxyUrl = getReviewerAgentOperatorProxyUrl();
   const llmProvider = String(
     process.env.LABEL_LLM_PROVIDER || envLocal.LABEL_LLM_PROVIDER || "",
   )
@@ -436,20 +434,8 @@ async function suggestLabelsWithLlm({
     .toLowerCase();
   const forceCompassProxy = llmProvider === "compass";
 
-  const explicitModel =
-    typeof envLocal.LABEL_LLM_MODEL === "string"
-      ? envLocal.LABEL_LLM_MODEL
-      : null;
   const model = resolveLlmModel({
-    explicitModel,
-    envLocal,
-    envKeys: [
-      "LABEL_LLM_MODEL",
-      "ADAPT_LLM_MODEL",
-      "AI_MODEL",
-      "LLM_MODEL",
-      "OPENAI_MODEL",
-    ],
+    defaultModel: "gpt-5.4-nano",
   });
 
   const system = `

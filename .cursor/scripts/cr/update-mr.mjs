@@ -26,7 +26,7 @@
 /**
  * 宣告內容用途說明與單號關聯
  * @description 腳本的宣告/常數取得與環境 token 掛鉤：包含專案根目錄、adapt.json 可用 labels 白名單、glab 與 GitLab API 的 email/身分取得、以及 AI review 提交與 notes marker 寫入。
- * @purpose 維持 AI review 僅在偵測到 MR head SHA 有新提交時才送出，並在缺少 COMPASS_API_TOKEN 時跳過送審，其餘流程不受影響。
+ * @purpose 維持 AI review 僅在偵測到 MR head SHA 有新提交時才送出，並在缺少 REVIEWER_AGENT_API_TOKEN 時跳過送審，其餘流程不受影響。
  * @external https://innotech.atlassian.net/browse/FE-8007
  * @external https://innotech.atlassian.net/browse/FE-7910
  */
@@ -58,9 +58,8 @@ import {
   getProjectRoot,
   loadEnvLocal,
   getGitLabToken,
-  getCompassApiToken,
-  getJiraEmail,
-  getGitLabToken as getGitLabTokenFromEnvLoader,
+  getReviewerAgentApiToken,
+  getReviewerAgentJobsUrl,
 } from "../utilities/env-loader.mjs";
 import { readStartTaskInfo } from "./label-analyzer.mjs";
 import {
@@ -230,7 +229,7 @@ async function getAIReviewEmail(hostname = "gitlab.service-hub.tech") {
 
 function checkAndGuideConfigForAIReview() {
   const missing = [];
-  if (!getCompassApiToken()) missing.push("COMPASS_API_TOKEN");
+  if (!getReviewerAgentApiToken()) missing.push("REVIEWER_AGENT_API_TOKEN");
 
   const hasToken = !!getGitLabTokenFromEnvLoader();
   const hasGlabAuth =
@@ -251,15 +250,18 @@ async function submitAIReview(mrUrl) {
     throw new Error("配置不完整，無法提交 AI review");
   }
 
-  const apiKey = getCompassApiToken();
-  if (!apiKey) throw new Error("無法獲取 COMPASS_API_TOKEN");
+  const apiKey = getReviewerAgentApiToken();
+  if (!apiKey) {
+    throw new Error(
+      "無法獲取 REVIEWER_AGENT_API_TOKEN（舊名 COMPASS_API_TOKEN 仍相容）",
+    );
+  }
 
   const email = await getAIReviewEmail();
   if (!email)
     throw new Error("無法獲取 email（需 GitLab email 或 JIRA_EMAIL）");
 
-  const apiUrl =
-    "https://mac09demac-mini.balinese-python.ts.net/api/workflows/jobs";
+  const apiUrl = getReviewerAgentJobsUrl();
   const requestBody = {
     taskId: "code-review",
     version: "v1",
@@ -922,10 +924,10 @@ async function main() {
     return;
   }
 
-  // 若未配置 COMPASS_API_TOKEN，視為環境不支援 AI review：僅跳過送審，其餘流程照常
+  // 若未配置 REVIEWER_AGENT_API_TOKEN，視為環境不支援 AI review：僅跳過送審，其餘流程照常
   // 並且不進行任何 new commit / SHA / marker 判斷（避免不必要的耦合）
-  if (!getCompassApiToken()) {
-    console.log("\n⏭️  跳過 AI review（缺少 COMPASS_API_TOKEN）\n");
+  if (!getReviewerAgentApiToken()) {
+    console.log("\n⏭️  跳過 AI review（缺少 REVIEWER_AGENT_API_TOKEN）\n");
     return;
   }
 

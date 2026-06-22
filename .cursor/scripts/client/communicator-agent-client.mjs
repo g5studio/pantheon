@@ -7,8 +7,14 @@
  * @external https://innotech.atlassian.net/browse/FE-8429
  */
 
+import { execSync } from "child_process";
 import { existsSync, readFileSync, writeFileSync } from "fs";
-import { join } from "path";
+import { basename, join } from "path";
+import {
+  callLlmJson,
+  isLlmCallReady,
+  resolveLlmCallParams,
+} from "./llm-client.mjs";
 import {
   getAgentDisplayName,
   getJiraEmail,
@@ -22,6 +28,102 @@ const DEFAULT_COMMUNICATOR_AGENT_API_TOKEN =
 const ENV_KEY_API_URL = "COMMUNICATOR_AGENT_API_URL";
 const ENV_KEY_API_TOKEN = "COMMUNICATOR_AGENT_API_TOKEN";
 const ENV_KEY_TARGET = "COMMUNICATOR_AGENT_TARGET";
+const ENV_KEY_RETURN_EDITOR = "COMMUNICATOR_RETURN_EDITOR";
+const DEFAULT_RETURN_EDITOR = "cursor";
+
+const RETURN_EDITOR_ALIASES = {
+  cursor: "cursor",
+  vscode: "vscode",
+  "visual studio code": "vscode",
+  code: "vscode",
+  vs: "vscode",
+  codex: "codex",
+  "claude-code": "claude-code",
+  "claude code": "claude-code",
+  claude: "claude-code",
+  "claude-cli": "claude-code",
+  none: "none",
+  off: "none",
+  false: "none",
+  disabled: "none",
+};
+
+const NOTIFICATION_BODY_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    body: {
+      type: "string",
+      description:
+        "Status phrase only (Traditional Chinese); contextLabel like [pantheon/FE-8429] is prepended by system",
+    },
+  },
+  required: ["body"],
+};
+
+const NOTIFICATION_BODY_SYSTEM_PROMPT = [
+  "你是 Pantheon Operator 開發助理，負責為 LINE WORKS 通知「填空」。",
+  "",
+  "## 訊息模板（固定，不可改寫）",
+  "完整訊息會依 input.messageTemplate 組裝，其中 {{body}} 是唯一由你填寫的位置。",
+  "範例模板：",
+  "Hi FE-William , 我是您的開發助理 Sigrid ，以下訊息通知您： {{body}}",
+  "",
+  "## 你的任務",
+  "- 只產出替換 {{body}} 的短句（繁體中文）。",
+  "- 問候語、助理自介、「以下訊息通知您：」已在模板中，body 絕不可重複這些內容。",
+  "- body 應簡短（通常一句、10～30 字），像狀態通知，不要寫成完整信件或過度解釋。",
+  "",
+  "## 填空規則",
+  "- input.contextLabel（如 [pantheon/FE-8429]）會由系統自動加在 body 前面，你只需產出後面的「狀態短句」。",
+  "- 狀態短句需讓使用者一眼看懂要做什麼（如 Push 已完成、等待指示中、待您確認）。",
+  "- 不要重複 contextLabel 中的專案名或 ticket；不要重複問候/助理自介。",
+  "- 主要依 input.message 理解狀況；若 message 是英文簡短狀態，轉成自然繁中短句即可。",
+  "- 「點擊此處返回」連結由系統依 COMMUNICATOR_RETURN_EDITOR 附加 editor deeplink，你不需要產出 URL。",
+  "",
+  "## 正確 vs 錯誤範例",
+  "contextLabel=[pantheon/FE-8429], message=Push complete",
+  "✅ body: Push 已完成",
+  "❌ body: [pantheon/FE-8429] Push 已完成（不要含 contextLabel）",
+  "",
+  "contextLabel=[fluid-two], message=Waiting for instructions",
+  "✅ body: 等待指示中",
+  "❌ body: Hi FE-William，我是您的開發助理…",
+  "",
+  '回傳 JSON：{ "body": "..." }',
+].join("\n");
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 組裝通知訊息固定前綴（至「以下訊息通知您： 」為止）。
+ * @purpose 供模板預覽與 buildCommunicatorMessage 共用，避免 LLM 填空位置不一致。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+function buildCommunicatorMessagePrefix({
+  recipientName = "",
+  agentDisplayName = "",
+} = {}) {
+  const name = pickFirstNonEmptyString(recipientName) || "there";
+  const agentName = pickFirstNonEmptyString(agentDisplayName);
+  const assistantIntro = agentName
+    ? `我是您的開發助理 ${agentName} ，`
+    : "我是您的開發助理，";
+
+  return `Hi ${name} , ${assistantIntro}以下訊息通知您： `;
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 產出含 {{body}} 佔位符的完整訊息模板。
+ * @purpose 讓 LLM 明確知道填空位置與固定 wrapper。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+export function buildCommunicatorMessageTemplate({
+  recipientName = "",
+  agentDisplayName = "",
+} = {}) {
+  return `${buildCommunicatorMessagePrefix({ recipientName, agentDisplayName })}{{body}}`;
+}
 
 /**
  * 宣告內容用途說明與單號關聯
@@ -50,6 +152,258 @@ function pickFirstNonEmptyString(...values) {
     }
   }
   return "";
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 取得目前 git branch 名稱。
+ * @purpose 從 branch 推導關聯 Jira ticket。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+function getCurrentGitBranch() {
+  try {
+    return execSync("git rev-parse --abbrev-ref HEAD", {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 從 branch 名稱提取 Jira ticket（如 feature/FE-8429）。
+ * @purpose 通知正文帶上可辨識的單號上下文。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+function extractTicketFromBranch(branch) {
+  const match = String(branch || "").match(/([A-Z]+-\d+)/i);
+  return match ? match[1].toUpperCase() : "";
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 解析通知所需的專案 / branch / ticket 上下文。
+ * @purpose 讓 LINE WORKS 訊息可區分哪個專案、哪張單。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+export function resolveNotificationContext({ title = "" } = {}) {
+  const projectName =
+    pickFirstNonEmptyString(title, basename(getProjectRoot())) || "unknown";
+  const gitBranch = getCurrentGitBranch();
+  const ticket = extractTicketFromBranch(gitBranch);
+
+  return {
+    projectName,
+    gitBranch: gitBranch || null,
+    ticket: ticket || null,
+  };
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 產出通知正文前的固定上下文標籤。
+ * @purpose 格式如 [pantheon/FE-8429] 或 [pantheon]，供使用者快速辨識。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+export function formatNotificationContextLabel({
+  projectName = "",
+  ticket = "",
+} = {}) {
+  const project = pickFirstNonEmptyString(projectName) || "unknown";
+  const ticketId = pickFirstNonEmptyString(ticket);
+  return ticketId ? `[${project}/${ticketId}]` : `[${project}]`;
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 組裝含上下文標籤的完整通知正文。
+ * @purpose contextLabel 由程式固定產生，statusBody 由 LLM 或 fallback 提供。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+export function assembleNotificationBody(contextLabel, statusBody, url = "") {
+  const label = pickFirstNonEmptyString(contextLabel);
+  const status = pickFirstNonEmptyString(statusBody);
+  const safeUrl = String(url || "").trim();
+  const core = [label, status].filter(Boolean).join(" ");
+  const withExplicitUrl = safeUrl ? `${core} ${safeUrl}`.trim() : core;
+  return finalizeNotificationBody(withExplicitUrl, { explicitUrl: safeUrl }).body;
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 正規化專案路徑供 deeplink 使用。
+ * @purpose 統一 Windows / macOS 路徑分隔符。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+function normalizeProjectPathForDeeplink(projectPath) {
+  return String(projectPath || "")
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "");
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 產生 cursor:// 開啟 workspace 的 deeplink。
+ * @purpose COMMUNICATOR_RETURN_EDITOR=cursor 時使用。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+function buildCursorWorkspaceDeeplink(projectPath) {
+  const encodedPath = encodeURI(normalizeProjectPathForDeeplink(projectPath));
+  return encodedPath ? `cursor://file/${encodedPath}` : "";
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 產生 vscode:// 開啟 workspace 的 deeplink。
+ * @purpose COMMUNICATOR_RETURN_EDITOR=vscode 時使用。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+function buildVscodeWorkspaceDeeplink(projectPath) {
+  const encodedPath = encodeURI(normalizeProjectPathForDeeplink(projectPath));
+  return encodedPath ? `vscode://file/${encodedPath}/` : "";
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 產生 codex:// 開啟 workspace 的 deeplink。
+ * @purpose COMMUNICATOR_RETURN_EDITOR=codex 時使用。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+function buildCodexWorkspaceDeeplink(projectPath) {
+  const params = new URLSearchParams();
+  params.set("path", String(projectPath || ""));
+  return params.toString() ? `codex://threads/new?${params.toString()}` : "";
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 正規化絕對路徑供 Claude Code deeplink 使用。
+ * @purpose claude-cli://open?cwd= 需完整絕對路徑。
+ */
+function toAbsolutePathForClaudeCode(projectPath) {
+  const raw = String(projectPath || "").trim();
+  if (!raw) return "";
+  return raw.replace(/\\/g, "/");
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 產生 claude-cli:// 開啟 workspace 的 deeplink。
+ * @purpose COMMUNICATOR_RETURN_EDITOR=claude-code 時使用（需 Claude Code v2.1.91+）。
+ */
+function buildClaudeCodeWorkspaceDeeplink(projectPath) {
+  const absolutePath = toAbsolutePathForClaudeCode(projectPath);
+  if (!absolutePath) return "";
+  const params = new URLSearchParams();
+  params.set("cwd", absolutePath);
+  return `claude-cli://open?${params.toString()}`;
+}
+
+const RETURN_EDITOR_BUILDERS = {
+  cursor: { editor: "cursor", build: buildCursorWorkspaceDeeplink },
+  vscode: { editor: "vscode", build: buildVscodeWorkspaceDeeplink },
+  codex: { editor: "codex", build: buildCodexWorkspaceDeeplink },
+  "claude-code": {
+    editor: "claude-code",
+    build: buildClaudeCodeWorkspaceDeeplink,
+  },
+};
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 正規化 COMMUNICATOR_RETURN_EDITOR 設定值。
+ * @purpose 統一 alias（如 claude → claude-code）與預設值。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+function normalizeReturnEditorKey(raw) {
+  if (!pickFirstNonEmptyString(raw)) return DEFAULT_RETURN_EDITOR;
+  const normalized = RETURN_EDITOR_ALIASES[String(raw).toLowerCase().trim()];
+  return normalized || DEFAULT_RETURN_EDITOR;
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 解析使用者設定的慣用 editor（env）。
+ * @purpose 讀取 COMMUNICATOR_RETURN_EDITOR，預設 cursor；none 表示不附加返回連結。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+export function resolveCommunicatorReturnEditor() {
+  const envLocal = loadEnvLocal();
+  const raw = pickFirstNonEmptyString(
+    process.env[ENV_KEY_RETURN_EDITOR],
+    envLocal[ENV_KEY_RETURN_EDITOR],
+  );
+  return normalizeReturnEditorKey(raw);
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 依慣用 editor 產生 workspace 返回 deeplink。
+ * @purpose 供通知正文末尾「點擊此處返回」使用。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+export function resolveEditorReturnLink(
+  projectPath = "",
+  editorOverride = "",
+) {
+  const editorKey = normalizeReturnEditorKey(
+    pickFirstNonEmptyString(editorOverride) ||
+      pickFirstNonEmptyString(
+        process.env[ENV_KEY_RETURN_EDITOR],
+        loadEnvLocal()[ENV_KEY_RETURN_EDITOR],
+      ),
+  );
+  if (editorKey === "none") return null;
+
+  const builder = RETURN_EDITOR_BUILDERS[editorKey];
+  if (!builder) return null;
+
+  const absolutePath = pickFirstNonEmptyString(projectPath) || getProjectRoot();
+  if (!absolutePath) return null;
+
+  const url = builder.build(absolutePath);
+  return url ? { url, editor: builder.editor } : null;
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 於正文末尾附加「點擊此處返回」editor deeplink。
+ * @purpose 讓使用者從 LINE WORKS 一鍵回到慣用 editor workspace。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+export function appendEditorReturnLink(
+  body,
+  { projectPath = "", explicitUrl = "", editor = "" } = {},
+) {
+  const core = String(body || "").trim();
+  if (!core || pickFirstNonEmptyString(explicitUrl)) {
+    return { body: core, returnLink: null };
+  }
+
+  const returnLink = resolveEditorReturnLink(projectPath, editor);
+  if (!returnLink?.url) {
+    return { body: core, returnLink: null };
+  }
+
+  return {
+    body: `${core}\n點擊此處返回 ${returnLink.url}`,
+    returnLink,
+  };
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 完成通知正文組裝（含 editor 返回連結）。
+ * @purpose 統一 LLM / fallback 輸出後的最終正文格式。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+function finalizeNotificationBody(body, { explicitUrl = "" } = {}) {
+  return appendEditorReturnLink(body, {
+    projectPath: getProjectRoot(),
+    explicitUrl,
+  });
 }
 
 /**
@@ -138,6 +492,7 @@ export function getCommunicatorAgentConfig() {
     apiUrl,
     apiToken: configuredToken || DEFAULT_COMMUNICATOR_AGENT_API_TOKEN,
     target,
+    returnEditor: resolveCommunicatorReturnEditor(),
     enabled: Boolean(apiUrl),
     usingDefaultToken: !configuredToken,
   };
@@ -172,22 +527,121 @@ function deriveDisplayNameFromEmail(email) {
 
 /**
  * 宣告內容用途說明與單號關聯
- * @description 組裝通知正文（title / message / url）。
- * @purpose 作為模板中的『正文』區塊。
+ * @description 組裝通知正文（message / url）；LLM 失敗時的 fallback。
+ * @purpose 作為模板中「以下訊息通知您：」後的正文原文直傳。
  * @external https://innotech.atlassian.net/browse/FE-8429
  */
-function buildNotificationBody(title, message, url = "") {
-  const safeTitle = String(title || "").trim();
+export function buildNotificationBodyFallback(title, message, url = "") {
+  const context = resolveNotificationContext({ title });
+  const contextLabel = formatNotificationContextLabel(context);
   const safeMessage = String(message || "").trim();
-  const safeUrl = String(url || "").trim();
-  const head = safeTitle ? `[${safeTitle}] ${safeMessage}`.trim() : safeMessage;
-  return safeUrl ? `${head}\n${safeUrl}` : head;
+  const safeTitle = String(title || "").trim();
+  const statusBody = safeMessage || safeTitle;
+  return assembleNotificationBody(contextLabel, statusBody, url);
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 以 LLM 理解通知脈絡後擬定正文；失敗時 fallback 原文。
+ * @purpose 讓開發助理以繁體中文撰寫 LINE WORKS 通知正文（FE-8429）。
+ * @external https://innotech.atlassian.net/browse/FE-8429
+ */
+export async function resolveNotificationBodyWithLlm({
+  title = "",
+  message = "",
+  url = "",
+  recipientName = "",
+} = {}) {
+  const context = resolveNotificationContext({ title });
+  const contextLabel = formatNotificationContextLabel(context);
+  const fallbackBody = buildNotificationBodyFallback(title, message, url);
+  const envLocal = loadEnvLocal();
+  const callParams = resolveLlmCallParams({
+    envLocal,
+    providerEnvKeys: ["COMMUNICATOR_LLM_PROVIDER"],
+  });
+
+  if (!isLlmCallReady(callParams)) {
+    return {
+      body: fallbackBody,
+      usedLlm: false,
+      reason: "llm-credentials-missing",
+      context,
+      contextLabel,
+    };
+  }
+
+  const agentDisplayName = getAgentDisplayName() || "";
+  const messageTemplate = buildCommunicatorMessageTemplate({
+    recipientName,
+    agentDisplayName,
+  });
+
+  try {
+    const { result, model, provider, degradedReason } = await callLlmJson({
+      action: "communicator-notification-body",
+      envLocal,
+      providerEnvKeys: ["COMMUNICATOR_LLM_PROVIDER"],
+      defaultModel: "gpt-5.4-nano",
+      system: NOTIFICATION_BODY_SYSTEM_PROMPT,
+      input: {
+        messageTemplate,
+        bodyPlaceholder: "{{body}}",
+        contextLabel,
+        projectName: context.projectName,
+        ticket: context.ticket,
+        gitBranch: context.gitBranch,
+        title: String(title || ""),
+        message: String(message || ""),
+        url: String(url || ""),
+        agentDisplayName,
+        recipientName: String(recipientName || ""),
+      },
+      temperature: 0.3,
+      schema: NOTIFICATION_BODY_SCHEMA,
+      schemaName: "communicator_notification_body",
+    });
+
+    const statusBody = pickFirstNonEmptyString(result?.body);
+    if (!statusBody) {
+      return {
+        body: fallbackBody,
+        usedLlm: false,
+        reason: "llm-empty-body",
+        model,
+        llmProvider: provider,
+        context,
+        contextLabel,
+      };
+    }
+
+    return {
+      body: assembleNotificationBody(contextLabel, statusBody, url),
+      statusBody,
+      usedLlm: true,
+      model,
+      llmProvider: provider,
+      degradedReason: degradedReason || null,
+      context,
+      contextLabel,
+    };
+  } catch (error) {
+    return {
+      body: fallbackBody,
+      usedLlm: false,
+      reason: "llm-failed",
+      llmProvider: callParams.provider,
+      error: error instanceof Error ? error.message : String(error),
+      context,
+      contextLabel,
+    };
+  }
 }
 
 /**
  * 宣告內容用途說明與單號關聯
  * @description 將系統通知格式化為 Operator 訊息模板。
- * @purpose Hi xxx , 我是您的開發助理 [AGENT_DISPLAY_NAME] ，以下訊息通知您：『正文』
+ * @purpose Hi xxx , 我是您的開發助理 [AGENT_DISPLAY_NAME] ，以下訊息通知您： 正文
  * @external https://innotech.atlassian.net/browse/FE-8429
  */
 export function buildCommunicatorMessage({
@@ -196,15 +650,13 @@ export function buildCommunicatorMessage({
   title = "",
   message = "",
   url = "",
+  body = "",
 } = {}) {
-  const body = buildNotificationBody(title, message, url);
-  const name = pickFirstNonEmptyString(recipientName) || "there";
-  const agentName = pickFirstNonEmptyString(agentDisplayName);
-  const assistantIntro = agentName
-    ? `我是您的開發助理 ${agentName} ，`
-    : "我是您的開發助理，";
+  const resolvedBody =
+    pickFirstNonEmptyString(body) ||
+    buildNotificationBodyFallback(title, message, url);
 
-  return `Hi ${name} , ${assistantIntro}以下訊息通知您：『${body}』`;
+  return `${buildCommunicatorMessagePrefix({ recipientName, agentDisplayName })}${resolvedBody}`;
 }
 
 /**
@@ -434,14 +886,22 @@ export async function sendCommunicatorNotification({
     (email ? await resolveRecipientDisplayName(config, email) : "") ||
     "there";
 
+  const bodyResult = await resolveNotificationBodyWithLlm({
+    title,
+    message,
+    url,
+    recipientName,
+  });
+  const returnLink = pickFirstNonEmptyString(url)
+    ? null
+    : resolveEditorReturnLink(getProjectRoot());
+
   const payload = {
     target: targetResult.target,
     message: buildCommunicatorMessage({
       recipientName,
       agentDisplayName: getAgentDisplayName() || "",
-      title,
-      message,
-      url,
+      body: bodyResult.body,
     }),
   };
 
@@ -468,6 +928,18 @@ export async function sendCommunicatorNotification({
     target: targetResult.target,
     targetSource: targetResult.source,
     targetPersisted: targetResult.persisted,
+    message: payload.message,
+    body: bodyResult.body,
+    statusBody: bodyResult.statusBody || null,
+    context: bodyResult.context || null,
+    contextLabel: bodyResult.contextLabel || null,
+    bodySource: bodyResult.usedLlm ? "llm" : "fallback",
+    bodyReason: bodyResult.reason || null,
+    bodyError: bodyResult.error || null,
+    llmModel: bodyResult.model || null,
+    llmProvider: bodyResult.llmProvider || null,
+    editorReturnLink: returnLink?.url || null,
+    editor: returnLink?.editor || null,
     response: result.response,
   };
 }
@@ -487,5 +959,5 @@ export function reportSystemNotification({ title, message, url = "" } = {}) {
  * llm 分析紀錄區
  * @llm-review-submitted-at 2026-06-23T00:00:00.000Z
  * @llm-review-model composer
- * @llm-review-note 調整 Operator 訊息模板：Hi xxx , 我是您的開發助理 [AGENT_DISPLAY_NAME] ，以下訊息通知您：『正文』（FE-8429）。
+ * @llm-review-note FE-8429：COMMUNICATOR_RETURN_EDITOR 新增 claude-code（claude-cli://open?cwd=）。
  */

@@ -8,14 +8,11 @@
  */
 
 import {
-  buildCommunicatorMessage,
   getCommunicatorAgentConfig,
   isCommunicatorAgentEnabled,
   resolveCommunicatorTarget,
-  resolveRecipientDisplayName,
   sendCommunicatorNotification,
 } from "../client/communicator-agent-client.mjs";
-import { getAgentDisplayName, getJiraEmail } from "../utilities/env-loader.mjs";
 
 /**
  * 宣告內容用途說明與單號關聯
@@ -69,6 +66,7 @@ Env:
   COMMUNICATOR_AGENT_API_URL
   COMMUNICATOR_AGENT_API_TOKEN   （未設定時使用內建預設 token）
   COMMUNICATOR_AGENT_TARGET      （未設定時自動解析）
+  COMMUNICATOR_RETURN_EDITOR     （慣用 editor deeplink；預設 cursor；含 claude-code）
   JIRA_EMAIL                     （target 自動解析用）
 
 Examples:
@@ -103,11 +101,13 @@ async function main() {
           enabled: config.enabled,
           apiUrl: config.apiUrl || null,
           target: config.target || null,
+          returnEditor: config.returnEditor || null,
           usingDefaultToken: config.usingDefaultToken,
           envKeys: [
             "COMMUNICATOR_AGENT_API_URL",
             "COMMUNICATOR_AGENT_API_TOKEN",
             "COMMUNICATOR_AGENT_TARGET",
+            "COMMUNICATOR_RETURN_EDITOR",
             "JIRA_EMAIL",
           ],
         },
@@ -145,28 +145,8 @@ async function main() {
   const url = String(args.url || "").trim();
 
   if (action === "ping" || action === "send") {
-    const config = getCommunicatorAgentConfig();
-    const email = getJiraEmail();
-    const recipientName = email
-      ? await resolveRecipientDisplayName(config, email)
-      : "there";
     const result = await sendCommunicatorNotification({ title, message, url });
-    console.log(
-      JSON.stringify(
-        {
-          ...result,
-          previewMessage: buildCommunicatorMessage({
-            recipientName,
-            agentDisplayName: getAgentDisplayName() || "",
-            title,
-            message,
-            url,
-          }),
-        },
-        null,
-        2,
-      ),
-    );
+    console.log(JSON.stringify(result, null, 2));
     process.exit(result.ok ? 0 : result.skipped ? 0 : 1);
   }
 
