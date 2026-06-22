@@ -16,7 +16,7 @@ import {
   resolveLlmCallParams,
 } from "./llm-client.mjs";
 import {
-  DEFAULT_REVIEWER_AGENT_API_URL,
+  DEFAULT_COMMUNICATOR_AGENT_API_URL,
   getAgentDisplayName,
   getJiraEmail,
   getProjectRoot,
@@ -479,7 +479,7 @@ export function getCommunicatorAgentConfig() {
     envLocal[ENV_KEY_API_URL],
   );
   const apiUrl = normalizeBaseUrl(
-    configuredApiUrl || DEFAULT_REVIEWER_AGENT_API_URL,
+    configuredApiUrl || DEFAULT_COMMUNICATOR_AGENT_API_URL,
   );
   const configuredToken = pickFirstNonEmptyString(
     process.env[ENV_KEY_API_TOKEN],
@@ -962,5 +962,5 @@ export function reportSystemNotification({ title, message, url = "" } = {}) {
  * llm 分析紀錄區
  * @llm-review-submitted-at 2026-06-23T00:00:00.000Z
  * @llm-review-model composer
- * @llm-review-note COMMUNICATOR_AGENT_API_URL 未設定時 fallback 至 DEFAULT_REVIEWER_AGENT_API_URL（與 Reviewer 一致）。
+ * @llm-review-note COMMUNICATOR_AGENT_API_URL 未設定時 fallback 至 DEFAULT_COMMUNICATOR_AGENT_API_URL（Hermes host，與 Reviewer 分離）。
  */
