@@ -30,6 +30,7 @@
     "agent-signature": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/agent-signature.mjs",
     "llm-client": "node .cursor/scripts/utilities/run-pantheon-script.mjs client/llm-client.mjs",
     "env-loader": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/env-loader.mjs",
-    "agent-log": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/agent-log.mjs"
+    "agent-log": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/agent-log.mjs",
+    "agent-communicator": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/agent-communicator.mjs"
   }
 }
