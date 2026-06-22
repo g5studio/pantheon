@@ -1,10 +1,6 @@
 # 開發工具腳本（打包時不會使用）
 .cursor/scripts/
 
-# Cursor Hooks 檔案
-.cursor/hooks.json
-.cursor/hooks/
-
 # Cursor 命令檔案
 .cursor/commands/
 
