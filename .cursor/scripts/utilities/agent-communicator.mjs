@@ -63,7 +63,7 @@ Options:
   --force-refresh    resolve-target 強制重新查 company-members
 
 Env:
-  COMMUNICATOR_AGENT_API_URL
+  COMMUNICATOR_AGENT_API_URL     （未設定時使用 manageds 預設 URL，同 REVIEWER_AGENT_API_URL）
   COMMUNICATOR_AGENT_API_TOKEN   （未設定時使用內建預設 token）
   COMMUNICATOR_AGENT_TARGET      （未設定時自動解析）
   COMMUNICATOR_RETURN_EDITOR     （慣用 editor deeplink；預設 cursor；含 claude-code）
@@ -102,6 +102,7 @@ async function main() {
           apiUrl: config.apiUrl || null,
           target: config.target || null,
           returnEditor: config.returnEditor || null,
+          usingDefaultApiUrl: config.usingDefaultApiUrl,
           usingDefaultToken: config.usingDefaultToken,
           envKeys: [
             "COMMUNICATOR_AGENT_API_URL",

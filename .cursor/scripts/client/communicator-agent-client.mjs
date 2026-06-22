@@ -3,7 +3,7 @@
 /**
  * 檔案用途區塊
  * @module communicator-agent-client
- * @purpose 依 env 對接 Hermes Communicator API 發送 LINE WORKS 通知；僅 URL 未設定時跳過。
+ * @purpose 依 env 對接 Hermes Communicator API 發送 LINE WORKS 通知；URL 未設定時使用 manageds 預設。
  * @external https://innotech.atlassian.net/browse/FE-8429
  */
 
@@ -16,6 +16,7 @@ import {
   resolveLlmCallParams,
 } from "./llm-client.mjs";
 import {
+  DEFAULT_REVIEWER_AGENT_API_URL,
   getAgentDisplayName,
   getJiraEmail,
   getProjectRoot,
@@ -473,11 +474,12 @@ function upsertCursorEnvLocalKey(key, value) {
  */
 export function getCommunicatorAgentConfig() {
   const envLocal = loadEnvLocal();
+  const configuredApiUrl = pickFirstNonEmptyString(
+    process.env[ENV_KEY_API_URL],
+    envLocal[ENV_KEY_API_URL],
+  );
   const apiUrl = normalizeBaseUrl(
-    pickFirstNonEmptyString(
-      process.env[ENV_KEY_API_URL],
-      envLocal[ENV_KEY_API_URL],
-    ),
+    configuredApiUrl || DEFAULT_REVIEWER_AGENT_API_URL,
   );
   const configuredToken = pickFirstNonEmptyString(
     process.env[ENV_KEY_API_TOKEN],
@@ -494,6 +496,7 @@ export function getCommunicatorAgentConfig() {
     target,
     returnEditor: resolveCommunicatorReturnEditor(),
     enabled: Boolean(apiUrl),
+    usingDefaultApiUrl: !configuredApiUrl,
     usingDefaultToken: !configuredToken,
   };
 }
@@ -501,7 +504,7 @@ export function getCommunicatorAgentConfig() {
 /**
  * 宣告內容用途說明與單號關聯
  * @description 判斷 Communicator Agent 是否已啟用。
- * @purpose 僅 COMMUNICATOR_AGENT_API_URL 未設定時回傳 false。
+ * @purpose apiUrl 可用時回傳 true（未設定 COMMUNICATOR_AGENT_API_URL 時使用 manageds 預設）。
  * @external https://innotech.atlassian.net/browse/FE-8429
  */
 export function isCommunicatorAgentEnabled() {
@@ -959,5 +962,5 @@ export function reportSystemNotification({ title, message, url = "" } = {}) {
  * llm 分析紀錄區
  * @llm-review-submitted-at 2026-06-23T00:00:00.000Z
  * @llm-review-model composer
- * @llm-review-note FE-8429：COMMUNICATOR_RETURN_EDITOR 新增 claude-code（claude-cli://open?cwd=）。
+ * @llm-review-note COMMUNICATOR_AGENT_API_URL 未設定時 fallback 至 DEFAULT_REVIEWER_AGENT_API_URL（與 Reviewer 一致）。
  */
