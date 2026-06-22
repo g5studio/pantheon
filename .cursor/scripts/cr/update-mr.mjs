@@ -58,6 +58,7 @@ import {
   getProjectRoot,
   loadEnvLocal,
   getGitLabToken,
+  getJiraEmail,
   getReviewerAgentApiToken,
   getReviewerAgentJobsUrl,
 } from "../utilities/env-loader.mjs";
@@ -202,7 +203,7 @@ function getGitLabUserEmailWithGlab() {
 
 async function getGitLabUserEmailWithApi(hostname = "gitlab.service-hub.tech") {
   try {
-    const token = getGitLabTokenFromEnvLoader();
+    const token = getGitLabToken();
     if (!token) return null;
     const response = await fetch(`https://${hostname}/api/v4/user`, {
       headers: { "PRIVATE-TOKEN": token },
@@ -231,7 +232,7 @@ function checkAndGuideConfigForAIReview() {
   const missing = [];
   if (!getReviewerAgentApiToken()) missing.push("REVIEWER_AGENT_API_TOKEN");
 
-  const hasToken = !!getGitLabTokenFromEnvLoader();
+  const hasToken = !!getGitLabToken();
   const hasGlabAuth =
     hasGlab() && isGlabAuthenticated("gitlab.service-hub.tech");
   if (!hasToken && !hasGlabAuth) missing.push("GitLab token 或 glab auth");

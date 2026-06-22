@@ -649,7 +649,7 @@ async function main() {
     console.log("選填配置：");
     console.log("  - MR_REVIEWER: 預設 MR Reviewer");
     console.log("  - REVIEWER_AGENT_API_TOKEN: Reviewer Agent API Token（舊名 COMPASS_API_TOKEN 仍相容）");
-    console.log("  - REVIEWER_AGENT_API_URL: Reviewer Agent API base URL（預設 manageds-virtual-machine）");
+    console.log("  - REVIEWER_AGENT_API_URL: Reviewer Agent API base URL（預設 mac09demac-mini / Compass）");
     console.log("");
   }
 
