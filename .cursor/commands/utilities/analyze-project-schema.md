@@ -107,5 +107,5 @@ node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/evolve.mjs writ
 
 環境變數（可選）：
 
-- `EVOLVE_SCHEMA_MODEL`：覆寫預設模型
 - `EVOLVE_LLM_PROVIDER`：`openai` 或 `api-domain`
+- 預設 model：`gpt-5.3-codex`（程式內建；可用 CLI `--llm-model` / `--model` 覆寫，不支援 env 設定）

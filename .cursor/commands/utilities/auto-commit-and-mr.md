@@ -27,7 +27,7 @@ description: 自動執行 commit 和建立 MR 的完整流程
 3. 從上下文推斷 commit 信息（type, ticket, message）
 4. 執行 commit 並推送到遠端
 5. 自動建立 MR（包含 FE Board label、reviewer、draft 狀態、delete source branch）
-6. **預設提交 AI review**（用戶可用 `--no-review` 明確跳過；若缺少 `COMPASS_API_TOKEN` 則會自動跳過 AI review；若為更新既有 MR，會由 `update-mr.mjs` 決定是否送審）
+6. **預設提交 AI review**（用戶可用 `--no-review` 明確跳過；若缺少 `REVIEWER_AGENT_API_TOKEN` 則會自動跳過 AI review；若為更新既有 MR，會由 `update-mr.mjs` 決定是否送審）
 
 **多 Ticket 驗證流程：**
 
@@ -83,7 +83,7 @@ description: 自動執行 commit 和建立 MR 的完整流程
 3. 執行 commit 並推送到遠端
 4. **略過關聯單號詢問環節**，直接使用當前分支單號
 5. 自動建立 MR（包含 FE Board label、reviewer、draft 狀態、delete source branch）
-6. **預設提交 AI review**（用戶可用 `--no-review` 明確跳過；若缺少 `COMPASS_API_TOKEN` 則會自動跳過 AI review；若為更新既有 MR，會由 `update-mr.mjs` 決定是否送審）
+6. **預設提交 AI review**（用戶可用 `--no-review` 明確跳過；若缺少 `REVIEWER_AGENT_API_TOKEN` 則會自動跳過 AI review；若為更新既有 MR，會由 `update-mr.mjs` 決定是否送審）
 
 **參數支持：**
 - `--reviewer="@username"`：指定 MR reviewer（預設: "@william.chiang"）

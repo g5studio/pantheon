@@ -1296,8 +1296,6 @@ async function cmdRunAnnotationPass(args) {
   const envLocal = loadEnvLocal();
   const model = resolveLlmModel({
     explicitModel: typeof args.model === "string" ? args.model : null,
-    envLocal,
-    envKeys: ["EVOLVE_ANNOTATION_MODEL", "ADAPT_LLM_MODEL", "OPENAI_MODEL"],
     defaultModel: "gpt-5.3-codex",
   });
 
@@ -1826,13 +1824,6 @@ async function cmdAnalyzeProjectSchema(args) {
         : typeof args["llm-model"] === "string"
           ? args["llm-model"]
           : null,
-    envLocal,
-    envKeys: [
-      "EVOLVE_SCHEMA_MODEL",
-      "EVOLVE_ANNOTATION_MODEL",
-      "ADAPT_LLM_MODEL",
-      "OPENAI_MODEL",
-    ],
     defaultModel: "gpt-5.3-codex",
   });
 

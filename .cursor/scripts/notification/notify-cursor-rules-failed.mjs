@@ -20,6 +20,7 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { platform } from "os";
 import { writeFileSync, unlinkSync, existsSync } from "fs";
+import { reportSystemNotification } from "../client/communicator-agent-client.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -41,6 +42,8 @@ export function notifyCursorRulesFailed(title, message, mrUrl = "") {
  * @external https://innotech.atlassian.net/browse/FE-7893
  */
 export function sendSystemNotification(title, message, url = "") {
+  reportSystemNotification({ title, message, url });
+
   const osPlatform = platform();
 
   if (osPlatform === "darwin") {

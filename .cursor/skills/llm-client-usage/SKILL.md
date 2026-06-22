@@ -13,7 +13,7 @@ Keep all script-level LLM calls consistent, traceable, and easy to degrade betwe
 ## Standard Pattern
 
 1. Read env with `loadEnvLocal()`.
-2. Resolve model with `resolveLlmModel(...)`.
+2. Resolve model with `resolveLlmModel({ explicitModel, defaultModel })` — **不讀 env**；僅 CLI 參數或內建 default。
 3. Resolve provider with this priority:
    - explicit arg (`--llm-provider`)
    - env (`*_LLM_PROVIDER`)
@@ -30,8 +30,6 @@ Keep all script-level LLM calls consistent, traceable, and easy to degrade betwe
 const envLocal = loadEnvLocal();
 const model = resolveLlmModel({
   explicitModel: args.model ?? null,
-  envLocal,
-  envKeys: ["MY_LLM_MODEL", "OPENAI_MODEL"],
   defaultModel: "gpt-5.4-nano",
 });
 
