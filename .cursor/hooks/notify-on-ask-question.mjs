@@ -50,11 +50,11 @@ function resolveCwd(input) {
   if (typeof input.cwd === "string" && input.cwd.trim()) {
     return input.cwd.trim();
   }
-  if (
-    Array.isArray(input.workspace_roots) &&
-    typeof input.workspace_roots[0] === "string"
-  ) {
-    return input.workspace_roots[0];
+  if (Array.isArray(input.workspace_roots)) {
+    const root = input.workspace_roots
+      .map((value) => (typeof value === "string" ? value.trim() : ""))
+      .find((value) => value.length > 0);
+    if (root) return root;
   }
   return process.cwd();
 }
@@ -117,5 +117,5 @@ if (isMain) {
  * llm 分析紀錄區
  * @llm-review-submitted-at 2026-06-23T00:00:00.000Z
  * @llm-review-model composer-2.5-fast
- * @llm-review-note AskQuestion 通知改為 30 秒冷卻；使用者已操作則由 cancel hook 取消。
+ * @llm-review-note resolveCwd 取第一個非空 trimmed workspace root；30 秒冷卻由 cancel hook 取消。
  */

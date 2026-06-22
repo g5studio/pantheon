@@ -236,7 +236,12 @@ export async function runNotificationScheduler({ pendingId, cwd }) {
   }
 
   const cooldownMs = state.cooldownMs || ASK_QUESTION_NOTIFY_COOLDOWN_MS;
-  await new Promise((resolve) => setTimeout(resolve, cooldownMs));
+  const targetAt =
+    typeof state.notifyAt === "number"
+      ? state.notifyAt
+      : Date.now() + cooldownMs;
+  const remaining = Math.max(0, targetAt - Date.now());
+  await new Promise((resolve) => setTimeout(resolve, remaining));
 
   const latest = readPendingState(cwd);
   if (!latest || latest.id !== pendingId || latest.status !== "pending") {
@@ -262,5 +267,5 @@ export async function runNotificationScheduler({ pendingId, cwd }) {
  * llm 分析紀錄區
  * @llm-review-submitted-at 2026-06-23T00:00:00.000Z
  * @llm-review-model composer-2.5-fast
- * @llm-review-note 重用記憶體 pendingState 補寫 schedulerPid，避免 re-read 為 null 時 crash。
+ * @llm-review-note scheduler 依 notifyAt 計算剩餘等待時間，避免子行程啟動延遲拉長冷卻。
  */
