@@ -27,7 +27,7 @@ description: 自動執行 commit 和建立 MR 的完整流程
 3. 從上下文推斷 commit 信息（type, ticket, message）
 4. 執行 commit 並推送到遠端
 5. 自動建立 MR（包含 FE Board label、reviewer、draft 狀態、delete source branch）
-6. **預設提交 AI review**（用戶可用 `--no-review` 明確跳過；若缺少 `COMPASS_API_TOKEN` 則會自動跳過 AI review；若為更新既有 MR，會由 `update-mr.mjs` 決定是否送審）
+6. **預設提交 AI review**（用戶可用 `--no-review` 明確跳過；若缺少 `REVIEWER_AGENT_API_TOKEN` 則會自動跳過 AI review；若為更新既有 MR，會由 `update-mr.mjs` 決定是否送審）
 
 **多 Ticket 驗證流程：**
 
@@ -83,7 +83,7 @@ description: 自動執行 commit 和建立 MR 的完整流程
 3. 執行 commit 並推送到遠端
 4. **略過關聯單號詢問環節**，直接使用當前分支單號
 5. 自動建立 MR（包含 FE Board label、reviewer、draft 狀態、delete source branch）
-6. **預設提交 AI review**（用戶可用 `--no-review` 明確跳過；若缺少 `COMPASS_API_TOKEN` 則會自動跳過 AI review；若為更新既有 MR，會由 `update-mr.mjs` 決定是否送審）
+6. **預設提交 AI review**（用戶可用 `--no-review` 明確跳過；若缺少 `REVIEWER_AGENT_API_TOKEN` 則會自動跳過 AI review；若為更新既有 MR，會由 `update-mr.mjs` 決定是否送審）
 
 **參數支持：**
 - `--reviewer="@username"`：指定 MR reviewer（預設: "@william.chiang"）
@@ -385,9 +385,15 @@ AI: 已設置 --no-draft 參數
    - 檢查 `issueType` 欄位是否為 `Bug`
 
 2. **追溯問題來源**（僅 Bug 類型）：
-   - 執行 `git log --oneline -20 -- <changed-files>` 查看變更檔案的歷史記錄
-   - 找出將功能「改壞」或「引入問題」的 commit
-   - 記錄相關的 Jira ticket 或 MR
+   - **必須優先**執行 `trace-bug-root-cause` 腳本（勿僅手動 `git log` 猜測）：
+     ```bash
+     pnpm run trace-bug-root-cause -- --ticket={ticket} --target=main
+     # 掛載專案若無 script：
+     node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs cr/trace-bug-root-cause.mjs --ticket={ticket} --target=main
+     ```
+   - 腳本會從 fix diff 提取搜尋詞，以 `git log -S` 追溯**引入問題**的 commit，並自動排除當前修復分支 commits 與當前 Bug 單號
+   - 需要結構化資料時加 `--json`；將輸出 Markdown 區塊貼入開發報告的「造成問題的單號」
+   - 若腳本回傳「無法追溯」，可再手動 `git log -S` / `git blame` 補充，但**不得**把當前 Bug 單或 Jira `is caused by` 連結誤填為引入單號
 
 3. **在開發報告中包含「造成問題的單號」區塊**：
    - **必須包含**以下資訊：
@@ -419,14 +425,15 @@ AI: 已設置 --no-draft 參數
 **追溯命令範例**：
 
 ```bash
-# 查看變更檔案的歷史記錄
-git log --oneline -20 -- src/utilities/api/endpoint/bet-creator/sport-api.ts
+# 推薦：自動追溯（從 fix diff 找引入 commit）
+pnpm run trace-bug-root-cause -- --ticket=FE-1234 --target=main
 
-# 查看特定 commit 的詳細信息
+# JSON 輸出（供 Agent 組裝開發報告）
+pnpm run trace-bug-root-cause -- --ticket=FE-1234 --json
+
+# 手動補充（腳本無法追溯時）
+git log -S "nickName.length" --oneline --follow -- path/to/file.ts
 git show <commit_hash> --stat
-
-# 搜尋包含特定關鍵字的 commit
-git log --oneline --all --grep="sportGuestClient"
 ```
 
 **禁止行為**：

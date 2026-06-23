@@ -1,56 +1,39 @@
 #!/usr/bin/env node
 
 /**
- * Jira Ticket 更新腳本
- *
- * 提供對 Jira ticket 的完整控制，包括：
- * - 狀態切換（transition）
- * - 欄位更新（summary, description, assignee, priority, labels, components 等）
- * - Issue 關聯（建立/移除與其他 ticket 的關聯）
- * - Sprint 設置
- * - Fix Version 設置
- *
- * 使用方式：
- *   node update-jira.mjs <ticket> <action> [options]
- *
- * 動作列表：
- *   --transition, -t       切換狀態
- *   --update, -u           更新欄位
- *   --link, -l             建立關聯
- *   --unlink               移除關聯
- *   --info                 查看 ticket 資訊與可用選項
- *
- * 範例：
- *   # 切換狀態
- *   node update-jira.mjs FE-1234 --transition="In Progress"
- *
- *   # 更新欄位
- *   node update-jira.mjs FE-1234 --update --summary="新標題"
- *   node update-jira.mjs FE-1234 --update --assignee="william.chiang"
- *   node update-jira.mjs FE-1234 --update --priority="High"
- *   node update-jira.mjs FE-1234 --update --labels="bug,urgent"
- *   node update-jira.mjs FE-1234 --update --fix-version="5.36.0"
- *
- *   # 建立關聯
- *   node update-jira.mjs FE-1234 --link=FE-5678 --link-type="blocks"
- *   node update-jira.mjs FE-1234 --link=FE-5678 --link-type="is blocked by"
- *   node update-jira.mjs FE-1234 --link=FE-5678 --link-type="relates to"
- *
- *   # 移除關聯
- *   node update-jira.mjs FE-1234 --unlink=FE-5678
- *
- *   # 查看 ticket 資訊
- *   node update-jira.mjs FE-1234 --info
+ * === 檔案用途區塊 ===
+ * @module script-runtime
+ * @purpose 管理 .cursor/scripts/jira/update-jira.mjs 的註解補全與用途說明
+ * @external https://innotech.atlassian.net/browse/FE-8310
+ * @external https://innotech.atlassian.net/browse/FE-7922
+ */
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 本區塊以下宣告需標示用途與單號關聯
+ * @purpose 統一定義宣告級註解格式與單號追溯規則
+ */
+/**
+ * 檔案用途區塊
+ * @module jira-update
+ * @purpose Jira Ticket 更新工具（狀態轉換/欄位更新/Issue Link/查看資訊）
  */
 
 import { getJiraConfig } from "../utilities/env-loader.mjs";
+import {
+  JIRA_CONTENT_OPERATIONS,
+  prepareJiraContent,
+  summarizeFormatCheck,
+} from "./jira-content-formatter.mjs";
+import { buildAdfDocFromText } from "./jira-adf-builder.mjs";
 
 // ============================================================================
 // 工具函數
 // ============================================================================
 
 /**
- * 從 Jira URL 解析 ticket ID
+ * 宣告內容用途說明與單號關聯
+ * @description 解析 Jira URL 中的 ticket key
+ * @purpose FE-7922
  */
 function parseJiraUrl(url) {
   if (!url.includes("/")) {
@@ -71,14 +54,18 @@ function parseJiraUrl(url) {
 }
 
 /**
- * 驗證 ticket 格式
+ * 宣告內容用途說明與單號關聯
+ * @description 驗證 ticket key 格式是否符合 〈專案代碼>-〈數字〉〉
+ * @purpose FE-7922
  */
 function validateTicket(ticket) {
   return /^[A-Z0-9]+-\d+$/.test(ticket);
 }
 
 /**
- * 建立 API 請求的基礎配置
+ * 宣告內容用途說明與單號關聯
+ * @description 建立 Jira API 請求的基本認證與 baseUrl
+ * @purpose FE-7922
  */
 function createApiConfig() {
   const config = getJiraConfig();
@@ -93,7 +80,9 @@ function createApiConfig() {
 }
 
 /**
- * 處理 API 錯誤回應
+ * 宣告內容用途說明與單號關聯
+ * @description 針對 Jira API 的非 OK response 進行錯誤分類並丟出可讀訊息
+ * @purpose FE-7922
  */
 async function handleApiError(response, context) {
   if (response.status === 404) {
@@ -112,44 +101,14 @@ async function handleApiError(response, context) {
   }
 }
 
-/**
- * 將純文字轉換為 ADF (Atlassian Document Format) 格式
- */
-function textToADF(text) {
-  const paragraphs = text.split(/\n\n+/);
-
-  const content = paragraphs.map((paragraph) => {
-    const lines = paragraph.split(/\n/);
-
-    if (lines.length === 1) {
-      return {
-        type: "paragraph",
-        content: [{ type: "text", text: paragraph }],
-      };
-    }
-
-    const lineContent = [];
-    lines.forEach((line, index) => {
-      if (index > 0) {
-        lineContent.push({ type: "hardBreak" });
-      }
-      if (line) {
-        lineContent.push({ type: "text", text: line });
-      }
-    });
-
-    return { type: "paragraph", content: lineContent };
-  });
-
-  return { version: 1, type: "doc", content };
-}
-
 // ============================================================================
 // API 操作函數
 // ============================================================================
 
 /**
- * 獲取 ticket 詳細資訊
+ * 宣告內容用途說明與單號關聯
+ * @description 取得 Jira issue 詳細資訊（包含 transitions 與 editmeta）
+ * @purpose FE-7922
  */
 async function getTicketInfo(ticket) {
   const { auth, baseUrl } = createApiConfig();
@@ -170,7 +129,9 @@ async function getTicketInfo(ticket) {
 }
 
 /**
- * 獲取可用的狀態轉換
+ * 宣告內容用途說明與單號關聯
+ * @description 取得 issue 可用的狀態轉換列表
+ * @purpose FE-7922
  */
 async function getAvailableTransitions(ticket) {
   const { auth, baseUrl } = createApiConfig();
@@ -192,7 +153,9 @@ async function getAvailableTransitions(ticket) {
 }
 
 /**
- * 執行狀態轉換
+ * 宣告內容用途說明與單號關聯
+ * @description 依 transitionId 執行 issue 狀態轉換
+ * @purpose FE-7922
  */
 async function executeTransition(ticket, transitionId) {
   const { auth, baseUrl } = createApiConfig();
@@ -218,7 +181,9 @@ async function executeTransition(ticket, transitionId) {
 }
 
 /**
- * 更新 ticket 欄位
+ * 宣告內容用途說明與單號關聯
+ * @description 使用 Jira REST API 更新 issue fields
+ * @purpose FE-7922
  */
 async function updateFields(ticket, fields) {
   const { auth, baseUrl } = createApiConfig();
@@ -242,7 +207,9 @@ async function updateFields(ticket, fields) {
 }
 
 /**
- * 獲取可用的 Issue Link 類型
+ * 宣告內容用途說明與單號關聯
+ * @description 取得可用的 Issue Link 類型
+ * @purpose FE-7922
  */
 async function getIssueLinkTypes() {
   const { auth, baseUrl } = createApiConfig();
@@ -264,7 +231,9 @@ async function getIssueLinkTypes() {
 }
 
 /**
- * 建立 Issue Link
+ * 宣告內容用途說明與單號關聯
+ * @description 建立 sourceTicket 與 targetTicket 之間的 Issue Link
+ * @purpose FE-7922
  */
 async function createIssueLink(
   sourceTicket,
@@ -327,7 +296,9 @@ async function createIssueLink(
 }
 
 /**
- * 獲取 ticket 的所有 links
+ * 宣告內容用途說明與單號關聯
+ * @description 取得 issue 的所有 issue links
+ * @purpose FE-7922
  */
 async function getIssueLinks(ticket) {
   const ticketInfo = await getTicketInfo(ticket);
@@ -335,7 +306,9 @@ async function getIssueLinks(ticket) {
 }
 
 /**
- * 移除 Issue Link
+ * 宣告內容用途說明與單號關聯
+ * @description 移除 sourceTicket 與 targetTicket 之間的 Issue Link
+ * @purpose FE-7922
  */
 async function removeIssueLink(sourceTicket, targetTicket) {
   const { auth, baseUrl } = createApiConfig();
@@ -380,7 +353,9 @@ async function removeIssueLink(sourceTicket, targetTicket) {
 }
 
 /**
- * 獲取專案資訊（用於獲取可用的 fix versions, components 等）
+ * 宣告內容用途說明與單號關聯
+ * @description 取得專案資訊（用於獲取可用的 fix versions, components 等）
+ * @purpose FE-7922
  */
 async function getProjectInfo(projectKey) {
   const { auth, baseUrl } = createApiConfig();
@@ -401,7 +376,9 @@ async function getProjectInfo(projectKey) {
 }
 
 /**
- * 獲取專案的版本列表
+ * 宣告內容用途說明與單號關聯
+ * @description 取得專案的版本列表
+ * @purpose FE-7922
  */
 async function getProjectVersions(projectKey) {
   const { auth, baseUrl } = createApiConfig();
@@ -422,7 +399,9 @@ async function getProjectVersions(projectKey) {
 }
 
 /**
- * 獲取專案的 Sprints（透過 Agile API）
+ * 宣告內容用途說明與單號關聯
+ * @description 取得專案的 Sprints（透過 Agile API）
+ * @purpose FE-7922
  */
 async function getBoardSprints(boardId) {
   const { auth, baseUrl } = createApiConfig();
@@ -444,7 +423,9 @@ async function getBoardSprints(boardId) {
 }
 
 /**
- * 獲取用戶資訊
+ * 宣告內容用途說明與單號關聯
+ * @description 搜尋 Jira 使用者資訊
+ * @purpose FE-7922
  */
 async function searchUsers(query) {
   const { auth, baseUrl } = createApiConfig();
@@ -467,7 +448,9 @@ async function searchUsers(query) {
 }
 
 /**
- * 設置 Sprint
+ * 宣告內容用途說明與單號關聯
+ * @description 設置 Sprint 欄位（嘗試自動辨識 customfield；失敗則回退標準 update）
+ * @purpose FE-7922
  */
 async function setSprintField(ticket, sprintId) {
   const { auth, baseUrl } = createApiConfig();
@@ -512,7 +495,9 @@ async function setSprintField(ticket, sprintId) {
 // ============================================================================
 
 /**
- * 處理狀態轉換
+ * 宣告內容用途說明與單號關聯
+ * @description 處理狀態轉換流程：比對目標狀態的 transition、執行並回傳新舊狀態
+ * @purpose FE-7922
  */
 async function handleTransition(ticket, targetStatus) {
   // 獲取可用的轉換
@@ -556,21 +541,38 @@ async function handleTransition(ticket, targetStatus) {
 }
 
 /**
- * 處理欄位更新
+ * 宣告內容用途說明與單號關聯
+ * @description 處理欄位更新：依 options 組裝 fieldsToUpdate，並在需要時套用 LLM 格式檢查
+ * @purpose FE-8310
  */
 async function handleFieldUpdate(ticket, options) {
   const fieldsToUpdate = {};
   const updates = [];
+  const formatChecks = {};
 
   // Summary（標題）
   if (options.summary) {
-    fieldsToUpdate.summary = options.summary;
-    updates.push({ field: "summary", value: options.summary });
+    const summaryFormat = await prepareJiraContent(
+      options.summary,
+      JIRA_CONTENT_OPERATIONS.SUMMARY,
+      { skipFormatCheck: options.skipFormatCheck }
+    );
+    formatChecks.summary = summarizeFormatCheck(summaryFormat);
+    fieldsToUpdate.summary = summaryFormat.normalizedContent;
+    updates.push({ field: "summary", value: summaryFormat.normalizedContent });
   }
 
   // Description（描述）
   if (options.description) {
-    fieldsToUpdate.description = textToADF(options.description);
+    const descriptionFormat = await prepareJiraContent(
+      options.description,
+      JIRA_CONTENT_OPERATIONS.DESCRIPTION,
+      { skipFormatCheck: options.skipFormatCheck }
+    );
+    formatChecks.description = summarizeFormatCheck(descriptionFormat);
+    fieldsToUpdate.description = buildAdfDocFromText(
+      descriptionFormat.normalizedContent
+    );
     updates.push({ field: "description", value: "(ADF content)" });
   }
 
@@ -636,8 +638,7 @@ async function handleFieldUpdate(ticket, options) {
     const projectKey = ticket.split("-")[0];
     const versions = await getProjectVersions(projectKey);
     const matchedVersion = versions.find(
-      (v) =>
-        v.name === options.fixVersion || v.name.includes(options.fixVersion)
+      (v) => v.name === options.fixVersion || v.name.includes(options.fixVersion)
     );
 
     if (!matchedVersion) {
@@ -710,11 +711,14 @@ async function handleFieldUpdate(ticket, options) {
     ticket,
     action: "update",
     updatedFields: updates,
+    formatCheck: Object.keys(formatChecks).length ? formatChecks : null,
   };
 }
 
 /**
- * 處理 Issue Link 建立
+ * 宣告內容用途說明與單號關聯
+ * @description 處理 Issue Link 建立
+ * @purpose FE-7922
  */
 async function handleLink(sourceTicket, targetTicket, linkType) {
   const result = await createIssueLink(sourceTicket, targetTicket, linkType);
@@ -727,7 +731,9 @@ async function handleLink(sourceTicket, targetTicket, linkType) {
 }
 
 /**
- * 處理 Issue Link 移除
+ * 宣告內容用途說明與單號關聯
+ * @description 處理 Issue Link 移除
+ * @purpose FE-7922
  */
 async function handleUnlink(sourceTicket, targetTicket) {
   const result = await removeIssueLink(sourceTicket, targetTicket);
@@ -740,7 +746,9 @@ async function handleUnlink(sourceTicket, targetTicket) {
 }
 
 /**
- * 顯示 ticket 詳細資訊
+ * 宣告內容用途說明與單號關聯
+ * @description 顯示 ticket 詳細資訊（包含 transitions 與 issue links/版本等可用選項）
+ * @purpose FE-7922
  */
 async function handleInfo(ticket) {
   const { baseUrl } = createApiConfig();
@@ -833,6 +841,7 @@ function parseArgs(args) {
     // Info
     info: false,
     // Help
+    skipFormatCheck: false,
     help: false,
   };
 
@@ -893,6 +902,8 @@ function parseArgs(args) {
     } else if (arg === "--unlink") {
       result.unlink = args[++i];
       result.action = "unlink";
+    } else if (arg === "--skip-format-check") {
+      result.skipFormatCheck = true;
     } else if (!arg.startsWith("-") && !result.ticket) {
       result.ticket = arg;
     }
@@ -928,6 +939,7 @@ function showHelp() {
   --add-fix-version="5.36.0" 新增 Fix Version（保留現有）
   --due-date="2024-12-31"    設置到期日
   --story-points="3"         設置 Story Points
+  --skip-format-check        略過 LLM 格式檢查（直接送出原始內容）
 
 關聯選項:
   --link-type="blocks"       指定關聯類型（預設: relates to）
@@ -1095,3 +1107,16 @@ export {
 };
 
 main();
+
+/**
+ * llm 分析紀錄區
+ * @llm-review-submitted-at 2026-06-13
+ * @llm-review-model gpt-4.1
+ * @llm-review-note 已將檔案/宣告區塊 jsdoc 依規格重構，並移除原本 @external 單行註解；僅更新註解不變更程式邏輯。
+ */
+/**
+ * === llm 分析紀錄區 ===
+ * @llm-review-submitted-at 2026-06-13T17:58:06.953Z
+ * @llm-review-model gpt-5.4-nano
+ * @llm-review-note 補齊未符合規範的宣告 JSDoc 區塊（補上 @description/@purpose，並依 declarationOrigins 為可關聯宣告指定 FE-7922/FE-8310；未變更程式邏輯）。另調整底部 llm 註解區塊標題格式一致化為三段式規範。
+ */

@@ -74,7 +74,7 @@ node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/adapt.mjs -- --
 - LLM 分析（至少一種；`--no-llm` 可跳過）
   - `OPENAI_API_KEY`（openai provider）
   - `CUSTOM_OPENAI_API_URL`（openai-compatible API domain，預設：`http://service-hub-ai.balinese-python.ts.net/v1`）
-  - `ADAPT_LLM_MODEL`（可選，未指定時預設使用 `gpt-5.2`）
+  - 預設 model：`gpt-5.3-codex`（程式內建；可用 CLI `--llm-model` 覆寫，不支援 env 設定）
 
 > 若未設置 `OPENAI_API_KEY`，`adapt` 會改走 `CUSTOM_OPENAI_API_URL`（若未設定則使用預設 domain）。
 >
@@ -139,4 +139,17 @@ node .cursor/scripts/utilities/repo-knowledge.mjs delete
 | `mrTargets` | array | 常見 MR 目標分支 |
 
 **收集來源**：`git branch -a`、`git symbolic-ref origin/HEAD`、`git log --grep="Merge branch"`。
+
+---
+
+## 4) 後續：evolve 生態演化
+
+`adapt` 完成 repo 知識庫落地後，可接續執行 `evolve` 指令，將專案改造成適合 Operator Agent 操作的生態：
+
+| 指令 | 前置 | 產物 |
+|---|---|---|
+| `adapt`（本指令） | - | `adapt.json`、pantheon-mounted-workflow skill |
+| `evolve` | 需先完成 `adapt`；於目標專案執行 | 在目標專案產生 `project-schema` skill、`misnamed-file-report.md`、註解補全 |
+
+詳見 [evolve 指令文件](./evolve.md)。
 

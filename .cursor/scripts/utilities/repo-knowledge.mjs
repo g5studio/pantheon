@@ -1,6 +1,20 @@
 #!/usr/bin/env node
 
 /**
+ * === 檔案用途區塊 ===
+ * @module script-runtime
+ * @purpose 管理 .cursor/scripts/utilities/repo-knowledge.mjs 的註解補全與用途說明
+ * @external https://innotech.atlassian.net/browse/FE-8016
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
+
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 本區塊以下宣告需標示用途與單號關聯
+ * @purpose 統一定義宣告級註解格式與單號追溯規則
+ */
+
+/**
  * Repo Knowledge JSON CRUD 工具（含 schema 驗證）
  *
  * 預設檔案位置：adapt.json（專案根目錄）
@@ -16,12 +30,27 @@
  * - 本工具僅處理 JSON 的 CRUD 與 schema 驗證，不負責 GitLab / LLM 收集與分析（由 adapt.mjs 處理）。
  */
 
+/** 檔案用途區塊
+ * @module repo-knowledge
+ * @purpose CLI 工具：針對 adapt.json 的 repo knowledge 內容進行讀寫、清除與 schema 驗證。
+ */
+
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { getProjectRoot } from "./env-loader.mjs";
 
+/** 宣告內容用途說明與單號關聯
+ * @description 取得專案根目錄路徑，供後續組裝 adapt.json 預設檔案路徑。
+ * @purpose 避免在不同執行目錄下造成相對路徑不一致。
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 const projectRoot = getProjectRoot();
 
+/** 宣告內容用途說明與單號關聯
+ * @description 解析 CLI 參數，支援 `--key=value` 與旗標形式 `--help`，並保留非 `--` 的參數於 `_`。
+ * @purpose 讓主流程能以 args._ / args.section / args.input 等方式取得輸入。
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function parseArgs(argv) {
   const args = { _: [] };
   for (const raw of argv) {
@@ -37,15 +66,30 @@ function parseArgs(argv) {
   return args;
 }
 
+/** 宣告內容用途說明與單號關聯
+ * @description 組合 adapt.json 的預設檔案路徑。
+ * @purpose 將預設資料落在專案根目錄。
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function getDefaultKnowledgeFile() {
   return join(projectRoot, "adapt.json");
 }
 
+/** 宣告內容用途說明與單號關聯
+ * @description 若目標檔案所在目錄不存在則建立。
+ * @purpose 寫入時避免因缺少資料夾而失敗。
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function ensureDirForFile(filePath) {
   const dir = dirname(filePath);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 }
 
+/** 宣告內容用途說明與單號關聯
+ * @description 進行 JSON.parse 並在失敗時包裝成更易讀的錯誤訊息。
+ * @purpose 讓 CLI 在輸入無效 JSON 時能回報具體錯誤上下文。
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function safeJsonParse(text, hint = "JSON") {
   try {
     return JSON.parse(text);
@@ -54,10 +98,20 @@ function safeJsonParse(text, hint = "JSON") {
   }
 }
 
+/** 宣告內容用途說明與單號關聯
+ * @description 判斷值是否為純物件（排除 null / array）。
+ * @purpose 作為 schema 驗證的型別守門。
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function isPlainObject(v) {
   return !!v && typeof v === "object" && !Array.isArray(v);
 }
 
+/** 宣告內容用途說明與單號關聯
+ * @description 驗證 labels 區塊結構：包含 name / scenario，以及可選的 applicable（布林或 {ok, reason}）。
+ * @purpose 確保 labels 內容符合後續使用時的結構預期。
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function validateLabelsSection(value) {
   if (!Array.isArray(value)) return { ok: false, error: "labels 必須是 array" };
   for (let i = 0; i < value.length; i++) {
@@ -97,6 +151,11 @@ function validateLabelsSection(value) {
   return { ok: true };
 }
 
+/** 宣告內容用途說明與單號關聯
+ * @description 驗證 git-flow 區塊結構：flowType / defaultBranch / summary 為必要字串。
+ * @purpose 確保 git-flow 描述可供後續流程依賴。
+ * @external https://innotech.atlassian.net/browse/FE-8016
+ */
 function validateGitFlowSection(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return { ok: false, error: "git-flow 必須是 object" };
@@ -113,6 +172,11 @@ function validateGitFlowSection(value) {
   return { ok: true };
 }
 
+/** 宣告內容用途說明與單號關聯
+ * @description 驗證 coding-standard 區塊結構：array 內每項需包含 rule / example 非空字串。
+ * @purpose 確保 coding-standard 內容符合 schema 預期。
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function validateCodingStandardSection(value) {
   if (!Array.isArray(value)) {
     return { ok: false, error: "coding-standard 必須是 array" };
@@ -132,6 +196,11 @@ function validateCodingStandardSection(value) {
   return { ok: true };
 }
 
+/** 宣告內容用途說明與單號關聯
+ * @description 驗證整份 repo knowledge 物件：必須包含 labels 與 coding-standard，且其餘區塊採可選並以型別限制。
+ * @purpose 在讀寫檔案時確保資料一致性與 schema 正確性。
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function validateRepoKnowledgeObject(obj) {
   if (!isPlainObject(obj)) return { ok: false, error: "根節點必須是 object" };
 
@@ -160,6 +229,11 @@ function validateRepoKnowledgeObject(obj) {
   return { ok: true };
 }
 
+/** 宣告內容用途說明與單號關聯
+ * @description 建立 repo knowledge 的初始化模板（包含 meta.schemaVersion 與 generatedAt）。
+ * @purpose 提供 `init` 指令可直接寫入的預設結構。
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function getEmptyKnowledgeTemplate() {
   return {
     labels: [],
@@ -173,6 +247,11 @@ function getEmptyKnowledgeTemplate() {
   };
 }
 
+/** 宣告內容用途說明與單號關聯
+ * @description 讀取指定檔案並進行 schema 驗證，成功回傳物件，檔案不存在回傳 null。
+ * @purpose 讓主流程能在 init/update/read/clear/delete 前先判斷狀態。
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function readKnowledge(filePath) {
   if (!existsSync(filePath)) return null;
   const text = readFileSync(filePath, "utf-8").replace(/^\uFEFF/, "");
@@ -182,6 +261,11 @@ function readKnowledge(filePath) {
   return obj;
 }
 
+/** 宣告內容用途說明與單號關聯
+ * @description 將已驗證的 repo knowledge 物件寫回檔案（包含確保目錄存在）。
+ * @purpose 對外提供一致且 schema-safe 的持久化能力。
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function writeKnowledge(filePath, obj) {
   const check = validateRepoKnowledgeObject(obj);
   if (!check.ok) throw new Error(`schema 驗證失敗：${check.error}`);
@@ -189,6 +273,11 @@ function writeKnowledge(filePath, obj) {
   writeFileSync(filePath, JSON.stringify(obj, null, 2) + "\n", "utf-8");
 }
 
+/** 宣告內容用途說明與單號關聯
+ * @description 印出 CLI 使用說明與範例。
+ * @purpose 讓使用者能快速理解 commands/options。
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 function showHelp() {
   const relDefault = "adapt.json";
   console.log(`
@@ -214,6 +303,11 @@ Examples:
 `);
 }
 
+/** 宣告內容用途說明與單號關聯
+ * @description CLI 入口：根據 command 執行 init/read/update/clear/delete，並在必要時讀取與寫回 adapt.json。
+ * @purpose 將參數解析、schema 驗證與檔案操作串接成可用的命令流程。
+ * @external https://innotech.atlassian.net/browse/FE-8007
+ */
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const [command] = args._;
@@ -351,3 +445,9 @@ main().catch((e) => {
   process.exit(1);
 });
 
+/**
+ * === llm 分析紀錄區 ===
+ * @llm-review-submitted-at 2026-06-13T19:34:29.422Z
+ * @llm-review-model gpt-5.4-nano
+ * @llm-review-note 修正宣告區塊中的 @external 標籤，使其符合要求的完整 Jira browse URL 格式（https://innotech.atlassian.net/browse/<TICKET>），並保留原有 runtime 邏輯不變。
+ */

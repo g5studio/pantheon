@@ -68,8 +68,8 @@ npm run pantheon:oracle
 
 | 腳本 | 功能 | 平台支援 |
 |---|---|---|
-| `pantheon:descend` | 初始化 Pantheon 並複製安裝 tooling（透過 git clone） | Windows / macOS / Linux |
-| `pantheon:oracle` | 更新 Pantheon 到最新版本，重建本地安裝內容，自動建立 `.env.local` | Windows / macOS / Linux |
+| `pantheon:descend` | 初始化 Pantheon 並複製安裝 tooling（透過 git clone），自動準備 CodeGraph（best effort），檢查並建立 `.env.local`（如不存在） | Windows / macOS / Linux |
+| `pantheon:oracle` | 更新 Pantheon 到最新版本，重建本地安裝內容，自動準備 CodeGraph（best effort），檢查並建立 `.env.local`（如不存在） | Windows / macOS / Linux |
 
 ### 執行效果
 
@@ -78,13 +78,15 @@ npm run pantheon:oracle
 2. 將 Pantheon 的 `commands`、`scripts`、`skills` 複製安裝到 `.cursor/*/{deities}/` 與 `.agents/*/{deities}/` 下
 3. 將 `.cursor/rules/{deities}/` 安裝到目標專案，保留 Cursor 規則能力
 4. 自動將 `.pantheon/`、`.cursor/.env.local`、`.cursor/.../{deities}/`、`.agents/.../{deities}/` 加入目標專案 `.gitignore`
-5. 自動建立 `.cursor/.env.local` 環境變數配置檔（從模板）
+5. 自動準備 CodeGraph（best effort）
+6. 檢查並建立 `.cursor/.env.local` 環境變數配置檔（如不存在，從模板建立）
 
 `pantheon:oracle` 執行後會：
 1. 拉取 Pantheon 最新內容
 2. 重建 `.cursor` 與 `.agents` 下的 Pantheon 安裝內容
 3. 更新或確認 `.gitignore`
-4. 檢查並建立 `.env.local`（如不存在）
+4. 自動準備 CodeGraph（best effort，與 `pantheon:descend` 相同邏輯）
+5. 檢查並建立 `.env.local`（如不存在）
 
 ## 掛載使用說明
 
@@ -134,6 +136,16 @@ Pantheon 專案設計為可以透過 **git clone** 掛載到其他專案中，�
 3. 如果不存在（在 Pantheon 專案本身），使用 `.cursor/scripts/...` 路徑
 
 詳細的路徑規則請參考：`.cursor/rules/pantheon-path-guideline.mdc`
+
+## Repo 知識庫與生態演化
+
+| 指令 | 用途 | 產物 |
+|---|---|---|
+| `adapt` | 解析並記錄專案特性（git flow、coding standard、label rule） | `adapt.json`、pantheon-mounted-workflow skill |
+| `analyze-project-schema` | 以 LLM 分析專案模塊架構（預設 gpt-5.3-codex） | `project-schema.json`、`architecture-preview.md` |
+| `evolve` | 將專案改造成適合 Operator Agent 操作的生態 | 在目標專案產生 `project-schema` skill、`misnamed-file-report.md`、註解補全 |
+
+`evolve` 需在 `adapt` 完成後於**目標專案**執行；階段一透過 `analyze-project-schema` 生成 `project-schema.json`，`architecture-preview.md` 等產物寫入目標專案根目錄，不在 Pantheon repo 內。詳見 `.cursor/commands/utilities/adapt.md`、`.cursor/commands/utilities/analyze-project-schema.md` 與 `.cursor/commands/utilities/evolve.md`。
 
 ## 開發模式
 

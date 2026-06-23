@@ -1,0 +1,34 @@
+---
+description: Force external-tool-first strategy for all file queries after Pantheon mount
+alwaysApply: true
+---
+
+# File Query External Priority
+
+## Purpose
+
+After a project mounts Pantheon, any file-query action should prioritize external tooling (CodeGraph) before local grep/read scanning, to reduce tool calls and token cost.
+
+## Scope
+
+This rule applies to all agent behaviors that perform file discovery, path lookup, or structure-oriented code queries.
+
+## Mandatory Order
+
+When the agent needs to query files, follow this order:
+
+1. **Use external tool first** (CodeGraph runtime, via any available entrypoint)
+2. If external tool is unavailable or returns insufficient results, fall back to local index
+3. If still insufficient, then use content search fallback (`rg`)
+
+## Required Behavior
+
+- Do not start with direct full-repo `rg`/file scanning when external-tool query can answer first.
+- Keep user workflow unchanged: user still runs existing `descend` / `oracle` and normal commands.
+- This policy is behavior-level, not command-level: it applies to any file-query action, not only a specific command.
+
+## Mounted Project Expectation
+
+- `pantheon:descend` / `pantheon:oracle` should best-effort prepare external query prerequisites.
+- Query flow must still succeed when external tool is not ready (graceful fallback required).
+- No new environment variable requirements may be introduced for this query strategy.

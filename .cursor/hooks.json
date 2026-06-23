@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "hooks": {
+    "postToolUse": [
+      {
+        "command": "node .cursor/hooks/notify-on-ask-question.mjs",
+        "timeout": 10
+      }
+    ],
+    "preToolUse": [
+      {
+        "command": "node .cursor/hooks/cancel-pending-ask-notification.mjs",
+        "timeout": 5
+      }
+    ],
+    "beforeSubmitPrompt": [
+      {
+        "command": "node .cursor/hooks/cancel-pending-ask-notification.mjs --event=beforeSubmitPrompt",
+        "timeout": 5
+      }
+    ]
+  }
+}

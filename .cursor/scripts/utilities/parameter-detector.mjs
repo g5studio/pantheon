@@ -1,11 +1,8 @@
 /**
- * 通用參數智能偵測工具
- * 用於偵測用戶在 chat 內容中表達的各種參數意圖
- * 支援中英文關鍵字檢測，即使內容非中文也能判斷類似情境
- */
-
-/**
  * 從多個來源獲取 chat 內容
+ * @description 合併多個環境變數中與使用者輸入相關的訊息，作為後續參數偵測的輸入來源。
+ * @purpose 與 getChatContent() 相關功能。
+ * @external https://innotech.atlassian.net/browse/FE-7893
  * @returns {string} - 合併後的 chat 內容
  */
 export function getChatContent() {
@@ -21,7 +18,9 @@ export function getChatContent() {
 
 /**
  * 參數關鍵字映射表
- * 每個參數對應中英文關鍵字列表
+ * @description 定義各參數對應的中英文關鍵字集合，用於從 chat 文字判斷使用者意圖。
+ * @purpose 與 shouldSetParameter() 的參數意圖辨識相關。
+ * @external https://innotech.atlassian.net/browse/FE-7893
  */
 const PARAMETER_KEYWORDS = {
   // --no-notify: 不要通知
@@ -268,6 +267,9 @@ const PARAMETER_KEYWORDS = {
 
 /**
  * 智能偵測是否要設置某個參數
+ * @description 先檢查命令列參數（--${parameterName}），若未命中則以 chatContent + 環境變數內容進行中英文關鍵字比對。
+ * @purpose 與解析各參數開關（如 no-notify/no-draft/no-review/skip-lint/auto-push）相關。
+ * @external https://innotech.atlassian.net/browse/FE-7893
  * @param {string} parameterName - 參數名稱（如 'no-notify', 'no-draft' 等）
  * @param {string[]} args - 命令行參數陣列
  * @param {string} chatContent - Chat 內容（可選）
@@ -301,6 +303,9 @@ export function shouldSetParameter(parameterName, args = [], chatContent = '') {
 
 /**
  * 智能偵測是否要跳過通知（向後兼容）
+ * @description 封裝 shouldSetParameter('no-notify')，用於向後相容地判斷是否需要跳過通知。
+ * @purpose 與 no-notify 訊息偵測相關。
+ * @external https://innotech.atlassian.net/browse/FE-7893
  * @param {string[]} args - 命令行參數陣列
  * @param {string} chatContent - Chat 內容（可選）
  * @returns {boolean} - 如果應該跳過通知則返回 true
@@ -311,6 +316,9 @@ export function shouldSkipNotification(args = [], chatContent = '') {
 
 /**
  * 從 chat 內容中提取 reviewer 用戶名
+ * @description 使用 @username 的模式從 chat 文字中抓取 reviewer，並排除常見非用戶名詞彙（如 main/develop/master 等）。
+ * @purpose 與解析 reviewer 參數相關。
+ * @external https://innotech.atlassian.net/browse/FE-7893
  * @param {string} chatContent - Chat 內容
  * @returns {string|null} - 提取到的 reviewer 用戶名（包含 @ 符號），如果未找到則返回 null
  */
@@ -341,6 +349,9 @@ export function extractReviewer(chatContent = '') {
 
 /**
  * 從 chat 內容中提取目標分支名稱
+ * @description 從文字中比對常見分支名稱（main/master/develop 等），以及 feature/bugfix/hotfix/release 類型的分支格式，提取出最先匹配結果。
+ * @purpose 與解析 target 分支參數相關。
+ * @external https://innotech.atlassian.net/browse/FE-7893
  * @param {string} chatContent - Chat 內容
  * @returns {string|null} - 提取到的分支名稱，如果未找到則返回 null
  */
@@ -372,6 +383,9 @@ export function extractTargetBranch(chatContent = '') {
 
 /**
  * 從 chat 內容中提取關聯單號
+ * @description 使用正規表示式抓取類似 FE-1234 的單號字串，並排除 currentTicket 以避免把當前分支的單號也納入關聯結果，最後去重。
+ * @purpose 與解析 related-tickets 參數/關聯單號相關。
+ * @external https://innotech.atlassian.net/browse/FE-7893
  * @param {string} chatContent - Chat 內容
  * @param {string} currentTicket - 當前分支的單號（用於排除）
  * @returns {string[]} - 提取到的單號陣列
@@ -394,6 +408,9 @@ export function extractRelatedTickets(chatContent = '', currentTicket = '') {
 
 /**
  * 智能解析所有參數
+ * @description 將多個偵測/提取函式的結果組裝成參數物件，包含 no-notify/no-draft/no-review/skip-lint/auto-push、reviewer、target、related-tickets。
+ * @purpose 與整合參數解析流程相關。
+ * @external https://innotech.atlassian.net/browse/FE-7893
  * @param {string[]} args - 命令行參數陣列
  * @param {string} chatContent - Chat 內容（可選）
  * @param {string} currentTicket - 當前分支的單號（用於提取關聯單號時排除）
@@ -411,3 +428,9 @@ export function parseAllParameters(args = [], chatContent = '', currentTicket = 
     'related-tickets': extractRelatedTickets(chatContent, currentTicket),
   };
 }
+/**
+ * === llm 分析紀錄區 ===
+ * @llm-review-submitted-at 2026-06-13T19:33:14.172Z
+ * @llm-review-model gpt-5.4-nano
+ * @llm-review-note Refactored file-level and declaration JSDoc comments to match required three-section layout, converted all @external tags to full Jira URLs, deduped/removed duplicate malformed llm analysis blocks, and ensured @external appears only for declarations with matching declarationOrigins tickets.
+ */

@@ -1,6 +1,21 @@
 #!/usr/bin/env node
-
 /**
+ * === 檔案用途區塊 ===
+ * @module script-runtime
+ * @purpose 管理 .cursor/scripts/jira/update-confluence-page.mjs 的註解補全與用途說明
+ * @external https://innotech.atlassian.net/browse/FE-7892
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ */
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 本區塊以下宣告需標示用途與單號關聯
+ * @purpose 統一定義宣告級註解格式與單號追溯規則
+ */
+/**
+ * @module update-confluence-page
+ * @purpose 使用 Jira API token 透過 Confluence REST API 更新指定頁面內容（可選擇 Markdown 轉換、Draft/小幅修改、dry-run 預覽）。
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ * 
  * 更新 Confluence 頁面內容
  * 使用 Jira API token 透過 Confluence API 更新頁面
  *
@@ -21,7 +36,12 @@ import { readFileSync, existsSync } from "fs";
 import { extname } from "path";
 import { getJiraConfig } from "../utilities/env-loader.mjs";
 
-// 從 Confluence URL 解析頁面 ID
+// 宣告內容用途說明與單號關聯
+/**
+ * @description 解析 Confluence URL 以擷取 spaceKey 與 pageId，供後續取得與更新頁面使用。
+ * @purpose 對應 Confluence 頁面識別資訊提取。
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ */
 function parseConfluenceUrl(url) {
   const match = url.match(/\/wiki\/spaces\/([^\/]+)\/pages\/(\d+)(?:\/|$)/);
   if (match) {
@@ -33,7 +53,12 @@ function parseConfluenceUrl(url) {
   return null;
 }
 
-// 解析命令行參數
+// 宣告內容用途說明與單號關聯
+/**
+ * @description 解析 CLI 參數並產生 options 物件（含 url/content/stdin/title/draft/minor/message/dryRun）。
+ * @purpose 將使用者輸入映射為執行所需設定。
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ */
 function parseArgs(args) {
   const options = {
     url: null,
@@ -70,7 +95,12 @@ function parseArgs(args) {
   return options;
 }
 
-// 從 stdin 讀取內容
+// 宣告內容用途說明與單號關聯
+/**
+ * @description 從 stdin 讀取內容並回傳字串，供後續更新頁面。
+ * @purpose 支援使用者以管線方式提供內容。
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ */
 async function readStdin() {
   return new Promise((resolve, reject) => {
     let data = "";
@@ -88,7 +118,12 @@ async function readStdin() {
   });
 }
 
-// Markdown 轉換為 Confluence Storage Format (XHTML)
+// 宣告內容用途說明與單號關聯
+/**
+ * @description 將 Markdown 內容轉換為 Confluence Storage Format（XHTML）。
+ * @purpose 提供 Markdown->Confluence 格式轉換。
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ */
 function markdownToConfluence(markdown) {
   let html = markdown;
 
@@ -184,7 +219,12 @@ function markdownToConfluence(markdown) {
   return processedLines.join("\n");
 }
 
-// 表格轉換
+// 宣告內容用途說明與單號關聯
+/**
+ * @description 將 Markdown 形式的表格段落轉換為 Confluence Storage Format 的 table XHTML。
+ * @purpose 支援表格轉換。
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ */
 function convertTables(html) {
   const lines = html.split("\n");
   const result = [];
@@ -230,7 +270,12 @@ function convertTables(html) {
   return result.join("\n");
 }
 
-// 建構 Confluence 表格
+// 宣告內容用途說明與單號關聯
+/**
+ * @description 根據解析後的表格 rows 組裝 Confluence Storage Format 的 table XHTML。
+ * @purpose 將表格資料渲染為 Confluence 格式。
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ */
 function buildConfluenceTable(rows) {
   if (rows.length === 0) return "";
 
@@ -250,7 +295,12 @@ function buildConfluenceTable(rows) {
   return table;
 }
 
-// 獲取當前頁面信息
+// 宣告內容用途說明與單號關聯
+/**
+ * @description 透過 Confluence REST API 取得指定 pageId 的頁面資訊（含 version、space、body.storage）。
+ * @purpose 取得更新所需的版本號與既有頁面上下文。
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ */
 async function getPageInfo(pageId, auth, baseUrl) {
   const apiUrl = `${baseUrl}/wiki/rest/api/content/${pageId}?expand=version,space,body.storage`;
 
@@ -275,7 +325,12 @@ async function getPageInfo(pageId, auth, baseUrl) {
   return await response.json();
 }
 
-// 更新 Confluence 頁面
+// 宣告內容用途說明與單號關聯
+/**
+ * @description 依 options 指定的內容與更新設定，計算版本號並呼叫 Confluence REST API 更新頁面（可支援 Markdown 轉換、draft、minor、dry-run）。
+ * @purpose 執行 Confluence 頁面更新流程。
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ */
 async function updateConfluencePage(options) {
   const config = getJiraConfig();
   const auth = Buffer.from(`${config.email}:${config.apiToken}`).toString(
@@ -475,7 +530,12 @@ function showHelp() {
 `);
 }
 
-// 主函數
+// 宣告內容用途說明與單號關聯
+/**
+ * @description 程式進入點：處理 help/缺少 URL 等狀況，並呼叫 updateConfluencePage 執行更新。
+ * @purpose 組裝 CLI 執行流程。
+ * @external https://innotech.atlassian.net/browse/FE-7893
+ */
 async function main() {
   const args = process.argv.slice(2);
 
@@ -502,3 +562,10 @@ async function main() {
 }
 
 main();
+
+/**
+ * === llm 分析紀錄區 ===
+ * @llm-review-submitted-at 2026-06-13T19:25:10.789Z
+ * @llm-review-model gpt-5.4-nano
+ * @llm-review-note 已依規範調整註解：將所有宣告級 @external 改為完整 Jira browse URL、確保三段式區塊標題正確，並移除/合併底部重複 llm 分析紀錄註解以符合單一「llm 分析紀錄區」區塊格式。
+ */

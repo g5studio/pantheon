@@ -1,0 +1,91 @@
+---
+description: Enforce post-script annotation compliance check and auto-fix
+alwaysApply: true
+---
+
+# Post-Script Annotation Compliance
+
+## Purpose
+
+After the agent executes any project script, it must run a comment-annotation compliance check and auto-fix pass before reporting completion.
+
+## Trigger
+
+Apply this rule whenever the agent runs script commands such as:
+- `pnpm run <script> -- ...`
+- `node .cursor/scripts/...`
+- `node .pantheon/.cursor/scripts/...`
+
+## Standard File Format (MR !1600 aligned)
+
+When checking or auto-fixing script annotations, use this exact structure:
+
+1. **Top block**: `檔案用途區塊`
+   - Must include: `@module`, `@purpose`
+   - Optional: `@external` (only when an external reference is identifiable)
+2. **Middle declaration blocks**: `宣告內容用途說明與單號關聯`
+   - Must include: `@description`, `@purpose`
+   - Optional: `@external` (same rule as above)
+3. **Bottom block**: `llm 分析紀錄區`
+   - Must include exactly one block per file
+   - Must include: `@llm-review-submitted-at`, `@llm-review-model`, `@llm-review-note`
+
+### Required Formatting Rules
+
+- Use plain section titles (`檔案用途區塊`, `宣告內容用途說明與單號關聯`, `llm 分析紀錄區`).
+- Do not use decorative title wrappers such as `=== ... ===`.
+- If no external reference is confidently identifiable, do not emit `@external`.
+- If `@external` is emitted, it must be a full hyperlink:
+  - `@external https://example.com/path/to/reference`
+- Keep only one `llm 分析紀錄區` block (dedupe old records).
+
+### Canonical Example
+
+```js
+/**
+ * 檔案用途區塊
+ * @module external-sync
+ * @purpose 更新外部系統資料同步行為
+ * @external https://docs.example.com/specs/external-sync
+ */
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 建立外部 API 認證設定
+ * @purpose 支援同步流程所需的請求簽章與授權
+ * @external https://docs.example.com/api/auth
+ */
+function createApiConfig() {}
+
+/**
+ * llm 分析紀錄區
+ * @llm-review-submitted-at 2026-06-14T00:00:00.000Z
+ * @llm-review-model gpt-5.4-nano
+ * @llm-review-note 註解格式對齊標準，未變更 runtime 邏輯。
+ */
+```
+
+## Mandatory Steps
+
+1. Detect whether script-related files were touched (especially `.cursor/scripts/**/*.mjs`).
+2. Run external-link normalization first:
+   - `pnpm run evolve -- fix-external-links --dirs=.cursor/scripts --format=text`
+3. Run safe annotation auto-fix:
+   - `pnpm run evolve -- annotation-audit --dirs=.cursor/scripts --fix=true --format=text`
+4. Run one verification pass:
+   - `pnpm run evolve -- annotation-audit --dirs=.cursor/scripts --format=text`
+
+## Enforcement Rules
+
+- `@external` must either:
+  - be a full hyperlink (for any valid external reference), or
+  - be removed when no reliable external reference can be determined.
+- Auto-fix actions must remain comment-only and must not alter runtime logic.
+- If verification still reports unresolved issues, the agent must report the file list and ask the user before any non-comment refactor.
+
+## Reporting Requirement
+
+When finishing script execution, include:
+- number of scanned/updated files,
+- how many invalid `@external` were normalized or removed,
+- whether the final verification pass is clean.

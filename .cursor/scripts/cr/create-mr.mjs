@@ -15,7 +15,8 @@ import {
   getJiraConfig,
   getGitLabToken,
   getJiraEmail,
-  getCompassApiToken,
+  getReviewerAgentApiToken,
+  getReviewerAgentJobsUrl,
 } from "../utilities/env-loader.mjs";
 import {
   determineLabels,
@@ -801,20 +802,21 @@ function checkAndGuideConfigForAIReview() {
   const missingConfigs = [];
   const guides = [];
 
-  const compassApiToken = getCompassApiToken();
-  if (!compassApiToken) {
-    missingConfigs.push("Compass API Token");
+  const reviewerApiToken = getReviewerAgentApiToken();
+  if (!reviewerApiToken) {
+    missingConfigs.push("Reviewer Agent API Token");
     guides.push({
-      name: "Compass API Token",
+      name: "Reviewer Agent API Token",
       steps: [
-        "1. 打開 compass 站台",
+        "1. 打開 Reviewer Agent / Compass 站台",
         "2. 點擊右上角頭像",
         "3. 選 personal tokens",
         "4. 建立 token",
         "5. 在 .env.local 文件中添加:",
-        "   COMPASS_API_TOKEN=your-token-here",
+        "   REVIEWER_AGENT_API_TOKEN=your-token-here",
+        "   （舊名 COMPASS_API_TOKEN 仍相容）",
         "6. 或設置環境變數:",
-        "   export COMPASS_API_TOKEN=your-token-here",
+        "   export REVIEWER_AGENT_API_TOKEN=your-token-here",
       ],
     });
   }
@@ -927,9 +929,11 @@ async function submitAIReview(mrUrl) {
     );
   }
 
-  const apiKey = getCompassApiToken();
+  const apiKey = getReviewerAgentApiToken();
   if (!apiKey) {
-    throw new Error("無法獲取 Compass API token，請設置 COMPASS_API_TOKEN");
+    throw new Error(
+      "無法獲取 Reviewer Agent API token，請設置 REVIEWER_AGENT_API_TOKEN（舊名 COMPASS_API_TOKEN 仍相容）",
+    );
   }
 
   const email = await getAIReviewEmail();
@@ -939,8 +943,7 @@ async function submitAIReview(mrUrl) {
 
   console.log(`📧 使用 email: ${email} 提交 AI review`);
 
-  const apiUrl =
-    "https://mac09demac-mini.balinese-python.ts.net/api/workflows/jobs";
+  const apiUrl = getReviewerAgentJobsUrl();
 
   const requestBody = {
     taskId: "code-review",
@@ -2490,8 +2493,10 @@ async function main() {
 
           if (skipReview) {
             console.log("⏭️  跳過 AI review（--no-review）\n");
-          } else if (!getCompassApiToken()) {
-            console.log("⏭️  跳過 AI review（缺少 COMPASS_API_TOKEN）\n");
+          } else if (!getReviewerAgentApiToken()) {
+            console.log(
+              "⏭️  跳過 AI review（缺少 REVIEWER_AGENT_API_TOKEN）\n",
+            );
           } else {
             console.log("🤖 正在提交 AI review...");
             try {
@@ -2634,8 +2639,8 @@ async function main() {
 
     if (skipReview) {
       console.log("⏭️  跳過 AI review（--no-review）\n");
-    } else if (!getCompassApiToken()) {
-      console.log("⏭️  跳過 AI review（缺少 COMPASS_API_TOKEN）\n");
+    } else if (!getReviewerAgentApiToken()) {
+      console.log("⏭️  跳過 AI review（缺少 REVIEWER_AGENT_API_TOKEN）\n");
     } else {
       console.log("🤖 正在提交 AI review...");
       try {
