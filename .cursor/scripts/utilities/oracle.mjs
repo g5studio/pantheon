@@ -306,6 +306,7 @@ function updateGitignore(cwd, installFolderName) {
     ".agents/skills/pantheon-mounted-workflow/",
     ".agent/skills/pantheon-mounted-workflow/",
     `.agents/commands/${installFolderName}/`,
+    `.agents/rules/${installFolderName}/`,
     `.agents/scripts/${installFolderName}/`,
     `.agents/skills/${installFolderName}/`,
   ];
@@ -487,6 +488,7 @@ async function main() {
     join(cwd, ".cursor", "scripts"),
     join(cwd, ".cursor", "skills"),
     join(cwd, ".agents", "commands"),
+    join(cwd, ".agents", "rules"),
     join(cwd, ".agents", "scripts"),
     join(cwd, ".agents", "skills"),
   ];
@@ -524,6 +526,10 @@ async function main() {
     {
       source: join(cwd, ".pantheon", ".cursor", "commands"),
       target: join(cwd, ".agents", "commands", installFolderName),
+    },
+    {
+      source: join(cwd, ".pantheon", ".cursor", "rules"),
+      target: join(cwd, ".agents", "rules", installFolderName),
     },
     {
       source: join(cwd, ".pantheon", ".cursor", "scripts"),
@@ -605,6 +611,8 @@ async function main() {
   console.log("└── .env.local");
   console.log(".agents/");
   console.log("├── commands/");
+  console.log(`│   └── ${installFolderName}/`);
+  console.log("├── rules/");
   console.log(`│   └── ${installFolderName}/`);
   console.log("├── scripts/");
   console.log(`│   └── ${installFolderName}/`);
