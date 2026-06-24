@@ -2,10 +2,14 @@
 
 import { execSync } from "child_process";
 import {
+  closeSync,
   existsSync,
   mkdirSync,
+  openSync,
+  readSync,
   readFileSync,
   readdirSync,
+  statSync,
   writeFileSync,
 } from "fs";
 import { basename, dirname, extname, join, relative } from "path";
@@ -28,7 +32,7 @@ const NOISE_COMMIT_SUBJECT_PATTERNS = [
   /^chore:\s*bump version$/i,
   /\bformat-and-lint\b/i,
 ];
-const ANNOTATION_AUDIT_EXTENSIONS = new Set([
+const STRICT_ANNOTATION_LAYOUT_EXTENSIONS = new Set([
   ".js",
   ".jsx",
   ".mjs",
@@ -60,46 +64,8 @@ const DEFAULT_EXCLUDE_FILES = new Set([
   "bun.lockb",
 ]);
 
-const ANALYZABLE_EXTENSIONS = new Set([
-  ".js",
-  ".mjs",
-  ".cjs",
-  ".ts",
-  ".tsx",
-  ".jsx",
-  ".vue",
-  ".svelte",
-  ".py",
-  ".go",
-  ".rs",
-  ".java",
-  ".kt",
-  ".swift",
-  ".rb",
-  ".php",
-  ".cs",
-  ".cpp",
-  ".c",
-  ".h",
-  ".hpp",
-  ".scala",
-  ".sh",
-  ".bash",
-  ".zsh",
-  ".yaml",
-  ".yml",
-  ".json",
-  ".md",
-  ".mdc",
-  ".css",
-  ".scss",
-  ".less",
-  ".html",
-  ".xml",
-  ".sql",
-  ".graphql",
-  ".gql",
-]);
+const DEFAULT_MAX_ANALYZABLE_FILE_BYTES = 2 * 1024 * 1024;
+const TEXT_PROBE_BYTES = 8192;
 
 const BINARY_EXTENSIONS = new Set([
   ".png",
@@ -273,6 +239,7 @@ function getDeclarationOriginTickets(filePath, signatures) {
 function stripLooseComments(text) {
   return String(text || "")
     .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/<!--[\s\S]*?-->/g, "")
     .replace(/^\s*\/\/.*$/gm, "");
 }
 
@@ -289,7 +256,41 @@ function isAnalyzableFile(filePath) {
   if (DEFAULT_EXCLUDE_FILES.has(base)) return false;
   const ext = extname(filePath).toLowerCase();
   if (BINARY_EXTENSIONS.has(ext)) return false;
-  return ANALYZABLE_EXTENSIONS.has(ext);
+  return isLikelyTextFile(filePath);
+}
+
+function isLikelyTextFile(filePath) {
+  try {
+    const maxFileBytesRaw = Number(process.env.EVOLVE_MAX_FILE_BYTES || "");
+    const maxFileBytes =
+      Number.isFinite(maxFileBytesRaw) && maxFileBytesRaw > 0
+        ? maxFileBytesRaw
+        : DEFAULT_MAX_ANALYZABLE_FILE_BYTES;
+    const st = statSync(filePath);
+    if (!st.isFile()) return false;
+    if (st.size === 0) return true;
+    if (st.size > maxFileBytes) return false;
+
+    const fd = openSync(filePath, "r");
+    const probeSize = Math.min(TEXT_PROBE_BYTES, st.size);
+    const buffer = Buffer.alloc(probeSize);
+    const bytesRead = readSync(fd, buffer, 0, probeSize, 0);
+    closeSync(fd);
+    if (bytesRead <= 0) return true;
+
+    let suspiciousBytes = 0;
+    for (let i = 0; i < bytesRead; i++) {
+      const byte = buffer[i];
+      if (byte === 0) return false;
+      if (byte < 7 || (byte > 14 && byte < 32)) {
+        suspiciousBytes++;
+      }
+    }
+
+    return suspiciousBytes / bytesRead < 0.3;
+  } catch {
+    return false;
+  }
 }
 
 function walkFiles(startDir, results = []) {
@@ -782,11 +783,26 @@ function getAnnotationAuditFiles(args) {
     allFiles.push(...files);
   }
 
-  return [...new Set(allFiles)]
-    .filter((filePath) =>
-      ANNOTATION_AUDIT_EXTENSIONS.has(extname(filePath).toLowerCase()),
-    )
-    .sort();
+  return [...new Set(allFiles)].sort();
+}
+
+function getRunAnnotationPassFiles(args) {
+  const dirsArg = typeof args.dirs === "string" ? args.dirs : "";
+  const startDirs = dirsArg
+    ? dirsArg
+        .split(",")
+        .map((d) => d.trim())
+        .filter(Boolean)
+    : ["src"];
+
+  const allFiles = [];
+  for (const dir of startDirs) {
+    const absDir = join(projectRoot, dir);
+    const files = walkFiles(absDir);
+    allFiles.push(...files);
+  }
+
+  return [...new Set(allFiles)].sort();
 }
 
 function parseJsdocBlocks(lines) {
@@ -1299,7 +1315,7 @@ async function cmdRunAnnotationPass(args) {
     defaultModel: "gpt-5.3-codex",
   });
 
-  const files = getAnnotationAuditFiles(args).slice(0, maxFiles);
+  const files = getRunAnnotationPassFiles(args).slice(0, maxFiles);
   const openaiApiKey = process.env.OPENAI_API_KEY || envLocal.OPENAI_API_KEY || null;
   const llmProviderInput = String(
     args["llm-provider"] ||
@@ -1339,6 +1355,12 @@ async function cmdRunAnnotationPass(args) {
     Number.isFinite(requestedLlmTimeoutMs) && requestedLlmTimeoutMs > 0
       ? requestedLlmTimeoutMs
       : 120000;
+  const requestedRuntimeVerifyMaxRounds = Number(args["runtime-verify-max-rounds"]);
+  const runtimeVerifyMaxRounds =
+    Number.isFinite(requestedRuntimeVerifyMaxRounds) &&
+    requestedRuntimeVerifyMaxRounds > 0
+      ? Math.floor(requestedRuntimeVerifyMaxRounds)
+      : 8;
   const requestedTemperature = Number(args.temperature);
   const temperature = Number.isFinite(requestedTemperature)
     ? requestedTemperature
@@ -1360,34 +1382,35 @@ async function cmdRunAnnotationPass(args) {
 
   for (const [index, relPath] of files.entries()) {
     const absPath = join(projectRoot, relPath);
+    const fileExt = extname(relPath).toLowerCase();
+    const enforceStrictLayout = STRICT_ANNOTATION_LAYOUT_EXTENSIONS.has(fileExt);
     const before = readFileSync(absPath, "utf-8");
     const signatures = extractDeclarationSignatures(before);
     const declarationOrigins = getDeclarationOriginTickets(relPath, signatures);
     const historySubjects = getFileHistorySubjects(relPath, 20);
-    const fileTickets = [
-      ...new Set(historySubjects.flatMap((subject) => extractTickets(subject || ""))),
-    ];
 
     try {
       console.log(
         `⏳ [${index + 1}/${files.length}] 處理中: ${relPath} (timeout=${llmTimeoutMs}ms)`,
       );
-      const schema = {
+      const annotationSchema = {
         type: "object",
         additionalProperties: false,
-        required: ["updatedContent", "summary"],
+        required: ["註解版本", "原始版本", "summary"],
         properties: {
-          updatedContent: { type: "string" },
+          註解版本: { type: "string" },
+          原始版本: { type: "string" },
           summary: { type: "string" },
         },
       };
 
-      const llmResp = await Promise.race([
+      const generationResp = await Promise.race([
         callOpenAiJson({
           action: "evolve",
           model,
           system:
             "You are an annotation refactoring engine. Return ONLY JSON. " +
+            "Your response MUST include fields: 註解版本, 原始版本, summary. " +
             "You must only update comments. Do not change runtime logic. " +
             "For JavaScript/TypeScript files, enforce a three-section annotation layout: " +
             "top block must contain title '檔案用途區塊' and use @module/@purpose/@external style, " +
@@ -1396,10 +1419,12 @@ async function cmdRunAnnotationPass(args) {
             "For declaration comments, use declaration origin tickets from input.declarationOrigins only. " +
             "If no tickets for a declaration, omit @external. " +
             "Every @external must use full Jira browse URL format: https://innotech.atlassian.net/browse/<TICKET>. " +
-            "Avoid template purpose phrases like 'Provide declaration logic for'.",
+            "Avoid template purpose phrases like 'Provide declaration logic for'. " +
+            "For .vue/.svelte/.dart files, keep comments compatible with the language syntax and preserve original structure.",
           input: {
             path: relPath,
             content: before,
+            originalContent: before,
             fileHistorySubjects: historySubjects,
             declarationOrigins,
             requirements: {
@@ -1425,8 +1450,8 @@ async function cmdRunAnnotationPass(args) {
               },
             },
           },
-          schema,
-          schemaName: "evolve_annotation_pass_result",
+          schema: annotationSchema,
+          schemaName: "evolve_annotation_generation_result",
           temperature,
           apiKey: llmProvider === "openai" ? openaiApiKey : null,
           customOpenAiApiUrl:
@@ -1442,55 +1467,157 @@ async function cmdRunAnnotationPass(args) {
         ),
       ]);
 
-      const updatedContent = String(llmResp.updatedContent || "");
-      if (!updatedContent.trim()) {
+      const generatedAnnotationVersion = String(generationResp["註解版本"] || "");
+      const generatedOriginalVersion = String(generationResp["原始版本"] || "");
+      if (!generatedAnnotationVersion.trim()) {
         report.failedFiles++;
         report.files.push({
           path: relPath,
           status: "failed",
-          reason: "llm-empty-output",
+          reason: "llm-empty-annotation-version",
+        });
+        continue;
+      }
+      if (!generatedOriginalVersion.trim()) {
+        report.failedFiles++;
+        report.files.push({
+          path: relPath,
+          status: "failed",
+          reason: "llm-empty-original-version",
         });
         continue;
       }
 
-      const withThreeSections = ensureThreeSectionAnnotationLayout(
-        updatedContent,
-        {
-          relPath,
-          hasDeclarations: signatures.length > 0,
-          fileTickets,
+      let candidateContent = generatedAnnotationVersion;
+      let runtimeVerified = false;
+      let runtimeVerifyRound = 0;
+      const runtimeVerifySchema = {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "註解版本",
+          "原始版本",
+          "是否驗證失敗有在做過調整",
+          "runtimeLogicEquivalent",
+          "note",
+        ],
+        properties: {
+          註解版本: { type: "string" },
+          原始版本: { type: "string" },
+          是否驗證失敗有在做過調整: { type: "boolean" },
+          runtimeLogicEquivalent: { type: "boolean" },
+          note: { type: "string" },
         },
-      );
-      const withNormalizedExternal = normalizeExternalTicketLinks(withThreeSections);
-      const withBottomRecord = upsertBottomLlmRecordBlock(withNormalizedExternal, {
-        model,
-        summary: llmResp.summary || "",
-      });
-      const invalidExternalLines = collectInvalidExternalLines(withBottomRecord);
-      if (invalidExternalLines.length > 0) {
-        report.rejectedBySafetyGate++;
-        report.files.push({
-          path: relPath,
-          status: "rejected",
-          reason: `external-link-format-invalid: ${invalidExternalLines.slice(0, 3).join(" | ")}`,
-        });
-        continue;
+      };
+
+      while (runtimeVerifyRound < runtimeVerifyMaxRounds) {
+        runtimeVerifyRound++;
+        const runtimeVerifyResp = await Promise.race([
+          callOpenAiJson({
+            action: "evolve",
+            model,
+            system:
+              "You are a runtime logic verifier. Return ONLY JSON. " +
+              "Your response MUST include: 註解版本, 原始版本, 是否驗證失敗有在做過調整, runtimeLogicEquivalent, note. " +
+              "Compare original version and annotation version. " +
+              "If runtime logic is not equivalent, you may adjust comment text ONLY. " +
+              "Never change executable runtime logic. " +
+              "If you made any adjustment due to verification failure, set 是否驗證失敗有在做過調整=true and return updated 註解版本. " +
+              "If no adjustment was made, set 是否驗證失敗有在做過調整=false.",
+            input: {
+              path: relPath,
+              原始版本: before,
+              註解版本: candidateContent,
+              verificationRound: runtimeVerifyRound,
+            },
+            schema: runtimeVerifySchema,
+            schemaName: "evolve_runtime_verify_result",
+            temperature,
+            apiKey: llmProvider === "openai" ? openaiApiKey : null,
+            customOpenAiApiUrl:
+              llmProvider === "api-domain" ? customOpenAiApiUrl : null,
+            forceCompassProxy: false,
+          }),
+          new Promise((_, reject) =>
+            setTimeout(
+              () =>
+                reject(
+                  new Error(
+                    `llm-timeout(${llmTimeoutMs}ms): runtime-verify:${relPath}:round-${runtimeVerifyRound}`,
+                  ),
+                ),
+              llmTimeoutMs,
+            ),
+          ),
+        ]);
+
+        const verifiedAnnotationVersion = String(runtimeVerifyResp["註解版本"] || "");
+        const adjustedFromFailure = !!runtimeVerifyResp["是否驗證失敗有在做過調整"];
+        const equivalent = !!runtimeVerifyResp.runtimeLogicEquivalent;
+
+        if (!verifiedAnnotationVersion.trim()) {
+          report.failedFiles++;
+          report.files.push({
+            path: relPath,
+            status: "failed",
+            reason: `runtime-verify-empty-annotation-version: round-${runtimeVerifyRound}`,
+          });
+          runtimeVerified = false;
+          break;
+        }
+
+        candidateContent = verifiedAnnotationVersion;
+        if (equivalent) {
+          runtimeVerified = true;
+          break;
+        }
+
+        if (!adjustedFromFailure) {
+          runtimeVerified = false;
+          break;
+        }
       }
-      const sectionValidation = validateAnnotationSectionFormat(
-        withBottomRecord,
-        signatures.length > 0,
-      );
-      if (!sectionValidation.ok) {
+
+      if (!runtimeVerified) {
         report.rejectedBySafetyGate++;
         report.files.push({
           path: relPath,
           status: "rejected",
-          reason: `annotation-section-missing: ${sectionValidation.missing.join(", ")}`,
+          reason:
+            runtimeVerifyRound >= runtimeVerifyMaxRounds
+              ? `runtime-logic-verify-max-rounds-exceeded: ${runtimeVerifyMaxRounds}`
+              : "runtime-logic-not-equivalent",
         });
         continue;
       }
 
-      if (!isCommentOnlyChange(before, withBottomRecord)) {
+      if (enforceStrictLayout) {
+        const invalidExternalLines = collectInvalidExternalLines(candidateContent);
+        if (invalidExternalLines.length > 0) {
+          report.rejectedBySafetyGate++;
+          report.files.push({
+            path: relPath,
+            status: "rejected",
+            reason: `external-link-format-invalid: ${invalidExternalLines.slice(0, 3).join(" | ")}`,
+          });
+          continue;
+        }
+        const sectionValidation = validateAnnotationSectionFormat(
+          candidateContent,
+          signatures.length > 0,
+        );
+        if (!sectionValidation.ok) {
+          report.rejectedBySafetyGate++;
+          report.files.push({
+            path: relPath,
+            status: "rejected",
+            reason: `annotation-section-missing: ${sectionValidation.missing.join(", ")}`,
+          });
+          continue;
+        }
+      }
+
+      if (!isCommentOnlyChange(before, candidateContent)) {
         report.rejectedBySafetyGate++;
         report.files.push({
           path: relPath,
@@ -1500,21 +1627,22 @@ async function cmdRunAnnotationPass(args) {
         continue;
       }
 
-      if (withBottomRecord === before) {
+      if (candidateContent === before) {
         report.skippedFiles++;
         report.files.push({ path: relPath, status: "unchanged" });
         continue;
       }
 
       if (!dryRun) {
-        writeFileSync(absPath, withBottomRecord, "utf-8");
+        writeFileSync(absPath, candidateContent, "utf-8");
       }
 
       report.updatedFiles++;
       report.files.push({
         path: relPath,
         status: dryRun ? "would-update" : "updated",
-        summary: llmResp.summary || "",
+        summary: generationResp.summary || "",
+        runtimeVerifyRounds: runtimeVerifyRound,
       });
     } catch (error) {
       report.failedFiles++;
@@ -2158,9 +2286,10 @@ Subcommands:
                  [--llm-provider=openai|api-domain]
                  [--api-domain=<url>]
                  [--llm-timeout-ms=120000]
+                 [--runtime-verify-max-rounds=8]
                  [--dry-run=true]
                  [--format=json|text]
-                 由 Pantheon agent 直接呼叫 LLM 逐檔補註解（含 comments-only 安全閘）
+                 由 Pantheon agent 直接呼叫 LLM 逐檔補註解，並逐檔做 runtime logic LLM 比對迴圈（含 comments-only 安全閘）
   fix-external-links [--dirs=a,b]
                  [--dry-run=true]
                  [--format=json|text]
