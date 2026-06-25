@@ -22,7 +22,7 @@ Typical responsibilities:
 - Shared `.cursor/commands`
 - Shared `.cursor/scripts`
 - Shared `.cursor/skills`
-- Shared `.agents/commands`, `.agents/scripts`, and `.agents/skills` (and some repos use `.agent/*` as legacy path)
+- Shared `.agents/commands`, `.agents/rules`, `.agents/scripts`, and `.agents/skills` (and some repos use `.agent/*` as legacy path)
 - Shared local workflow helpers such as MR, Jira, version, or project automation scripts
 
 Do not assume Pantheon affects CI, build output, or production runtime unless the repo clearly shows that.
@@ -57,7 +57,7 @@ When running or reading Pantheon-provided files, resolve paths in this order:
 1. `.pantheon/.cursor/...`
 2. `.cursor/...`
 3. `.cursor/scripts/<install-name>/...`, `.cursor/rules/<install-name>/...`, `.cursor/commands/<install-name>/...`, or `.cursor/skills/<install-name>/...` when the repo uses installed Pantheon copies
-4. `.agents/scripts/<install-name>/...`, `.agents/commands/<install-name>/...`, or `.agents/skills/<install-name>/...`
+4. `.agents/scripts/<install-name>/...`, `.agents/rules/<install-name>/...`, `.agents/commands/<install-name>/...`, or `.agents/skills/<install-name>/...`
 5. `.agent/scripts/<install-name>/...`, `.agent/commands/<install-name>/...`, or `.agent/skills/<install-name>/...` (legacy fallback)
 
 For this bootstrap skill, prefer the local materialized copies first:
@@ -81,7 +81,7 @@ When the user asks to use Pantheon in a mounted project:
 
 1. Explain Pantheon’s role in this repo: tooling layer vs runtime feature.
 2. Identify the mount entry points in `package.json`.
-3. Identify what `oracle.mjs` installs into `.cursor/` and `.agent/`.
+3. Identify what `oracle.mjs` installs into `.cursor/` and `.agents/` (legacy fallback `.agent/` if present).
 4. Check whether `adapt.json` exists and treat it as repo-localized Pantheon knowledge.
 5. Use Pantheon scripts via the correct mounted or installed path.
 6. Mention any safety risks such as local reset behavior inside `.pantheon/`.
@@ -103,7 +103,7 @@ When investigating Pantheon usage in an unfamiliar repo, start from:
 - `.pantheon/version.json`
 - `.pantheon/.cursor/scripts/utilities/oracle.mjs`
 - `.pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs` if present
-- Any local `.cursor/scripts/<install-name>/*`, `.agents/scripts/<install-name>/*`, or `.agent/scripts/<install-name>/*` installed by Pantheon
+- Any local `.cursor/{commands,rules,scripts,skills}/<install-name>/*`, `.agents/{commands,rules,scripts,skills}/<install-name>/*`, or `.agent/{commands,rules,scripts,skills}/<install-name>/*` installed by Pantheon
 
 ## Common Mistakes
 
