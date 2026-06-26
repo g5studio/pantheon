@@ -1,7 +1,7 @@
 /**
  * === 檔案用途區塊 ===
  * @module llm-client
- * @purpose 集中處理 .cursor/scripts 底下的 LLM 呼叫，並支援 Compass operator-proxy 與 custom OpenAI API 網域。
+ * @purpose 集中處理 .cursor/scripts 底下的 LLM 呼叫（僅 OPENAI_API_KEY 與 CUSTOM_OPENAI_API_URL）。
  * @external https://innotech.atlassian.net/browse/FE-8017
  * @external https://innotech.atlassian.net/browse/FE-8138
  * @external https://innotech.atlassian.net/browse/FE-8007
@@ -9,10 +9,6 @@
  */
 
 import { reportLlmError } from "./agent-log-client.mjs";
-import {
-  getReviewerAgentApiToken,
-  getReviewerAgentOperatorProxyUrl,
-} from "../utilities/env-loader.mjs";
 
 /**
  * === 宣告內容用途說明與單號關聯 ===
@@ -183,12 +179,6 @@ function deriveLlmErrorCode(error) {
   const llmHttp = msg.match(/LLM API 失敗:\s*(\d{3})/);
   if (llmHttp) return llmHttp[1];
 
-  const compassHttp = msg.match(/Compass operator-proxy 失敗:\s*(\d{3})/);
-  if (compassHttp) return compassHttp[1];
-
-  if (/Compass operator-proxy 失敗/i.test(msg)) return "compass-api-error";
-  if (/Compass operator-proxy 回傳格式錯誤/i.test(msg))
-    return "invalid-response-format";
   if (/LLM 回傳為空/i.test(msg)) return "empty-response";
   if (/無法從 LLM 回傳中解析 JSON/i.test(msg)) return "json-parse-error";
   if (/LLM output 必須是 JSON object/i.test(msg)) return "invalid-json-output";
@@ -225,117 +215,16 @@ function reportLlmFailure(error, context = {}) {
  */
 function buildLlmLogContext({
   model,
-  forceCompassProxy = false,
   hasApiKey = false,
   endpoint = null,
   action = null,
 }) {
-  const provider = forceCompassProxy
-    ? "compass"
-    : hasApiKey
-      ? "openai"
-      : "api-domain";
-
   return {
     action: typeof action === "string" ? action.trim() || null : null,
-    provider,
+    provider: hasApiKey ? "openai" : "api-domain",
     model: typeof model === "string" ? model : null,
     endpoint,
   };
-}
-
-function normalizeMessagesForOperatorProxy(messages) {
-  const list = Array.isArray(messages) ? messages : [];
-
-  const systemParts = [];
-  const contentParts = [];
-
-  for (const m of list) {
-    const role = typeof m?.role === "string" ? m.role : "";
-    const content =
-      typeof m?.content === "string"
-        ? m.content
-        : m?.content == null
-          ? ""
-          : safeJsonParse(m.content) != null
-            ? JSON.stringify(m.content)
-            : String(m.content);
-
-    if (role === "system") systemParts.push(content);
-    else contentParts.push(content);
-  }
-
-  return {
-    system: systemParts.filter(Boolean).join("\n\n"),
-    content: contentParts.filter(Boolean).join("\n\n"),
-  };
-}
-
-async function callCompassOperatorProxy({
-  compassApiToken,
-  url,
-  content,
-  system,
-  provider = "openai",
-  model,
-  responseFormat = null,
-}) {
-  const effectiveCompassApiToken =
-    typeof compassApiToken === "string" && compassApiToken.trim()
-      ? compassApiToken.trim()
-      : (getReviewerAgentApiToken() || "").trim();
-
-  if (!effectiveCompassApiToken) {
-    throw new Error(
-      "缺少 REVIEWER_AGENT_API_TOKEN（Compass operator-proxy 需要認證；舊名 COMPASS_API_TOKEN 仍相容）",
-    );
-  }
-
-  const effectiveUrl =
-    typeof url === "string" && url.trim()
-      ? url.trim()
-      : getReviewerAgentOperatorProxyUrl();
-
-  const requestBody = {
-    content,
-    system,
-    provider,
-    model,
-  };
-  if (responseFormat && typeof responseFormat === "object") {
-    requestBody.response_format = responseFormat;
-  }
-
-  const resp = await fetch(effectiveUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Api-Key": effectiveCompassApiToken,
-    },
-    body: JSON.stringify(requestBody),
-  });
-
-  const rawText = await resp.text().catch(() => "");
-  const json = safeJsonParse(rawText);
-
-  if (!resp.ok) {
-    const msg =
-      (json && typeof json.error === "string" && json.error.trim()) ||
-      rawText ||
-      resp.statusText ||
-      "Unknown error";
-    throw new Error(`Compass operator-proxy 失敗: ${resp.status} ${msg}`.trim());
-  }
-
-  if (!json || typeof json !== "object") {
-    throw new Error("Compass operator-proxy 回傳格式錯誤（非 JSON）");
-  }
-  if (json.ok !== true) {
-    const msg = typeof json.error === "string" ? json.error : "Unknown error";
-    throw new Error(`Compass operator-proxy 失敗: ${msg}`.trim());
-  }
-
-  return json;
 }
 
 /**
@@ -366,8 +255,8 @@ function pickFirstNonEmptyString(...values) {
 
 /**
  * === 宣告內容用途說明與單號關聯 ===
- * @description 依 env 與顯式設定決定 LLM provider（openai / api-domain / compass）。
- * @purpose 集中 provider 選路邏輯，避免各 caller 自行判斷 Compass / domain。
+ * @description 依 env 與顯式設定決定 LLM provider（openai / api-domain）。
+ * @purpose 集中 provider 選路邏輯；僅使用 OPENAI_API_KEY 與 CUSTOM_OPENAI_API_URL。
  * @external https://innotech.atlassian.net/browse/FE-8429
  */
 export function resolveLlmProvider({
@@ -375,18 +264,12 @@ export function resolveLlmProvider({
   envLocal = {},
   providerEnvKeys = [],
   openaiApiKey = null,
-  compassApiToken = null,
 } = {}) {
   const apiKey = pickFirstNonEmptyString(
     openaiApiKey,
     process.env.OPENAI_API_KEY,
     envLocal.OPENAI_API_KEY,
   );
-  const compassToken = pickFirstNonEmptyString(
-    compassApiToken,
-    getReviewerAgentApiToken(),
-  );
-
   let explicit = pickFirstNonEmptyString(explicitProvider);
   if (!explicit) {
     for (const key of providerEnvKeys) {
@@ -418,13 +301,9 @@ export function resolveLlmProvider({
     ) {
       provider = "api-domain";
     } else if (want === "compass") {
-      if (compassToken) {
-        provider = "compass";
-      } else {
-        provider = apiKey ? "openai" : "api-domain";
-        degradedReason =
-          "指定 compass provider 但缺少 REVIEWER_AGENT_API_TOKEN，已改用其他 provider";
-      }
+      provider = apiKey ? "openai" : "api-domain";
+      degradedReason =
+        "compass provider 已移除（REVIEWER_AGENT_API_TOKEN 僅供 AI review 使用）；LLM 已改用 openai / api-domain";
     } else if (want === "auto") {
       provider = apiKey ? "openai" : "api-domain";
     } else {
@@ -438,7 +317,6 @@ export function resolveLlmProvider({
   return {
     provider,
     apiKey: apiKey || null,
-    compassApiToken: compassToken || null,
     degradedReason,
   };
 }
@@ -456,17 +334,14 @@ export function resolveLlmCallParams({
   customOpenAiApiUrl = null,
   customOpenAiApiUrlEnvKeys = ["CUSTOM_OPENAI_API_URL"],
   openaiApiKey = null,
-  compassApiToken = null,
 } = {}) {
   const providerResult = resolveLlmProvider({
     explicitProvider,
     envLocal,
     providerEnvKeys,
     openaiApiKey,
-    compassApiToken,
   });
-  const { provider, apiKey, compassApiToken: compassToken, degradedReason } =
-    providerResult;
+  const { provider, apiKey, degradedReason } = providerResult;
 
   const resolvedCustomUrl = pickFirstNonEmptyString(
     customOpenAiApiUrl,
@@ -476,17 +351,11 @@ export function resolveLlmCallParams({
     ]),
     DEFAULT_CUSTOM_OPENAI_API_URL,
   );
-  const compassOperatorProxyUrl = getReviewerAgentOperatorProxyUrl();
-
   return {
     provider,
     degradedReason: degradedReason || null,
-    forceCompassProxy: provider === "compass",
     apiKey: provider === "openai" ? apiKey : null,
     customOpenAiApiUrl: provider === "api-domain" ? resolvedCustomUrl : null,
-    compassApiToken: provider === "compass" ? compassToken : null,
-    compassOperatorProxyUrl:
-      provider === "compass" ? compassOperatorProxyUrl : null,
   };
 }
 
@@ -497,9 +366,6 @@ export function resolveLlmCallParams({
  * @external https://innotech.atlassian.net/browse/FE-8429
  */
 export function isLlmCallReady(callParams = {}) {
-  if (callParams.provider === "compass") {
-    return Boolean(callParams.compassApiToken);
-  }
   if (callParams.provider === "openai") {
     return Boolean(callParams.apiKey);
   }
@@ -512,7 +378,7 @@ export function isLlmCallReady(callParams = {}) {
 /**
  * === 宣告內容用途說明與單號關聯 ===
  * @description 高階 LLM JSON 呼叫：自動 resolve provider、model 與連線參數。
- * @purpose 讓 caller 只關心 system/input/schema，不需自行組 Compass / domain 邏輯。
+ * @purpose 讓 caller 只關心 system/input/schema，不需自行組 provider 連線邏輯。
  * @external https://innotech.atlassian.net/browse/FE-8429
  */
 export async function callLlmJson({
@@ -550,9 +416,6 @@ export async function callLlmJson({
     schemaName,
     apiKey: callParams.apiKey,
     customOpenAiApiUrl: callParams.customOpenAiApiUrl,
-    compassApiToken: callParams.compassApiToken,
-    compassOperatorProxyUrl: callParams.compassOperatorProxyUrl,
-    forceCompassProxy: callParams.forceCompassProxy,
   });
 
   return {
@@ -598,9 +461,6 @@ export async function callOpenAiChatCompletions({
   customOpenAiApiUrl = null,
   apiDomain = null,
   responseFormat = null,
-  compassApiToken = null,
-  compassOperatorProxyUrl = null,
-  forceCompassProxy = false,
   action = null,
 }) {
   const effectiveApiKey =
@@ -617,43 +477,13 @@ export async function callOpenAiChatCompletions({
   const kind = resolveApiKind({ url, model });
   const logContext = buildLlmLogContext({
     model,
-    forceCompassProxy,
     hasApiKey: Boolean(effectiveApiKey),
     action,
-    endpoint: forceCompassProxy
-      ? "compass-operator-proxy"
-      : kind === "responses"
-        ? "responses"
-        : "chat/completions",
+    endpoint: kind === "responses" ? "responses" : "chat/completions",
   });
   let activeEndpoint = logContext.endpoint;
 
   try {
-    if (forceCompassProxy) {
-      const effectiveCompassApiToken =
-        typeof compassApiToken === "string" && compassApiToken.trim()
-          ? compassApiToken.trim()
-          : (getReviewerAgentApiToken() || "").trim();
-      const { system, content } = normalizeMessagesForOperatorProxy(messages);
-      const compassResp = await callCompassOperatorProxy({
-        compassApiToken: effectiveCompassApiToken,
-        url: compassOperatorProxyUrl,
-        content,
-        system,
-        provider: "openai",
-        model,
-        responseFormat,
-      });
-
-      const result =
-        typeof compassResp?.result === "string" ? compassResp.result : "";
-      return {
-        choices: [{ message: { content: result } }],
-        _provider: "compass",
-        _endpoint: "compass-operator-proxy",
-      };
-    }
-
     const headers = {
       "Content-Type": "application/json",
     };
@@ -761,9 +591,6 @@ export async function callOpenAiJson({
   apiKey,
   customOpenAiApiUrl = null,
   apiDomain = null,
-  compassApiToken = null,
-  compassOperatorProxyUrl = null,
-  forceCompassProxy = false,
   action = null,
   model,
   system,
@@ -795,10 +622,9 @@ export async function callOpenAiJson({
       : (process.env.OPENAI_API_KEY || "").trim();
   const jsonLogContext = buildLlmLogContext({
     model,
-    forceCompassProxy,
     hasApiKey: Boolean(effectiveApiKey),
     action,
-    endpoint: forceCompassProxy ? "compass-operator-proxy" : "chat/completions",
+    endpoint: "chat/completions",
   });
 
   const data = await callOpenAiChatCompletions({
@@ -809,9 +635,6 @@ export async function callOpenAiJson({
     messages,
     temperature,
     responseFormat,
-    compassApiToken,
-    compassOperatorProxyUrl,
-    forceCompassProxy,
     action,
   });
 
@@ -839,5 +662,5 @@ export async function callOpenAiJson({
  * === llm 分析紀錄區 ===
  * @llm-review-submitted-at 2026-06-13T19:31:57.607Z
  * @llm-review-model gpt-5.4-nano
- * @llm-review-note 新增 resolveLlmProvider / resolveLlmCallParams / callLlmJson，集中 provider 選路（FE-8429）。
+ * @llm-review-note LLM 僅支援 OPENAI_API_KEY 與 CUSTOM_OPENAI_API_URL；移除 Reviewer/Compass proxy 路徑。
  */
