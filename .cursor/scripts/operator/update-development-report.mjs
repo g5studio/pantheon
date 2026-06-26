@@ -19,9 +19,8 @@ import { join } from "path";
 import {
   getProjectRoot,
   loadEnvLocal,
-  getCompassApiToken,
 } from "../utilities/env-loader.mjs";
-import { callOpenAiJson, resolveLlmModel } from "../utilities/llm-client.mjs";
+import { callOpenAiJson, resolveLlmModel } from "../client/llm-client.mjs";
 
 const projectRoot = getProjectRoot();
 
@@ -303,100 +302,6 @@ function extractStartTaskDevelopmentReportTemplateText(startTaskCommandText) {
   return slice.length > maxChars ? slice.slice(0, maxChars) : slice;
 }
 
-function coerceJsonObjectFromModel(text) {
-  const trimmed = String(text || "").trim();
-  if (!trimmed) throw new Error("LLM 回傳為空");
-
-  try {
-    return JSON.parse(trimmed);
-  } catch {}
-
-  const first = trimmed.indexOf("{");
-  const last = trimmed.lastIndexOf("}");
-  if (first >= 0 && last > first) {
-    const slice = trimmed.slice(first, last + 1);
-    return JSON.parse(slice);
-  }
-
-  throw new Error("無法從 LLM 回傳中解析 JSON");
-}
-
-async function callCompassOperatorProxyJson({
-  model,
-  system,
-  input,
-  schema,
-  schemaName = "structured_output",
-}) {
-  const token = getCompassApiToken();
-  if (!token) {
-    throw new Error(
-      "缺少 LLM 認證（請設定 OPENAI_API_KEY 或 COMPASS_API_TOKEN）",
-    );
-  }
-
-  const url =
-    process.env.COMPASS_OPERATOR_PROXY_URL ||
-    "https://mac09demac-mini.balinese-python.ts.net/api/workflows/operator-proxy";
-
-  const requestBody = {
-    provider: "openai",
-    model,
-    system: String(system || ""),
-    content: JSON.stringify(input),
-  };
-  if (schema && typeof schema === "object") {
-    requestBody.response_format = {
-      type: "json_schema",
-      json_schema: {
-        name: String(schemaName || "structured_output"),
-        strict: true,
-        schema,
-      },
-    };
-  }
-
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Api-Key": token,
-    },
-    body: JSON.stringify(requestBody),
-  });
-
-  const rawText = await resp.text().catch(() => "");
-  let json = null;
-  try {
-    json = JSON.parse(rawText);
-  } catch {
-    json = null;
-  }
-
-  if (!resp.ok) {
-    const msg =
-      (json && typeof json.error === "string" && json.error.trim()) ||
-      rawText ||
-      resp.statusText ||
-      "Unknown error";
-    throw new Error(
-      `Compass operator-proxy 失敗: ${resp.status} ${msg}`.trim(),
-    );
-  }
-
-  if (!json || typeof json !== "object") {
-    throw new Error("Compass operator-proxy 回傳格式錯誤（非 JSON）");
-  }
-  if (json.ok !== true) {
-    const msg = typeof json.error === "string" ? json.error : "Unknown error";
-    throw new Error(`Compass operator-proxy 失敗: ${msg}`.trim());
-  }
-
-  const resultText =
-    typeof json?.result === "string" ? String(json.result) : "";
-  return coerceJsonObjectFromModel(resultText);
-}
-
 async function reviewDevelopmentReportWithLlm({
   reportContent,
   startTaskInfo,
@@ -407,6 +312,9 @@ async function reviewDevelopmentReportWithLlm({
     startTaskInfo,
   );
   const envLocal = loadEnvLocal();
+  const openAiApiKey = process.env.OPENAI_API_KEY || envLocal.OPENAI_API_KEY || null;
+  const customOpenAiApiUrl =
+    process.env.CUSTOM_OPENAI_API_URL || envLocal.CUSTOM_OPENAI_API_URL || null;
 
   const model = resolveLlmModel({
     envLocal,
@@ -450,50 +358,25 @@ async function reviewDevelopmentReportWithLlm({
       : null,
   };
 
-  try {
-    const obj = await callOpenAiJson({
-      model,
-      system,
-      input,
-      temperature: 0.1,
-      schema,
-      schemaName: "development_report_review",
-    });
+  const obj = await callOpenAiJson({
+    apiKey: openAiApiKey,
+    customOpenAiApiUrl,
+    model,
+    system,
+    input,
+    temperature: 0.1,
+    schema,
+    schemaName: "development_report_review",
+  });
 
-    if (
-      typeof obj?.ok !== "boolean" ||
-      typeof obj?.final !== "string" ||
-      typeof obj?.reason !== "string"
-    ) {
-      throw new Error("LLM 回傳格式錯誤（缺少 ok/final/reason）");
-    }
-    return obj;
-  } catch (error) {
-    // fallback to Compass operator-proxy if OpenAI key missing / OpenAI API is unavailable
-    const msg = String(error?.message || "");
-    const shouldFallback =
-      msg.includes("缺少 OpenAI API key") ||
-      msg.includes("OpenAI API 失敗") ||
-      msg.includes("fetch failed");
-
-    if (!shouldFallback) throw error;
-
-    const obj = await callCompassOperatorProxyJson({
-      model,
-      system,
-      input,
-      schema,
-      schemaName: "development_report_review",
-    });
-    if (
-      typeof obj?.ok !== "boolean" ||
-      typeof obj?.final !== "string" ||
-      typeof obj?.reason !== "string"
-    ) {
-      throw new Error("LLM 回傳格式錯誤（缺少 ok/final/reason）");
-    }
-    return obj;
+  if (
+    typeof obj?.ok !== "boolean" ||
+    typeof obj?.final !== "string" ||
+    typeof obj?.reason !== "string"
+  ) {
+    throw new Error("LLM 回傳格式錯誤（缺少 ok/final/reason）");
   }
+  return obj;
 }
 
 // 讀取 start-task 開發計劃（從 Git notes）

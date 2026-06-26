@@ -16,7 +16,8 @@ import { basename } from "path";
 import {
   getProjectRoot,
   getGitLabToken,
-  getCompassApiToken,
+  getReviewerAgentApiToken,
+  getReviewerAgentJobsUrl,
   getJiraEmail,
 } from "../utilities/env-loader.mjs";
 import {
@@ -381,9 +382,11 @@ async function resolveDiscussion(
  * @returns {Promise<Object>} API 回應
  */
 async function submitAIReview(mrUrl) {
-  const apiKey = getCompassApiToken();
+  const apiKey = getReviewerAgentApiToken();
   if (!apiKey) {
-    throw new Error("無法獲取 Compass API token，請設置 COMPASS_API_TOKEN");
+    throw new Error(
+      "無法獲取 REVIEWER_AGENT_API_TOKEN（舊名 COMPASS_API_TOKEN 仍相容）",
+    );
   }
 
   // 獲取 email
@@ -394,8 +397,7 @@ async function submitAIReview(mrUrl) {
 
   console.log(`📧 使用 email: ${email} 提交 AI review`);
 
-  const apiUrl =
-    "https://mac09demac-mini.balinese-python.ts.net/api/workflows/jobs";
+  const apiUrl = getReviewerAgentJobsUrl();
 
   const requestBody = {
     taskId: "code-review",
