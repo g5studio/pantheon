@@ -24,8 +24,8 @@
  * 優先使用 LLM 做語意保留的格式轉換；失敗時 fallback 到 heuristic 規則。
  */
 
-import { loadEnvLocal, getCompassApiToken } from "../utilities/env-loader.mjs";
-import { callOpenAiJson, resolveLlmModel } from "../client/llm-client.mjs";
+import { loadEnvLocal } from "../utilities/env-loader.mjs";
+import { callLlmJson, resolveLlmModel } from "../client/llm-client.mjs";
 
 /**
  * @description 內容操作常數（summary/comment/description）定義
@@ -294,12 +294,6 @@ async function normalizeWithLlm(content, operation, options = {}) {
     defaultModel: "gpt-5.4-nano",
   });
 
-  const apiKey = process.env.OPENAI_API_KEY || envLocal.OPENAI_API_KEY || "";
-  const customOpenAiApiUrl =
-    process.env.CUSTOM_OPENAI_API_URL || envLocal.CUSTOM_OPENAI_API_URL || null;
-  const compassApiToken = getCompassApiToken();
-  const forceCompassProxy = !apiKey && !!compassApiToken;
-
   const system = [
     "You are a Jira content formatter.",
     "Convert agent/chat Markdown into Jira-safe plain text BEFORE ADF conversion.",
@@ -320,19 +314,22 @@ async function normalizeWithLlm(content, operation, options = {}) {
     content,
   };
 
-  const result = await callOpenAiJson({
+  const { result, provider, degradedReason } = await callLlmJson({
     action: "jira-content-formatter",
-    apiKey,
-    customOpenAiApiUrl,
-    compassApiToken,
-    forceCompassProxy,
-    model,
+    envLocal,
+    providerEnvKeys: ["JIRA_FORMAT_LLM_PROVIDER"],
+    explicitModel: options.model,
+    defaultModel: "gpt-5.4-nano",
     system,
     input,
     temperature: 0.1,
     schema: FORMAT_SCHEMA,
     schemaName: "jira_content_format",
   });
+
+  if (degradedReason && !options.silent) {
+    console.error(`⚠️  Jira 格式檢查 LLM provider 調整: ${degradedReason}`);
+  }
 
   return {
     normalizedContent: String(result.normalizedContent ?? content),
@@ -341,6 +338,7 @@ async function normalizeWithLlm(content, operation, options = {}) {
     detectedFormats: result.detectedFormats || detectMarkdownFeatures(content).features,
     usedLlm: true,
     model,
+    llmProvider: provider,
   };
 }
 

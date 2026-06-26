@@ -1456,7 +1456,6 @@ async function cmdRunAnnotationPass(args) {
           apiKey: llmProvider === "openai" ? openaiApiKey : null,
           customOpenAiApiUrl:
             llmProvider === "api-domain" ? customOpenAiApiUrl : null,
-          forceCompassProxy: false,
         }),
         new Promise((_, reject) =>
           setTimeout(
@@ -1536,7 +1535,6 @@ async function cmdRunAnnotationPass(args) {
             apiKey: llmProvider === "openai" ? openaiApiKey : null,
             customOpenAiApiUrl:
               llmProvider === "api-domain" ? customOpenAiApiUrl : null,
-            forceCompassProxy: false,
           }),
           new Promise((_, reject) =>
             setTimeout(
@@ -2021,7 +2019,6 @@ async function cmdAnalyzeProjectSchema(args) {
       temperature,
       apiKey: llmProvider === "openai" ? openaiApiKey : null,
       customOpenAiApiUrl: llmProvider === "api-domain" ? customOpenAiApiUrl : null,
-      forceCompassProxy: false,
     }),
     new Promise((_, reject) =>
       setTimeout(
