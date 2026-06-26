@@ -31,10 +31,12 @@ import {
   getProjectRoot,
   loadEnvLocal,
   getGitLabToken,
-  getReviewerAgentApiToken,
-  getReviewerAgentOperatorProxyUrl,
 } from "./env-loader.mjs";
-import { callOpenAiJson, resolveLlmModel } from "../client/llm-client.mjs";
+import {
+  callOpenAiJson,
+  resolveLlmModel,
+  resolveLlmProvider,
+} from "../client/llm-client.mjs";
 
 /**
  * Absolute repository root directory resolved from env-loader.
@@ -1498,50 +1500,16 @@ async function main() {
     typeof args["llm-model"] === "string" ? args["llm-model"] : null;
 
   const openaiKey = process.env.OPENAI_API_KEY || env.OPENAI_API_KEY || null;
-  const compassApiToken = getReviewerAgentApiToken();
-  const compassOperatorProxyUrl = getReviewerAgentOperatorProxyUrl();
   const customOpenAiApiUrl =
     process.env.CUSTOM_OPENAI_API_URL ||
     env.CUSTOM_OPENAI_API_URL ||
     "http://service-hub-ai.balinese-python.ts.net/v1";
 
-  // Provider selection policy:
-  // - Prefer OpenAI when OPENAI_API_KEY exists
-  // - If no OPENAI_API_KEY, default to OpenAI-compatible API domain
-  // - Keep compass as explicit opt-in only
-  let provider = null;
-  let degradedReason = null;
-
-  if (explicitProvider) {
-    const want = String(explicitProvider).toLowerCase();
-    if (want === "openai") {
-      if (openaiKey) {
-        provider = "openai";
-      } else {
-        provider = "api-domain";
-        degradedReason =
-          "指定 openai provider 但缺少 OPENAI_API_KEY，將改走 CUSTOM_OPENAI_API_URL";
-      }
-    } else if (
-      want === "api-domain" ||
-      want === "openai-domain" ||
-      want === "domain"
-    ) {
-      provider = "api-domain";
-    } else if (want === "compass") {
-      if (compassApiToken) {
-        provider = "compass";
-      } else {
-        provider = openaiKey ? "openai" : "api-domain";
-        degradedReason = "指定 compass provider 但缺少 REVIEWER_AGENT_API_TOKEN";
-      }
-    } else {
-      provider = openaiKey ? "openai" : "api-domain";
-      degradedReason = `未知 llm provider：${explicitProvider}，改用 ${provider}`;
-    }
-  } else {
-    provider = openaiKey ? "openai" : "api-domain";
-  }
+  const { provider, degradedReason } = resolveLlmProvider({
+    explicitProvider,
+    envLocal: env,
+    openaiApiKey: openaiKey,
+  });
 
   const model = resolveLlmModel({
     explicitModel,
@@ -1557,21 +1525,21 @@ async function main() {
   const llmWarnings = [];
   const llmFailureReason = "分析當下無法正確取得llm答覆，已改用保守推測。";
 
+  const buildAdaptCallArgs = (extra) => ({
+    action: "adapt",
+    apiKey: provider === "openai" ? openaiKey : null,
+    customOpenAiApiUrl: provider === "api-domain" ? customOpenAiApiUrl : null,
+    model,
+    ...extra,
+  });
+
   const llmOutput = await attemptLlmJsonCall({
-    callArgs: {
-      action: "adapt",
-      apiKey: provider === "openai" ? openaiKey : null,
-      customOpenAiApiUrl: provider === "api-domain" ? customOpenAiApiUrl : null,
-      compassApiToken: provider === "compass" ? compassApiToken : null,
-      compassOperatorProxyUrl:
-        provider === "compass" ? compassOperatorProxyUrl : null,
-      forceCompassProxy: provider === "compass",
-      model,
+    callArgs: buildAdaptCallArgs({
       system: getAdaptSystemPrompt(),
       input: inputPayload,
       schema: getAdaptResponseJsonSchema(),
       schemaName: "adapt_repo_knowledge",
-    },
+    }),
     sectionName: "primary-output",
     warnings: llmWarnings,
     maxAttempts: llmRetryAttempts,
@@ -1621,16 +1589,7 @@ async function main() {
   const repairedLabelMap = new Map();
   if (invalidLabelCases.length > 0) {
     const repairResp = await attemptLlmJsonCall({
-      callArgs: {
-        action: "adapt",
-        apiKey: provider === "openai" ? openaiKey : null,
-        customOpenAiApiUrl:
-          provider === "api-domain" ? customOpenAiApiUrl : null,
-        compassApiToken: provider === "compass" ? compassApiToken : null,
-        compassOperatorProxyUrl:
-          provider === "compass" ? compassOperatorProxyUrl : null,
-        forceCompassProxy: provider === "compass",
-        model,
+      callArgs: buildAdaptCallArgs({
         system: getAdaptLabelRepairSystemPrompt(),
         input: {
           repo: { host: hostname, fullPath: projectInfo.fullPath },
@@ -1640,7 +1599,7 @@ async function main() {
         },
         schema: getAdaptLabelRepairJsonSchema(),
         schemaName: "adapt_repo_knowledge_label_repair",
-      },
+      }),
       sectionName: "label-repair",
       warnings: llmWarnings,
       maxAttempts: llmRetryAttempts,
@@ -1660,16 +1619,7 @@ async function main() {
   const codingStandardCheck = validateCodingStandardSection(outCs);
   if (!codingStandardCheck.ok) {
     const repairResp = await attemptLlmJsonCall({
-      callArgs: {
-        action: "adapt",
-        apiKey: provider === "openai" ? openaiKey : null,
-        customOpenAiApiUrl:
-          provider === "api-domain" ? customOpenAiApiUrl : null,
-        compassApiToken: provider === "compass" ? compassApiToken : null,
-        compassOperatorProxyUrl:
-          provider === "compass" ? compassOperatorProxyUrl : null,
-        forceCompassProxy: provider === "compass",
-        model,
+      callArgs: buildAdaptCallArgs({
         system: getAdaptCodingStandardRepairSystemPrompt(),
         input: {
           repo: { host: hostname, fullPath: projectInfo.fullPath },
@@ -1682,7 +1632,7 @@ async function main() {
         },
         schema: getAdaptCodingStandardRepairJsonSchema(),
         schemaName: "adapt_repo_knowledge_cs_repair",
-      },
+      }),
       sectionName: "coding-standard-repair",
       warnings: llmWarnings,
       maxAttempts: llmRetryAttempts,
@@ -1693,16 +1643,7 @@ async function main() {
   const gitFlowCheck = validateGitFlowSection(outGitFlow);
   if (!gitFlowCheck.ok) {
     const repairResp = await attemptLlmJsonCall({
-      callArgs: {
-        action: "adapt",
-        apiKey: provider === "openai" ? openaiKey : null,
-        customOpenAiApiUrl:
-          provider === "api-domain" ? customOpenAiApiUrl : null,
-        compassApiToken: provider === "compass" ? compassApiToken : null,
-        compassOperatorProxyUrl:
-          provider === "compass" ? compassOperatorProxyUrl : null,
-        forceCompassProxy: provider === "compass",
-        model,
+      callArgs: buildAdaptCallArgs({
         system: getAdaptGitFlowRepairSystemPrompt(),
         input: {
           repo: { host: hostname, fullPath: projectInfo.fullPath },
@@ -1711,7 +1652,7 @@ async function main() {
         },
         schema: getAdaptGitFlowRepairJsonSchema(),
         schemaName: "adapt_repo_knowledge_gitflow_repair",
-      },
+      }),
       sectionName: "git-flow-repair",
       warnings: llmWarnings,
       maxAttempts: llmRetryAttempts,

@@ -265,7 +265,7 @@ export const DEFAULT_COMMUNICATOR_AGENT_API_URL =
 /**
  * === 宣告內容用途說明與單號關聯 ===
  * @description 取得 Reviewer Agent API token（支援舊名 COMPASS_API_TOKEN）。
- * @purpose AI review 與 compass provider LLM 認證。
+ * @purpose 僅供 AI review jobs API（create-mr / update-mr / fix-comment）；不得用於 LLM 呼叫。
  * @external https://innotech.atlassian.net/browse/FE-8429
  */
 export function getReviewerAgentApiToken() {
@@ -315,22 +315,6 @@ export function getReviewerAgentApiBaseUrl() {
  */
 export function getReviewerAgentJobsUrl() {
   return `${getReviewerAgentApiBaseUrl()}/api/workflows/jobs`;
-}
-
-/**
- * === 宣告內容用途說明與單號關聯 ===
- * @description 取得 operator-proxy endpoint URL。
- * @purpose compass LLM provider；優先沿用 COMPASS_OPERATOR_PROXY_URL 完整 URL。
- * @external https://innotech.atlassian.net/browse/FE-8429
- */
-export function getReviewerAgentOperatorProxyUrl() {
-  const envLocal = loadEnvLocal();
-  const legacyFullUrl = pickFirstEnvString(
-    process.env.COMPASS_OPERATOR_PROXY_URL,
-    envLocal.COMPASS_OPERATOR_PROXY_URL,
-  );
-  if (legacyFullUrl) return legacyFullUrl;
-  return `${getReviewerAgentApiBaseUrl()}/api/workflows/operator-proxy`;
 }
 
 /**

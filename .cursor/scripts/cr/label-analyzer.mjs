@@ -15,10 +15,8 @@ import {
   getJiraConfig,
   guideJiraConfig,
   loadEnvLocal,
-  getReviewerAgentApiToken,
-  getReviewerAgentOperatorProxyUrl,
 } from "../utilities/env-loader.mjs";
-import { callOpenAiJson, resolveLlmModel } from "../client/llm-client.mjs";
+import { callLlmJson, resolveLlmModel } from "../client/llm-client.mjs";
 
 // 使用 env-loader 提供的 projectRoot
 const projectRoot = getProjectRoot();
@@ -420,20 +418,6 @@ async function suggestLabelsWithLlm({
   existingLabels = [],
 }) {
   const envLocal = loadEnvLocal();
-  const apiKey = process.env.OPENAI_API_KEY || envLocal.OPENAI_API_KEY || null;
-  const customOpenAiApiUrl =
-    process.env.CUSTOM_OPENAI_API_URL ||
-    envLocal.CUSTOM_OPENAI_API_URL ||
-    "http://service-hub-ai.balinese-python.ts.net/v1";
-  const compassApiToken = getReviewerAgentApiToken();
-  const compassOperatorProxyUrl = getReviewerAgentOperatorProxyUrl();
-  const llmProvider = String(
-    process.env.LABEL_LLM_PROVIDER || envLocal.LABEL_LLM_PROVIDER || "",
-  )
-    .trim()
-    .toLowerCase();
-  const forceCompassProxy = llmProvider === "compass";
-
   const model = resolveLlmModel({
     defaultModel: "gpt-5.4-nano",
   });
@@ -475,18 +459,19 @@ async function suggestLabelsWithLlm({
   };
 
   console.log(`🤖 正在請 LLM 建議 labels... (model=${model})`);
-  const resp = await callOpenAiJson({
+  const { result: resp, degradedReason } = await callLlmJson({
     action: "label-analyzer",
-    apiKey,
-    customOpenAiApiUrl,
-    compassApiToken,
-    compassOperatorProxyUrl,
-    forceCompassProxy,
-    model,
+    envLocal,
+    providerEnvKeys: ["LABEL_LLM_PROVIDER"],
+    defaultModel: "gpt-5.4-nano",
     system,
     input,
     temperature: 0.1,
   });
+
+  if (degradedReason) {
+    console.log(`⚠️  label-analyzer LLM provider 調整: ${degradedReason}`);
+  }
 
   const labels = uniqStrings(resp?.labels);
   const reason = typeof resp?.reason === "string" ? resp.reason.trim() : "";
