@@ -31,6 +31,7 @@
     "llm-client": "node .cursor/scripts/utilities/run-pantheon-script.mjs client/llm-client.mjs",
     "env-loader": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/env-loader.mjs",
     "agent-log": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/agent-log.mjs",
+    "send-operator-log": "node .cursor/scripts/utilities/run-pantheon-script.mjs operator/send-operator-log.mjs",
     "agent-communicator": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/agent-communicator.mjs"
   }
 }

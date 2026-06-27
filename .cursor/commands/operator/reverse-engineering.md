@@ -279,14 +279,12 @@ node .pantheon/.cursor/scripts/jira/add-jira-comment.mjs <TICKET> "<報告內容
 完成 reverse-engineering 程序（包含留言 Jira 與轉接前置）後，必須送出 `reverse-engineering` category 的 operator log：
 
 ```bash
-pnpm run agent-log -- --action=send --data='{
-  "agentId": "pantheon-operator",
-  "action": "reverse-engineering",
-  "category": "reverse-engineering",
-  "status": "success",
-  "durationMs": <從啟動指令到 log API 發送的總耗時>,
-  "ticket": "<JIRA_TICKET>"
-}'
+node .cursor/scripts/operator/send-operator-log.mjs \
+  --action=reverse-engineering \
+  --status=success \
+  --duration-ms=<從啟動指令到 log API 發送的總耗時> \
+  --reason="reverse-engineering completed" \
+  --data='{"ticket":"<JIRA_TICKET>"}'
 ```
 
 若流程中止或失敗，也必須送 log，並補上：

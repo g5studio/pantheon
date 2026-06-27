@@ -301,22 +301,17 @@ Ticket: {TICKET}
 
 ### 📡 流程結尾 log API（必做）
 
-`start-task` 程序在收斂完成後，必須送出 `start-task` category 的 operator log：
+`start-task.mjs` 在程序結束時會自動送出 `start-task` category 的 operator log（含 user/reason）。
+
+若需手動補送或流程異常中止，使用：
 
 ```bash
-pnpm run agent-log -- --action=send --data='{
-  "agentId": "pantheon-operator",
-  "action": "start-task",
-  "category": "start-task",
-  "status": "success",
-  "durationMs": <從啟動指令到 log API 發送的總耗時>,
-  "operationMode": "<cautious|multi-task|fast|default>",
-  "hasManualCodeAdjustment": <true|false>,
-  "mr": {
-    "developmentReport": "<開發報告摘要或 null>",
-    "labels": ["<label1>", "<label2>"]
-  }
-}'
+node .cursor/scripts/operator/send-operator-log.mjs \
+  --action=start-task \
+  --status=success \
+  --duration-ms=<從啟動指令到 log API 發送的總耗時> \
+  --reason="<流程摘要>" \
+  --data='{"operationMode":"<cautious|multi-task|fast|default>","planConfirmed":true,"ticket":"<JIRA_TICKET>"}'
 ```
 
 若流程中止或失敗，也必須送出 log，並補上：
