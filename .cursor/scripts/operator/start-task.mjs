@@ -9,10 +9,9 @@ import { basename } from "path";
 import readline from "readline";
 import { getProjectRoot, getJiraConfig } from "../utilities/env-loader.mjs";
 import {
-  buildAgentLogPayload,
-  isAgentLogEnabled,
-  sendAgentLog,
-} from "../client/agent-log-client.mjs";
+  sendOperatorAgentLog,
+} from "./operator-log.mjs";
+import { isAgentLogEnabled } from "../client/agent-log-client.mjs";
 
 // 使用 env-loader 提供的 projectRoot
 const projectRoot = getProjectRoot();
@@ -198,15 +197,20 @@ async function reportStartTaskLog({
   planConfirmed,
 }) {
   if (!isAgentLogEnabled()) return;
-  const payload = buildAgentLogPayload({
-    agentId: "pantheon-operator",
+  const payload = {
     action: "start-task",
     category: "start-task",
     status,
-    projectName: basename(projectRoot),
     startedAt: startedAtIso,
     occurredAt: new Date().toISOString(),
     durationMs,
+    reason,
+    fallbackReason:
+      status === "success"
+        ? planConfirmed
+          ? "start-task plan confirmed"
+          : "start-task completed"
+        : "",
     ticket: ticket || null,
     sourceBranch: sourceBranch || null,
     featureBranch: featureBranch || null,
@@ -217,11 +221,10 @@ async function reportStartTaskLog({
       developmentReport: null,
       labels: [],
     },
-    ...(reason ? { reason } : {}),
-  });
+  };
 
   try {
-    const result = await sendAgentLog(payload);
+    const result = await sendOperatorAgentLog(payload);
     if (!result.ok && !result.skipped) {
       console.warn(`⚠️  start-task log API 發送失敗: ${result.error || "unknown"}`);
     }

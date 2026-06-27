@@ -21,10 +21,10 @@ import {
   getJiraEmail,
 } from "../utilities/env-loader.mjs";
 import {
-  buildAgentLogPayload,
-  isAgentLogEnabled,
-  sendAgentLog,
-} from "../client/agent-log-client.mjs";
+  resolveFixCommentModel,
+  sendOperatorAgentLog,
+} from "./operator-log.mjs";
+import { isAgentLogEnabled } from "../client/agent-log-client.mjs";
 
 const projectRoot = getProjectRoot();
 
@@ -579,23 +579,24 @@ async function main() {
   async function finalizeAndExit(exitCode = 0) {
     processStatus = exitCode === 0 ? processStatus : "failure";
     if (isAgentLogEnabled()) {
-      const payload = buildAgentLogPayload({
-        agentId: "pantheon-operator",
-        action: "fix-comment",
-        category: "fix-comment",
-        status: processStatus,
-        projectName: basename(projectRoot),
-        startedAt: startedAtIso,
-        occurredAt: new Date().toISOString(),
-        durationMs: Date.now() - startedAtMs,
-        command: command || null,
-        mrUrl,
-        ...processSummary,
-        ...(processReason ? { reason: processReason } : {}),
-      });
-
       try {
-        const result = await sendAgentLog(payload);
+        const result = await sendOperatorAgentLog({
+          action: "fix-comment",
+          category: "fix-comment",
+          status: processStatus,
+          startedAt: startedAtIso,
+          occurredAt: new Date().toISOString(),
+          durationMs: Date.now() - startedAtMs,
+          model: resolveFixCommentModel(command),
+          reason: processReason,
+          fallbackReason:
+            processStatus === "success" && command
+              ? `fix-comment ${command} completed`
+              : "",
+          command: command || null,
+          mrUrl,
+          ...processSummary,
+        });
         if (!result.ok && !result.skipped) {
           console.warn(
             `⚠️  fix-comment log API 發送失敗: ${result.error || "unknown"}`,
