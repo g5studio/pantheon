@@ -5,6 +5,7 @@
  * @module agent-log-client
  * @purpose 依 env 指定的 Log API 送出 agent log；未設定 env 時關閉功能且不影響主流程。
  * @external https://innotech.atlassian.net/browse/FE-8388
+ * @external https://innotech.atlassian.net/browse/FE-8460 - 統一 user/model/timing 欄位對齊 Ares
  */
 
 import { basename } from "path";
@@ -42,27 +43,6 @@ function normalizeDurationMs(value) {
   return Math.round(value);
 }
 
-function normalizeAgentLogTimingFields(data) {
-  const occurredAt =
-    normalizeIsoTime(data.occurredAt) || new Date().toISOString();
-  const startedAt = normalizeIsoTime(data.startedAt) || occurredAt;
-
-  let durationMs = normalizeDurationMs(data.durationMs);
-  if (durationMs === null) {
-    const occurredTime = new Date(occurredAt).getTime();
-    const startedTime = new Date(startedAt).getTime();
-    const inferred = occurredTime - startedTime;
-    durationMs = inferred >= 0 ? inferred : 0;
-  }
-
-  return {
-    ...data,
-    startedAt,
-    occurredAt,
-    durationMs,
-  };
-}
-
 /**
  * 宣告內容用途說明與單號關聯
  * @description 從字串候選值中取得第一個非空值。
@@ -76,6 +56,38 @@ function pickFirstNonEmptyString(...values) {
     }
   }
   return "";
+}
+
+function normalizeAgentLogIdentityFields(data) {
+  const userEmail =
+    pickFirstNonEmptyString(data.userEmail, data.user) || null;
+
+  return {
+    ...data,
+    userEmail,
+    user: pickFirstNonEmptyString(data.user, userEmail) || userEmail,
+  };
+}
+
+function normalizeAgentLogTimingFields(data) {
+  const occurredAt =
+    normalizeIsoTime(data.occurredAt) || new Date().toISOString();
+  const startedAt = normalizeIsoTime(data.startedAt) || occurredAt;
+
+  let durationMs = normalizeDurationMs(data.durationMs);
+  if (durationMs === null) {
+    const occurredTime = new Date(occurredAt).getTime();
+    const startedTime = new Date(startedAt).getTime();
+    const inferred = occurredTime - startedTime;
+    durationMs = inferred >= 0 ? inferred : 0;
+  }
+
+  return normalizeAgentLogIdentityFields({
+    ...data,
+    startedAt,
+    occurredAt,
+    durationMs,
+  });
 }
 
 /**
@@ -136,11 +148,15 @@ export function isAgentLogEnabled() {
  * @external https://innotech.atlassian.net/browse/FE-8388
  */
 export function buildAgentLogPayload(overrides = {}) {
-  const base = {
+  const userEmail = getJiraEmail() || null;
+  const base = normalizeAgentLogIdentityFields({
     agentDisplayName: getAgentDisplayName() || null,
-  };
+    projectName: basename(getProjectRoot()),
+    userEmail,
+    user: userEmail,
+  });
   if (overrides && typeof overrides === "object" && !Array.isArray(overrides)) {
-    return { ...base, ...overrides };
+    return normalizeAgentLogIdentityFields({ ...base, ...overrides });
   }
   return base;
 }
@@ -220,24 +236,43 @@ export function buildLlmErrorLogPayload({ errorCode, reason, context = {} }) {
     context && typeof context === "object" && !Array.isArray(context)
       ? context
       : {};
-  const { provider, model, endpoint, action, taskAction, task, taskName, ...rest } = ctx;
+  const {
+    provider,
+    model,
+    endpoint,
+    action,
+    taskAction,
+    task,
+    taskName,
+    startedAt,
+    durationMs,
+    ...rest
+  } = ctx;
   const resolvedAction = resolveLlmAction({ action, taskAction, task, taskName });
+  const occurredAt = new Date().toISOString();
+  const normalizedStartedAt =
+    normalizeIsoTime(startedAt) ||
+    normalizeIsoTime(rest.startedAt) ||
+    occurredAt;
+  const normalizedDurationMs =
+    normalizeDurationMs(durationMs) ??
+    normalizeDurationMs(rest.durationMs) ??
+    Math.max(0, new Date(occurredAt).getTime() - new Date(normalizedStartedAt).getTime());
 
   return buildAgentLogPayload({
     agentId: "pantheon-operator",
     action: resolvedAction,
     category: "llm-error",
     status: "failure",
-    projectName: basename(getProjectRoot()),
-    userEmail: getJiraEmail() || null,
-    agentDisplayName: getAgentDisplayName() || null,
     llmErrorCode: String(errorCode || "unknown"),
     reason: String(reason || "Unknown error"),
     ...(provider ? { provider } : {}),
     ...(model ? { model } : {}),
     ...(endpoint ? { endpoint } : {}),
     ...rest,
-    occurredAt: new Date().toISOString(),
+    startedAt: normalizedStartedAt,
+    occurredAt,
+    durationMs: normalizedDurationMs,
   });
 }
 
@@ -258,5 +293,5 @@ export function reportLlmError({ errorCode, reason, context = {} }) {
  * llm 分析紀錄區
  * @llm-review-submitted-at 2026-06-17T00:00:00.000Z
  * @llm-review-model gpt-5.4-nano
- * @llm-review-note 改用 MASTER_CONTROL_AGENT_API_URL；保留 OPERATOR_AGENT_LOG_API_URL 向下兼容。
+ * @llm-review-note FE-8460：buildAgentLogPayload 統一 user/userEmail/projectName；LLM error log 補 startedAt/durationMs。
  */

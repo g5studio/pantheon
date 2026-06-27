@@ -6,6 +6,7 @@
  * @external https://innotech.atlassian.net/browse/FE-8138
  * @external https://innotech.atlassian.net/browse/FE-8007
  * @external https://innotech.atlassian.net/browse/FE-8388
+ * @external https://innotech.atlassian.net/browse/FE-8460 - LLM 錯誤 log 補 startedAt/durationMs
  */
 
 import { reportLlmError } from "./agent-log-client.mjs";
@@ -483,6 +484,8 @@ export async function callOpenAiChatCompletions({
     endpoint: kind === "responses" ? "responses" : "chat/completions",
   });
   let activeEndpoint = logContext.endpoint;
+  const startedAtMs = Date.now();
+  const startedAtIso = new Date(startedAtMs).toISOString();
 
   try {
     const headers = {
@@ -577,7 +580,12 @@ export async function callOpenAiChatCompletions({
       throw error;
     }
   } catch (error) {
-    reportLlmFailure(error, { ...logContext, endpoint: activeEndpoint });
+    reportLlmFailure(error, {
+      ...logContext,
+      endpoint: activeEndpoint,
+      startedAt: startedAtIso,
+      durationMs: Date.now() - startedAtMs,
+    });
     throw error;
   }
 }
@@ -627,6 +635,8 @@ export async function callOpenAiJson({
     action,
     endpoint: "chat/completions",
   });
+  const startedAtMs = Date.now();
+  const startedAtIso = new Date(startedAtMs).toISOString();
 
   const data = await callOpenAiChatCompletions({
     apiKey,
@@ -654,7 +664,11 @@ export async function callOpenAiJson({
 
     return obj;
   } catch (error) {
-    reportLlmFailure(error, parseContext);
+    reportLlmFailure(error, {
+      ...parseContext,
+      startedAt: startedAtIso,
+      durationMs: Date.now() - startedAtMs,
+    });
     throw error;
   }
 }
