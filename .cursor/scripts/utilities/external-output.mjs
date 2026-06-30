@@ -78,6 +78,7 @@ export function parseExternalOutputArgs(argv) {
     format: null,
     includeRaw: false,
     maxChars: DEFAULT_MAX_CHARS,
+    maxCharsExplicit: false,
     commentsLimit: DEFAULT_COMMENTS_LIMIT,
     commentsLimitExplicit: false,
     commentsSince: null,
@@ -91,6 +92,8 @@ export function parseExternalOutputArgs(argv) {
     help: false,
     ticket: null,
     url: null,
+    extra_fields: null,
+    fields: null,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -116,6 +119,7 @@ export function parseExternalOutputArgs(argv) {
           break;
         case "max-chars":
           result.maxChars = Number(value);
+          result.maxCharsExplicit = true;
           break;
         case "comments-limit":
           result.commentsLimit = resolveCommentsLimit(value);
@@ -149,6 +153,12 @@ export function parseExternalOutputArgs(argv) {
           break;
         case "ticket":
           result.ticket = String(value);
+          break;
+        case "extra-fields":
+          result.extra_fields = String(value);
+          break;
+        case "fields":
+          result.fields = String(value);
           break;
         default:
           result[key.replace(/-/g, "_")] = value;
@@ -364,14 +374,23 @@ export function pickJiraSections(payload, section) {
         summary: payload.summary,
         issueType: payload.issueType,
         status: payload.status,
+        isSubTask: payload.isSubTask,
+        parent: payload.parent,
         assignee: payload.assignee,
+        reporter: payload.reporter,
         priority: payload.priority,
         labels: payload.labels,
         components: payload.components,
         fixVersions: payload.fixVersions,
         dueDate: payload.dueDate,
+        timeTracking: payload.timeTracking,
         subtasks: payload.subtasks,
+        extraFields: payload.extraFields,
       };
+    case "extra":
+      return payload.extraFields
+        ? { ...base, extraFields: payload.extraFields }
+        : { ...base, extraFields: {} };
     default:
       return payload;
   }
@@ -381,5 +400,5 @@ export function pickJiraSections(payload, section) {
  * llm 分析紀錄區
  * @llm-review-submitted-at 2026-06-14T12:00:00.000Z
  * @llm-review-model composer-2.5-fast
- * @llm-review-note 新增 FE-8389 Agent-first 外部腳本輸出共用 utility。
+ * @llm-review-note 新增 FE-8389 Agent-first 外部腳本輸出共用 utility；支援 --extra-fields/--fields 與 metadata 新欄位 section。
  */
