@@ -16,6 +16,8 @@ import {
   getProjectRoot,
 } from "../utilities/env-loader.mjs";
 
+const PANTHEON_OPERATOR_AGENT_ID = "pantheon-operator";
+
 /**
  * 宣告內容用途說明與單號關聯
  * @description 安全解析 JSON 字串；失敗回傳 null。
@@ -150,6 +152,7 @@ export function isAgentLogEnabled() {
 export function buildAgentLogPayload(overrides = {}) {
   const userEmail = getJiraEmail() || null;
   const base = normalizeAgentLogIdentityFields({
+    agentId: PANTHEON_OPERATOR_AGENT_ID,
     agentDisplayName: getAgentDisplayName() || null,
     projectName: basename(getProjectRoot()),
     userEmail,
@@ -260,7 +263,6 @@ export function buildLlmErrorLogPayload({ errorCode, reason, context = {} }) {
     Math.max(0, new Date(occurredAt).getTime() - new Date(normalizedStartedAt).getTime());
 
   return buildAgentLogPayload({
-    agentId: "pantheon-operator",
     action: resolvedAction,
     category: "llm-error",
     status: "failure",
@@ -293,5 +295,5 @@ export function reportLlmError({ errorCode, reason, context = {} }) {
  * llm 分析紀錄區
  * @llm-review-submitted-at 2026-06-17T00:00:00.000Z
  * @llm-review-model gpt-5.4-nano
- * @llm-review-note FE-8460：buildAgentLogPayload 統一 user/userEmail/projectName；LLM error log 補 startedAt/durationMs。
+ * @llm-review-note buildAgentLogPayload 固定 agentId；LLM error log 補 startedAt/durationMs。
  */
