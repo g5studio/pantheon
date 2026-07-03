@@ -3,8 +3,9 @@
 /**
  * 檔案用途區塊
  * @module communicator-agent-client
- * @purpose 依 env 對接 Hermes Communicator API 發送 LINE WORKS 通知；URL 未設定時使用 manageds 預設。
+ * @purpose 依 env 對接 Hermes Communicator API 發送 LINE WORKS 通知（local > system）。
  * @external https://innotech.atlassian.net/browse/FE-8429
+ * @external https://innotech.atlassian.net/browse/FE-8513 - getCommunicatorAgentConfig 改接 env-loader，移除內建 URL/token fallback
  */
 
 import { execSync } from "child_process";
@@ -16,15 +17,13 @@ import {
   resolveLlmCallParams,
 } from "./llm-client.mjs";
 import {
-  DEFAULT_COMMUNICATOR_AGENT_API_URL,
   getAgentDisplayName,
+  getCommunicatorAgentApiToken,
+  getCommunicatorAgentApiUrl,
   getJiraEmail,
   getProjectRoot,
   loadEnvLocal,
 } from "../utilities/env-loader.mjs";
-
-const DEFAULT_COMMUNICATOR_AGENT_API_TOKEN =
-  "hermes_3Hfh-t54t7eCzZSf8tT2upxKUWPCX3LtERPp64BPD9U";
 
 const ENV_KEY_API_URL = "COMMUNICATOR_AGENT_API_URL";
 const ENV_KEY_API_TOKEN = "COMMUNICATOR_AGENT_API_TOKEN";
@@ -469,22 +468,14 @@ function upsertCursorEnvLocalKey(key, value) {
 /**
  * 宣告內容用途說明與單號關聯
  * @description 讀取 Communicator Agent / Hermes API 設定。
- * @purpose 供 send / resolve-target 與 CLI 共用。
+ * @purpose 供 send / resolve-target 與 CLI 共用；FE-8513 改由 env-loader 集中解析
  * @external https://innotech.atlassian.net/browse/FE-8429
+ * @external https://innotech.atlassian.net/browse/FE-8513 - 移除 DEFAULT_COMMUNICATOR_* hardcode，改呼叫 getCommunicatorAgentApiUrl/Token
  */
 export function getCommunicatorAgentConfig() {
   const envLocal = loadEnvLocal();
-  const configuredApiUrl = pickFirstNonEmptyString(
-    process.env[ENV_KEY_API_URL],
-    envLocal[ENV_KEY_API_URL],
-  );
-  const apiUrl = normalizeBaseUrl(
-    configuredApiUrl || DEFAULT_COMMUNICATOR_AGENT_API_URL,
-  );
-  const configuredToken = pickFirstNonEmptyString(
-    process.env[ENV_KEY_API_TOKEN],
-    envLocal[ENV_KEY_API_TOKEN],
-  );
+  const apiUrl = normalizeBaseUrl(getCommunicatorAgentApiUrl());
+  const apiToken = getCommunicatorAgentApiToken();
   const target = pickFirstNonEmptyString(
     process.env[ENV_KEY_TARGET],
     envLocal[ENV_KEY_TARGET],
@@ -492,19 +483,17 @@ export function getCommunicatorAgentConfig() {
 
   return {
     apiUrl,
-    apiToken: configuredToken || DEFAULT_COMMUNICATOR_AGENT_API_TOKEN,
+    apiToken,
     target,
     returnEditor: resolveCommunicatorReturnEditor(),
     enabled: Boolean(apiUrl),
-    usingDefaultApiUrl: !configuredApiUrl,
-    usingDefaultToken: !configuredToken,
   };
 }
 
 /**
  * 宣告內容用途說明與單號關聯
  * @description 判斷 Communicator Agent 是否已啟用。
- * @purpose apiUrl 可用時回傳 true（未設定 COMMUNICATOR_AGENT_API_URL 時使用 manageds 預設）。
+ * @purpose apiUrl 可用時回傳 true（COMMUNICATOR_AGENT_API_URL 由 env-loader 解析）。
  * @external https://innotech.atlassian.net/browse/FE-8429
  */
 export function isCommunicatorAgentEnabled() {
@@ -962,5 +951,5 @@ export function reportSystemNotification({ title, message, url = "" } = {}) {
  * llm 分析紀錄區
  * @llm-review-submitted-at 2026-06-23T00:00:00.000Z
  * @llm-review-model composer
- * @llm-review-note COMMUNICATOR_AGENT_API_URL 未設定時 fallback 至 DEFAULT_COMMUNICATOR_AGENT_API_URL（Hermes host，與 Reviewer 分離）。
+ * @llm-review-note FE-8513：COMMUNICATOR_AGENT_API_URL/TOKEN 改由 env-loader local > system 解析，移除 hardcode fallback。
  */

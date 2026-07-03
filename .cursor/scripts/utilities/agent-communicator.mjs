@@ -63,8 +63,8 @@ Options:
   --force-refresh    resolve-target 強制重新查 company-members
 
 Env:
-  COMMUNICATOR_AGENT_API_URL     （未設定時使用 manageds 預設 URL，同 REVIEWER_AGENT_API_URL）
-  COMMUNICATOR_AGENT_API_TOKEN   （未設定時使用內建預設 token）
+  COMMUNICATOR_AGENT_API_URL     （企業級 env，local > .env.system；缺值時 throw）
+  COMMUNICATOR_AGENT_API_TOKEN   （企業級 env，local > .env.system；缺值時 throw）
   COMMUNICATOR_AGENT_TARGET      （未設定時自動解析）
   COMMUNICATOR_RETURN_EDITOR     （慣用 editor deeplink；預設 cursor；含 claude-code）
   JIRA_EMAIL                     （target 自動解析用）
@@ -82,6 +82,7 @@ Examples:
  * @description CLI 主流程。
  * @purpose 提供 show-config / resolve-target / ping / send 操作。
  * @external https://innotech.atlassian.net/browse/FE-8429
+ * @external https://innotech.atlassian.net/browse/FE-8513 - show-config 移除 usingDefault* 欄位，env 改由 env-loader local > system 解析
  */
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -102,8 +103,6 @@ async function main() {
           apiUrl: config.apiUrl || null,
           target: config.target || null,
           returnEditor: config.returnEditor || null,
-          usingDefaultApiUrl: config.usingDefaultApiUrl,
-          usingDefaultToken: config.usingDefaultToken,
           envKeys: [
             "COMMUNICATOR_AGENT_API_URL",
             "COMMUNICATOR_AGENT_API_TOKEN",

@@ -5,7 +5,7 @@
  * @module agent-log-client
  * @purpose 依 env 指定的 Log API 送出 agent log；未設定 env 時關閉功能且不影響主流程。
  * @external https://innotech.atlassian.net/browse/FE-8388
- * @external https://innotech.atlassian.net/browse/FE-8460 - 統一 user/model/timing 欄位對齊 Ares
+ * @external https://innotech.atlassian.net/browse/FE-8460
  */
 
 import { basename } from "path";

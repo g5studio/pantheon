@@ -6,7 +6,7 @@
  * @external https://innotech.atlassian.net/browse/FE-8138
  * @external https://innotech.atlassian.net/browse/FE-8007
  * @external https://innotech.atlassian.net/browse/FE-8388
- * @external https://innotech.atlassian.net/browse/FE-8460 - LLM 錯誤 log 補 startedAt/durationMs
+ * @external https://innotech.atlassian.net/browse/FE-8460
  */
 
 import { reportLlmError } from "./agent-log-client.mjs";

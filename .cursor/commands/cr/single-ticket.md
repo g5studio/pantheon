@@ -2,7 +2,27 @@
 description: 快速執行 commit 並建立 MR，略過關聯單號詢問（預設送審，可用 --no-review 跳過）
 ---
 
-請參考 [auto-commit-and-mr.md](../auto-commit-and-mr.md) 中的 `cr single-ticket` 指令說明。
+請參考 [auto-commit-and-mr.md](../utilities/auto-commit-and-mr.md) 中的 `cr single-ticket` 指令說明。
+
+## Agent-first 外部腳本讀法（CRITICAL — [FE-8389](https://innotech.atlassian.net/browse/FE-8389)）
+
+**腳本命中（掛載專案）**：先查 host `package.json`；有 script 用 `pnpm run <script> -- <args>`；無 script 用 `node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs <path> <args>`。
+
+**禁止舊讀法**：
+- ❌ 把 stdout 中 emoji / 中文進度 log 當作結果解析（進度在 stderr）
+- ❌ 預設或習慣性使用 `--include-raw`、`raw.fields.*`
+- ❌ 忽略 `meta.hints` 而誤判資料不完整
+- ❌ Bug 追溯只手動 `git log`，不跑 `trace-bug-root-cause`
+
+| 步驟 | 腳本 | 建議參數 | Agent 解析重點 |
+|---|---|---|---|
+| 讀 Jira（開發報告） | `read-jira-ticket` | `--format=agent`（非 TTY 預設） | `summary`, `issueType`, `description`, `fixVersions`, `comments`, `meta` |
+| 讀 Jira（快速驗證） | `read-jira-ticket` | `--bundle=cr` | 僅 metadata；**不可**用於寫開發報告 |
+| Bug 追溯 | `trace-bug-root-cause` | `--format=agent` | `traceable`, `topCandidate`, `markdownSection` |
+| Commit | `agent-commit` | `--format=agent`（非 TTY 預設） | `commit.hash`, `branch`, `pushed`, `mrCreateUrl` |
+| 建立 MR | `create-mr` | `--development-report=...` | stdout JSON：`mr.iid`, `mr.webUrl`, `aiReview` |
+
+**資料截斷時**：檢查 `meta.truncated` / `meta.hints.nextSections`，必要時加 `--section=description` 或 `--comments-limit=all`（**不要**直接 `--include-raw`）。
 
 當用戶輸入 `cr single-ticket` 時，自動執行以下完整流程：
 1. 檢查 Git 狀態
@@ -12,7 +32,7 @@ description: 快速執行 commit 並建立 MR，略過關聯單號詢問（預�
 5. 自動建立 MR（包含 FE Board label、reviewer、draft 狀態、delete source branch）
 6. **預設提交 AI review**（用戶可用 `--no-review` 明確跳過；若缺少 `REVIEWER_AGENT_API_TOKEN` 則會自動跳過 AI review；若為更新既有 MR，會由 `update-mr.mjs` 決定是否送審）
 7. **自動檢查 Cursor rules**：在執行 commit 之前，AI 會檢查代碼是否符合 Cursor rules。如果檢測到違規，會自動顯示系統通知（macOS/Windows）並自動切換到 Cursor，停止 commit 流程
-8. **Bug 類型強制追溯來源**：如果 Jira ticket 類型為 Bug，AI 必須在生成開發報告前執行 `pnpm run trace-bug-root-cause -- --ticket={ticket}`，並將輸出的「造成問題的單號」區塊納入開發報告（**不得**把當前 Bug 單誤填為引入單號）。詳細流程請參考 [auto-commit-and-mr.md](../utilities/auto-commit-and-mr.md) 中的「步驟 4.6. Bug 類型強制追溯來源」章節。
+8. **Bug 類型強制追溯來源**：如果 Jira ticket 類型為 Bug，AI 必須在生成開發報告前執行 `pnpm run trace-bug-root-cause -- --ticket={ticket} --format=agent --target=main`（掛載專案無 script 時改用 `.pantheon` runner），從 stdout JSON 讀取 `markdownSection` 與 `topCandidate` 納入開發報告（**不得**把當前 Bug 單誤填為引入單號）。詳細流程請參考 [auto-commit-and-mr.md](../utilities/auto-commit-and-mr.md) 中的「步驟 4.6. Bug 類型強制追溯來源」章節。
 9. **生成開發報告（CRITICAL）**：在建立 MR 前，**必須**根據 Jira ticket 資訊和變更內容生成開發報告，並透過 `--development-report` 傳遞給 `create-mr.mjs`。**CRITICAL**：Agent 必須確保傳入的是「不跑版」的 Markdown（避免出現字面 `\n`）。
 10. **讀取 Agent 版本（CRITICAL）**：在建立 MR 前，**必須**讀取 `version.json`（優先順序：`.pantheon/version.json` → `version.json` → `.cursor/version.json`）並透過 `--agent-version` 參數傳遞給 `create-mr.mjs`。
 
@@ -36,7 +56,7 @@ description: 快速執行 commit 並建立 MR，略過關聯單號詢問（預�
 **`--development-report` 不跑版建議：**
 - **方法 A（推薦）**：用 heredoc 直接把 Markdown 當作參數值（不產生檔案）
   ```bash
-  node .cursor/scripts/cr/create-mr.mjs \
+  pnpm run create-mr -- \
     --development-report="$(cat <<'EOF'
   ## 📋 關聯單資訊
 

@@ -2,7 +2,24 @@
 description: 快速執行 commit 並建立 MR 的完整流程，必須提供多於一個 Jira ticket（預設送審，可用 --no-review 跳過）
 ---
 
-請參考 [auto-commit-and-mr.md](../auto-commit-and-mr.md) 中的 `cr multiple-ticket` 指令說明。
+請參考 [auto-commit-and-mr.md](../utilities/auto-commit-and-mr.md) 中的 `cr multiple-ticket` 指令說明。
+
+## Agent-first 外部腳本讀法（CRITICAL — [FE-8389](https://innotech.atlassian.net/browse/FE-8389)）
+
+**腳本命中（掛載專案）**：先查 host `package.json`；有 script 用 `pnpm run <script> -- <args>`；無 script 用 `node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs <path> <args>`。
+
+**禁止舊讀法**：
+- ❌ 從 `raw.fields.subtasks` 提取子任務（已移除預設 raw）
+- ❌ 把 stderr 進度 log 當 MR / Jira 結果
+- ❌ 用 `--bundle=cr` 讀 Jira 後寫開發報告（會缺 description / comments）
+- ❌ Bug 追溯用 `--json` pretty 全文而非 `--format=agent`
+
+| 步驟 | 腳本 | 建議參數 | Agent 解析重點 |
+|---|---|---|---|
+| 讀子任務 | `read-jira-ticket` | `--format=agent` | **`subtasks[]`**（`ticket`, `summary`）；備援 `links[]` |
+| 讀 Jira（開發報告） | `read-jira-ticket` | `--format=agent` | `summary`, `issueType`, `description`, `fixVersions`, `meta` |
+| Bug 追溯 | `trace-bug-root-cause` | `--format=agent` | `markdownSection`, `topCandidate.relatedTickets` |
+| 建立 MR | `create-mr` | `--related-tickets=...` | stdout JSON：`mr.iid`, `mr.webUrl` |
 
 ## 核心要求
 
@@ -24,7 +41,7 @@ description: 快速執行 commit 並建立 MR 的完整流程，必須提供多�
 5. 自動建立 MR（包含 FE Board label、reviewer、draft 狀態、delete source branch）
 6. **預設提交 AI review**（用戶可用 `--no-review` 明確跳過；若缺少 `REVIEWER_AGENT_API_TOKEN` 則會自動跳過 AI review；若為更新既有 MR，會由 `update-mr.mjs` 決定是否送審）
 7. **自動檢查 Cursor rules**：在執行 commit 之前，AI 會檢查代碼是否符合 Cursor rules
-8. **Bug 類型強制追溯來源**：如果 Jira ticket 類型為 Bug，AI 必須在生成開發報告前執行 `pnpm run trace-bug-root-cause -- --ticket={ticket}`，並將輸出的「造成問題的單號」區塊納入開發報告（**不得**把當前 Bug 單誤填為引入單號）。詳細流程請參考 [auto-commit-and-mr.md](../utilities/auto-commit-and-mr.md) 中的「步驟 4.6. Bug 類型強制追溯來源」章節。
+8. **Bug 類型強制追溯來源**：如果 Jira ticket 類型為 Bug，AI 必須在生成開發報告前執行 `pnpm run trace-bug-root-cause -- --ticket={ticket} --format=agent --target=main`（掛載專案無 script 時改用 `.pantheon` runner），從 stdout JSON 讀取 `markdownSection` 納入開發報告（**不得**把當前 Bug 單誤填為引入單號）。詳細流程請參考 [auto-commit-and-mr.md](../utilities/auto-commit-and-mr.md) 中的「步驟 4.6. Bug 類型強制追溯來源」章節。
 9. **生成開發報告（CRITICAL）**：在建立 MR 前，**必須**根據 Jira ticket 資訊和變更內容生成開發報告，並透過 `--development-report` 傳遞給 `create-mr.mjs`。**CRITICAL**：Agent 必須確保傳入的是「不跑版」的 Markdown（避免出現字面 `\n`）。
 10. **讀取 Agent 版本（CRITICAL）**：在建立 MR 前，**必須**讀取 `version.json`（優先順序：`.pantheon/version.json` → `version.json` → `.cursor/version.json`）並透過 `--agent-version` 參數傳遞給 `create-mr.mjs`。
 
@@ -63,8 +80,8 @@ AI 詢問:
 用戶選擇: 1
 
 AI 執行:
-1. 優先透過 Pantheon 專案內工具讀取 FE-7893 的子任務（`pnpm run read-jira-ticket -- --ticket=FE-7893`；若 host 專案無 script，改用 `node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs jira/read-jira-ticket.mjs --ticket=FE-7893`）
-2. 獲取子任務列表（例如：FE-7894, FE-7895, FE-7896）
+1. 讀取父單：`pnpm run read-jira-ticket -- --ticket=FE-7893 --format=agent`（若 host 專案無 script，改用 `.pantheon` runner）
+2. 從 stdout JSON 的 **`subtasks[]`** 提取子任務（`ticket` + `summary`）；若 `subtasks` 為空，再從 `links[]` 篩選子任務型關聯
 3. 自動設置 --related-tickets="FE-7894,FE-7895,FE-7896"
 4. 繼續執行流程
 ```
@@ -90,14 +107,15 @@ AI 提示:
 
 1. **讀取 Jira ticket 信息**：
    ```bash
-   pnpm run read-jira-ticket -- --ticket="<ticket-id>"
+   pnpm run read-jira-ticket -- --ticket="<ticket-id>" --format=agent
    # 若 host 專案無此 script：
-   # node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs jira/read-jira-ticket.mjs --ticket="<ticket-id>"
+   # node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs jira/read-jira-ticket.mjs --ticket="<ticket-id>" --format=agent
    ```
 
-2. **從回傳的 JSON 中提取子任務**：
-   - 子任務位於 `raw.fields.subtasks` 陣列中
-   - 每個子任務有 `key` 欄位（例如：`FE-7894`）
+2. **從 stdout agent JSON 提取子任務**：
+   - **優先**：`subtasks[]` 陣列（每項含 `ticket`, `summary`, `status`）
+   - **備援**：`links[]` 中子任務型關聯（例如 type 含 Sub-task / 子任务 / 事务拆分）
+   - **禁止**：讀取 `raw.fields.subtasks`（除非使用者明確要求 `--include-raw` 且仍取不到 `subtasks[]`）
 
 3. **驗證子任務存在**：
    - 如果沒有子任務，告知用戶並提供其他選項
