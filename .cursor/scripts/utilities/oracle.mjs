@@ -7,6 +7,7 @@
  * @external https://innotech.atlassian.net/browse/FE-8164
  * @external https://innotech.atlassian.net/browse/FE-7892
  * @external https://innotech.atlassian.net/browse/FE-7922
+ * @external https://innotech.atlassian.net/browse/FE-8513 - 掛載時自動建立 .cursor/.env.system，企業共用 env 可 commit
  */
 /**
  * === 宣告內容用途說明與單號關聯 ===
@@ -571,11 +572,33 @@ async function main() {
 
   // ========================================
   // 8. 檢查並建立環境變數配置檔
+  // FE-8513: 掛載時自動建立 .cursor/.env.system（企業共用，可 commit；不加入 gitignore）
   // ========================================
   console.log("");
   const envLocalPath = join(cwd, ".cursor", ".env.local");
+  const envSystemPath = join(cwd, ".cursor", ".env.system");
   const envExamplePath = join(cwd, ".pantheon", ".cursor", ".env.example");
+  const envSystemSourcePath = join(
+    cwd,
+    ".pantheon",
+    ".cursor",
+    ".env.system",
+  );
   let envCreated = false;
+
+  if (!existsSync(envSystemPath)) {
+    if (existsSync(envSystemSourcePath)) {
+      console.log("📝 建立企業級環境變數配置檔...");
+      copyFileSync(envSystemSourcePath, envSystemPath);
+      log.success("已建立 .cursor/.env.system");
+    } else if (existsSync(join(cwd, ".cursor", ".env.system"))) {
+      log.success(".cursor/.env.system 已存在");
+    } else {
+      log.warning(".env.system 不存在，跳過建立 .cursor/.env.system");
+    }
+  } else {
+    log.success(".cursor/.env.system 已存在");
+  }
 
   if (!existsSync(envLocalPath)) {
     if (existsSync(envExamplePath)) {
@@ -608,6 +631,7 @@ async function main() {
   console.log(`│   └── ${installFolderName}/`);
   console.log("├── skills/");
   console.log(`│   └── ${installFolderName}/`);
+  console.log("├── .env.system");
   console.log("└── .env.local");
   console.log(".agents/");
   console.log("├── commands/");

@@ -17,6 +17,7 @@ import {
   getJiraEmail,
   getReviewerAgentApiToken,
   getReviewerAgentJobsUrl,
+  getMRReviewer,
 } from "../utilities/env-loader.mjs";
 import {
   determineLabels,
@@ -1907,12 +1908,8 @@ async function main() {
   if (reviewerArg) {
     reviewer = reviewerArg.split("=")[1];
   } else {
-    const envLocal = loadEnvLocal();
-    reviewer = process.env.MR_REVIEWER || envLocal.MR_REVIEWER;
-
-    if (!reviewer) {
-      reviewer = "@william.chiang";
-    }
+    // FE-8513: MR reviewer 改由 getMRReviewer 從 local > system 解析，移除 @william.chiang hardcode
+    reviewer = getMRReviewer();
   }
 
   const skipReview = args.includes("--no-review");
