@@ -28,6 +28,12 @@ import { execSync, spawnSync } from "child_process";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { getProjectRoot } from "../utilities/env-loader.mjs";
+import {
+  logProgress,
+  resolveOutputFormat,
+  writeScriptError,
+  writeScriptResult,
+} from "../utilities/external-output.mjs";
 
 // 使用 env-loader 提供的 projectRoot
 /**
@@ -133,73 +139,70 @@ const skipLint = args.includes("--skip-lint");
  * @external https://innotech.atlassian.net/browse/FE-7893
  */
 const autoPush = args.includes("--auto-push");
+const formatArg = args.find((arg) => arg.startsWith("--format="))?.split("=")[1];
+const outputFormat = resolveOutputFormat(formatArg);
 
 // 驗證參數
 if (!type || !ticket || !message) {
-  console.error("缺少必要參數: --type, --ticket, --message");
-  process.exit(1);
+  writeScriptError("缺少必要參數: --type, --ticket, --message", "MISSING_ARGS");
 }
 
 // 驗證 ticket 格式
 if (!/^[A-Z0-9]+\-[0-9]+$/.test(ticket)) {
-  console.error(`無效的 ticket 格式: ${ticket}`);
-  process.exit(1);
+  writeScriptError(`無效的 ticket 格式: ${ticket}`, "INVALID_TICKET");
 }
 
 // 驗證 message
 if (message.length > 64) {
-  console.error(`Message 超過 64 字元: ${message.length}`);
-  process.exit(1);
+  writeScriptError(`Message 超過 64 字元: ${message.length}`, "MESSAGE_TOO_LONG");
 }
 
 if (message !== message.toLowerCase()) {
-  console.error("Message 必須是小寫");
-  process.exit(1);
+  writeScriptError("Message 必須是小寫", "MESSAGE_NOT_LOWERCASE");
 }
 
 // 檢查是否包含中文字符
 if (/[\u4e00-\u9fff]/.test(message)) {
-  console.error("❌ Commit message 不允許使用中文，請使用英文");
-  console.error(`   檢測到的 message: ${message}`);
-  process.exit(1);
+  writeScriptError(
+    `Commit message 不允許使用中文，請使用英文。檢測到的 message: ${message}`,
+    "MESSAGE_CONTAINS_CHINESE",
+  );
 }
 
 // 構建 commit message
 const commitMessage = `${type}(${ticket}): ${message}`;
 
-console.log(`\n📝 Commit message: ${commitMessage}\n`);
+logProgress(`\n📝 Commit message: ${commitMessage}\n`);
 
 // 運行 lint（如果未跳過）
 if (!skipLint) {
   if (!hasPackageScript("format-and-lint")) {
-    console.log(
+    logProgress(
       "⚠️  查無 format-and-lint script，略過 lint 檢查並繼續流程\n"
     );
   } else {
-    console.log("🔍 運行 lint 檢查...");
+    logProgress("🔍 運行 lint 檢查...");
     try {
       exec("pnpm run format-and-lint");
-      console.log("✅ Lint 檢查通過\n");
+      logProgress("✅ Lint 檢查通過\n");
     } catch (error) {
-      console.error("❌ Lint 檢查失敗");
-      process.exit(1);
+      writeScriptError("Lint 檢查失敗", "LINT_FAILED");
     }
   }
 }
 
 // 添加檔案
-console.log("📦 添加檔案到暫存區...");
+logProgress("📦 添加檔案到暫存區...");
 exec("git add .");
-console.log("✅ 檔案已添加\n");
+logProgress("✅ 檔案已添加\n");
 
 // 創建 commit
-console.log("💾 創建 commit...");
+logProgress("💾 創建 commit...");
 try {
   exec(`git commit -m "${commitMessage}"`);
-  console.log("✅ Commit 創建成功\n");
+  logProgress("✅ Commit 創建成功\n");
 } catch (error) {
-  console.error("❌ Commit 創建失敗");
-  process.exit(1);
+  writeScriptError("Commit 創建失敗", "COMMIT_FAILED");
 }
 
 // 檢查並複製 start-task Git notes 到新 commit
@@ -244,7 +247,7 @@ try {
       );
 
       if (result.status === 0) {
-        console.log("✅ 已複製 start-task Git notes 到新 commit\n");
+        logProgress("✅ 已複製 start-task Git notes 到新 commit\n");
       }
     }
   } catch (parentError) {
@@ -281,7 +284,7 @@ try {
         );
 
         if (result.status === 0) {
-          console.log(
+          logProgress(
             "✅ 已從 base commit 複製 start-task Git notes 到新 commit\n"
           );
         }
@@ -304,10 +307,13 @@ try {
 const currentBranch = exec("git rev-parse --abbrev-ref HEAD", {
   silent: true,
 }).trim();
+const commitHash = exec("git rev-parse HEAD", { silent: true }).trim();
+let mrCreateUrl = null;
+let pushed = false;
 
 // 推送到遠端（如果啟用）
 if (autoPush) {
-  console.log("🚀 推送到遠端...");
+  logProgress("🚀 推送到遠端...");
   try {
     // 先檢查遠端分支是否存在
     /**
@@ -333,12 +339,13 @@ if (autoPush) {
 
     // 如果遠端分支不存在，使用 -u 設置 upstream；否則直接推送
     if (!remoteBranchExists) {
-      console.log(`📤 遠端分支不存在，使用 -u 設置 upstream...`);
+      logProgress(`📤 遠端分支不存在，使用 -u 設置 upstream...`);
       exec(`git push -u origin ${currentBranch}`);
     } else {
       exec(`git push origin ${currentBranch}`);
     }
-    console.log("✅ 推送成功\n");
+    logProgress("✅ 推送成功\n");
+    pushed = true;
 
     // 獲取 remote URL
     try {
@@ -367,49 +374,50 @@ if (autoPush) {
            * @external https://innotech.atlassian.net/browse/FE-7893
            */
           const [, host, path] = match;
-          const mrUrl = `https://${host}/${path.replace(
+          mrCreateUrl = `https://${host}/${path.replace(
             /\.git$/,
             ""
           )}/-/merge_requests/new?merge_request[source_branch]=${currentBranch}`;
-          // 使用 Markdown 超連結格式，符合 mr-execution-result-report.mdc 規範
-          console.log(`🔗 MR 連結: [建立 MR](${mrUrl})\n`);
+          logProgress(`🔗 MR 連結: [建立 MR](${mrCreateUrl})\n`);
         }
       }
     } catch (error) {
       // 忽略 remote URL 獲取錯誤
     }
   } catch (error) {
-    console.error("❌ 推送失敗");
-    console.error(`錯誤: ${error.message}`);
-    console.log(`\n💡 請檢查：`);
-    console.log(`   1. 網路連線是否正常`);
-    console.log(`   2. Git 認證是否正確`);
-    console.log(`   3. 遠端倉庫權限是否足夠`);
-    console.log(
-      `\n   如果分支不存在，請使用: git push -u origin ${currentBranch}`
+    writeScriptError(
+      `推送失敗: ${error.message}。若分支不存在，請使用: git push -u origin ${currentBranch}`,
+      "PUSH_FAILED",
     );
-    process.exit(1);
   }
 } else {
-  console.log(`\n💡 使用以下指令推送到遠端:`);
-  console.log(`   git push origin ${currentBranch}\n`);
+  logProgress(`\n💡 使用以下指令推送到遠端:`);
+  logProgress(`   git push origin ${currentBranch}\n`);
 }
 
-console.log("✅ 完成！");
+writeScriptResult(
+  {
+    source: "git",
+    action: "commit",
+    commit: {
+      hash: commitHash,
+      shortHash: commitHash.slice(0, 7),
+      message: commitMessage,
+      type,
+      ticket,
+    },
+    branch: currentBranch,
+    pushed,
+    mrCreateUrl,
+    lintSkipped: skipLint,
+    message: `Commit ${commitHash.slice(0, 7)} created on ${currentBranch}`,
+  },
+  outputFormat,
+);
 
 /**
  * llm 分析紀錄區
- * @llm-review-submitted-at 2026-06-13T18:09:44.304Z
- * @llm-review-model annotation-refactor-engine
- * @llm-review-note 只更新檔案內 JSDoc 註解，依三段式區塊規範整理：
- * 1) top/middle/bottom 區塊標題統一。
- * 2) 宣告註解外部來源僅保留對應 tickets（無 tickets 省略 @external）。
- * 3) 所有 @external 均使用完整 Jira browse URL。
- * 未變更任何 runtime 邏輯。
- */
-/**
- * === llm 分析紀錄區 ===
- * @llm-review-submitted-at 2026-06-13T19:15:10.809Z
- * @llm-review-model gpt-5.4-nano
- * @llm-review-note 調整並統一三段式 JSDoc 區塊標題/格式；清理宣告區外部來源不符合規則者，所有 @external 改為完整 Jira browse URL，並保留僅與宣告 origin tickets 相符的連結；合併/修正 llm 分析紀錄區為單一底部區塊。
+ * @llm-review-submitted-at 2026-06-14T19:00:00.000Z
+ * @llm-review-model composer-2.5-fast
+ * @llm-review-note FE-8389：progress 改 stderr；成功結果 stdout compact JSON；錯誤走 writeScriptError。
  */
