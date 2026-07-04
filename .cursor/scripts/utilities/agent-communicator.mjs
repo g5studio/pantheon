@@ -82,7 +82,7 @@ Examples:
  * @description CLI 主流程。
  * @purpose 提供 show-config / resolve-target / ping / send 操作。
  * @external https://innotech.atlassian.net/browse/FE-8429
- * @external https://innotech.atlassian.net/browse/FE-8513 - show-config 移除 usingDefault* 欄位，env 改由 env-loader local > system 解析
+ * @external https://innotech.atlassian.net/browse/FE-8513
  */
 async function main() {
   const args = parseArgs(process.argv.slice(2));
