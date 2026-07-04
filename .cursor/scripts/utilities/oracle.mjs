@@ -7,7 +7,7 @@
  * @external https://innotech.atlassian.net/browse/FE-8164
  * @external https://innotech.atlassian.net/browse/FE-7892
  * @external https://innotech.atlassian.net/browse/FE-7922
- * @external https://innotech.atlassian.net/browse/FE-8513 - 掛載時自動建立 .cursor/.env.system，企業共用 env 可 commit
+ * @external https://innotech.atlassian.net/browse/FE-8513
  */
 /**
  * === 宣告內容用途說明與單號關聯 ===

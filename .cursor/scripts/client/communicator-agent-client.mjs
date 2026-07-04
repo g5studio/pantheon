@@ -5,7 +5,7 @@
  * @module communicator-agent-client
  * @purpose 依 env 對接 Hermes Communicator API 發送 LINE WORKS 通知（local > system）。
  * @external https://innotech.atlassian.net/browse/FE-8429
- * @external https://innotech.atlassian.net/browse/FE-8513 - getCommunicatorAgentConfig 改接 env-loader，移除內建 URL/token fallback
+ * @external https://innotech.atlassian.net/browse/FE-8513
  */
 
 import { execSync } from "child_process";
@@ -470,7 +470,7 @@ function upsertCursorEnvLocalKey(key, value) {
  * @description 讀取 Communicator Agent / Hermes API 設定。
  * @purpose 供 send / resolve-target 與 CLI 共用；FE-8513 改由 env-loader 集中解析
  * @external https://innotech.atlassian.net/browse/FE-8429
- * @external https://innotech.atlassian.net/browse/FE-8513 - 移除 DEFAULT_COMMUNICATOR_* hardcode，改呼叫 getCommunicatorAgentApiUrl/Token
+ * @external https://innotech.atlassian.net/browse/FE-8513
  */
 export function getCommunicatorAgentConfig() {
   const envLocal = loadEnvLocal();

@@ -7,7 +7,7 @@
  * @external https://innotech.atlassian.net/browse/FE-7840
  * @external https://innotech.atlassian.net/browse/FE-8004
  * @external https://innotech.atlassian.net/browse/FE-7892
- * @external https://innotech.atlassian.net/browse/FE-8513 - 企業級 env 分層重構，新增 local > system 取值鏈並移除 hardcode default
+ * @external https://innotech.atlassian.net/browse/FE-8513
  */
 /**
  * === 宣告內容用途說明與單號關聯 ===
@@ -21,7 +21,7 @@
  * @external https://innotech.atlassian.net/browse/FE-7892
  * @external https://innotech.atlassian.net/browse/FE-7840
  * @external https://innotech.atlassian.net/browse/FE-8004
- * @external https://innotech.atlassian.net/browse/FE-8513 - 企業級 env 分層重構，新增 local > system 取值鏈並移除 hardcode default
+ * @external https://innotech.atlassian.net/browse/FE-8513
  */
 
 import { readFileSync, existsSync } from "fs";
@@ -126,7 +126,7 @@ export function loadEnvLocal() {
  * === 宣告內容用途說明與單號關聯 ===
  * @description 讀取企業級共用設定 `.cursor/.env.system`（可 commit，不 ignore）。
  * @purpose FE-8513：提供 system 層 env，供 local > system 取值鏈使用。
- * @external https://innotech.atlassian.net/browse/FE-8513 - 新增 loadEnvSystem 讀取 .cursor/.env.system 作為企業共用設定層
+ * @external https://innotech.atlassian.net/browse/FE-8513
  */
 export function loadEnvSystem() {
   const projectRoot = getProjectRoot();
@@ -168,7 +168,7 @@ function pickFirstEnvString(...values) {
  * === 宣告內容用途說明與單號關聯 ===
  * @description 企業級 env 缺失時輸出設定指引。
  * @purpose FE-8513：提示於 .env.local 或 .env.system 補齊。
- * @external https://innotech.atlassian.net/browse/FE-8513 - 新增 guideEnterpriseEnvConfig，缺值時指引 local/system 補齊路徑
+ * @external https://innotech.atlassian.net/browse/FE-8513
  */
 function guideEnterpriseEnvConfig(keys, label) {
   const keyList = Array.isArray(keys) ? keys : [keys];
@@ -190,7 +190,7 @@ function guideEnterpriseEnvConfig(keys, label) {
  * === 宣告內容用途說明與單號關聯 ===
  * @description 依 local > system 解析 env；缺值且 required 時 throw。
  * @purpose FE-8513：集中企業級 env 取值，code 內不留 hardcode default。
- * @external https://innotech.atlassian.net/browse/FE-8513 - 新增 resolveEnvValue 實作 local > system 取值，缺值時 throw
+ * @external https://innotech.atlassian.net/browse/FE-8513
  */
 export function resolveEnvValue(key, options = {}) {
   const {
@@ -232,7 +232,7 @@ export function resolveEnvValue(key, options = {}) {
  * @description 當 Jira 需要的設定缺失時，透過終端提供使用者設定步驟提示。
  * @purpose FE-7892、FE-8513：補充 JIRA_BASE_URL 企業級設定指引
  * @external https://innotech.atlassian.net/browse/FE-7892
- * @external https://innotech.atlassian.net/browse/FE-8513 - guideJiraConfig 新增 JIRA_BASE_URL 補齊步驟說明
+ * @external https://innotech.atlassian.net/browse/FE-8513
  */
 export function guideJiraConfig() {
   console.error("\n❌ Jira 配置缺失！\n");
@@ -276,7 +276,7 @@ export function guideJiraConfig() {
  * === 宣告內容用途說明與單號關聯 ===
  * @description 取得 Jira Base URL（local > system；無 hardcode default）。
  * @purpose FE-8513：Jira Base URL 改由 JIRA_BASE_URL env 解析，移除 innotech hardcode
- * @external https://innotech.atlassian.net/browse/FE-8513 - 新增 getJiraBaseUrl，以 resolveEnvValue 取代寫死 baseUrl
+ * @external https://innotech.atlassian.net/browse/FE-8513
  */
 export function getJiraBaseUrl(options = {}) {
   const { required = true } = options;
@@ -296,7 +296,7 @@ export function getJiraBaseUrl(options = {}) {
  * @description 取得 Jira 設定（email/apiToken 由 local 讀取；baseUrl 由 local > system）。
  * @purpose FE-7892、FE-8513：baseUrl 改走 getJiraBaseUrl，不再 hardcode innotech URL
  * @external https://innotech.atlassian.net/browse/FE-7892
- * @external https://innotech.atlassian.net/browse/FE-8513 - getJiraConfig 改接 JIRA_BASE_URL env 取值
+ * @external https://innotech.atlassian.net/browse/FE-8513
  */
 export function getJiraConfig(throwOnMissing = true) {
   const envLocal = loadEnvLocal();
@@ -403,7 +403,7 @@ export function getCompassApiToken() {
  * === 宣告內容用途說明與單號關聯 ===
  * @description 取得 Reviewer Agent API base URL（local > system；無 hardcode default）。
  * @purpose FE-8513：Reviewer API URL 改 resolveEnvValue，移除 DEFAULT_REVIEWER_AGENT_API_URL
- * @external https://innotech.atlassian.net/browse/FE-8513 - getReviewerAgentApiBaseUrl 不再 fallback mac09demac-mini hardcode
+ * @external https://innotech.atlassian.net/browse/FE-8513
  */
 export function getReviewerAgentApiBaseUrl() {
   return normalizeEnvBaseUrl(
@@ -427,7 +427,7 @@ export function getReviewerAgentJobsUrl() {
  * === 宣告內容用途說明與單號關聯 ===
  * @description 取得 Communicator Agent API base URL（local > system）。
  * @purpose FE-8513：新增 Communicator API URL getter，集中於 env-loader 解析
- * @external https://innotech.atlassian.net/browse/FE-8513 - 供 communicator-agent-client 移除內建 URL fallback
+ * @external https://innotech.atlassian.net/browse/FE-8513
  */
 export function getCommunicatorAgentApiUrl() {
   return normalizeEnvBaseUrl(
@@ -441,7 +441,7 @@ export function getCommunicatorAgentApiUrl() {
  * === 宣告內容用途說明與單號關聯 ===
  * @description 取得 Communicator Agent API token（local > system）。
  * @purpose FE-8513：新增 Communicator API token getter，集中於 env-loader 解析
- * @external https://innotech.atlassian.net/browse/FE-8513 - 供 communicator-agent-client 移除內建 token fallback
+ * @external https://innotech.atlassian.net/browse/FE-8513
  */
 export function getCommunicatorAgentApiToken() {
   return resolveEnvValue("COMMUNICATOR_AGENT_API_TOKEN", {
@@ -454,7 +454,7 @@ export function getCommunicatorAgentApiToken() {
  * @description 取得 Master Control Agent Log API URL（local > system；支援舊名）。
  * @purpose llm-client 錯誤上報與 agent-log CLI 共用；FE-8513 改走 resolveEnvValue
  * @external https://innotech.atlassian.net/browse/FE-8388
- * @external https://innotech.atlassian.net/browse/FE-8513 - getMasterControlAgentApiUrl 支援 local > system 與 OPERATOR 舊名
+ * @external https://innotech.atlassian.net/browse/FE-8513
  */
 export function getMasterControlAgentApiUrl(options = {}) {
   const { required = false } = options;
@@ -469,7 +469,7 @@ export function getMasterControlAgentApiUrl(options = {}) {
  * === 宣告內容用途說明與單號關聯 ===
  * @description 取得 MR Reviewer（local > system；無 hardcode default）。
  * @purpose FE-8513：MR reviewer 改 resolveEnvValue，移除 create-mr @william.chiang hardcode
- * @external https://innotech.atlassian.net/browse/FE-8513 - getMRReviewer 缺值時 throw 並指引補齊 env
+ * @external https://innotech.atlassian.net/browse/FE-8513
  */
 export function getMRReviewer(options = {}) {
   const { required = true } = options;
@@ -483,7 +483,7 @@ export function getMRReviewer(options = {}) {
  * === 宣告內容用途說明與單號關聯 ===
  * @description 取得 Figma Access Token（local > system）。
  * @purpose FE-8513：新增 Figma token getter，企業級 env 由 local > system 解析
- * @external https://innotech.atlassian.net/browse/FE-8513 - getFigmaAccessToken 缺值時 throw 並指引補齊 env
+ * @external https://innotech.atlassian.net/browse/FE-8513
  */
 export function getFigmaAccessToken(options = {}) {
   const { required = true } = options;
