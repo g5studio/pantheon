@@ -124,15 +124,33 @@ export function loadEnvLocal() {
 
 /**
  * === 宣告內容用途說明與單號關聯 ===
- * @description 讀取企業級共用設定 `.cursor/.env.system`（可 commit，不 ignore）。
- * @purpose FE-8513：作為 oracle/descend 預填 .env.local 的來源；runtime 腳本不直接讀取。
+ * @description 解析 Pantheon 來源的 .env.system 路徑（掛載專案或 Pantheon 本 repo）。
+ * @purpose oracle/descend 預填 .env.local 時讀取來源；不在目標專案建立 .env.system。
  * @external https://innotech.atlassian.net/browse/FE-8513
  */
-export function loadEnvSystem() {
-  const projectRoot = getProjectRoot();
-  const systemEnvPath = join(projectRoot, ".cursor", ".env.system");
+export function resolvePantheonEnvSystemPath(projectRoot = getProjectRoot()) {
+  const mountedPath = join(projectRoot, ".pantheon", ".cursor", ".env.system");
+  if (existsSync(mountedPath)) {
+    return mountedPath;
+  }
 
-  if (!existsSync(systemEnvPath)) {
+  const pantheonRepoPath = join(projectRoot, ".cursor", ".env.system");
+  if (existsSync(pantheonRepoPath)) {
+    return pantheonRepoPath;
+  }
+
+  return null;
+}
+
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 讀取 Pantheon 來源的 .env.system（.pantheon 或本 repo）。
+ * @purpose 供 seedEnvLocalFromSystem 使用；runtime 腳本不直接讀取。
+ * @external https://innotech.atlassian.net/browse/FE-8513
+ */
+export function loadEnvSystem(projectRoot = getProjectRoot()) {
+  const systemEnvPath = resolvePantheonEnvSystemPath(projectRoot);
+  if (!systemEnvPath) {
     return {};
   }
 
@@ -170,7 +188,7 @@ function escapeRegExp(string) {
 
 /**
  * === 宣告內容用途說明與單號關聯 ===
- * @description 將 .env.system 的非空值預填至 .env.local 的空欄位；不覆寫 local 既有值。
+ * @description 將 Pantheon .env.system 的非空值預填至目標專案 .env.local；不覆寫 local 既有值。
  * @purpose oracle/descend 執行時集中種子 env，runtime 腳本僅讀 .env.local。
  * @external https://innotech.atlassian.net/browse/FE-8513
  */
@@ -179,9 +197,9 @@ export function seedEnvLocalFromSystem(options = {}) {
   const envLocalPath =
     options.envLocalPath ?? join(projectRoot, ".cursor", ".env.local");
   const envSystemPath =
-    options.envSystemPath ?? join(projectRoot, ".cursor", ".env.system");
+    options.envSystemPath ?? resolvePantheonEnvSystemPath(projectRoot);
 
-  if (!existsSync(envLocalPath) || !existsSync(envSystemPath)) {
+  if (!envSystemPath || !existsSync(envLocalPath)) {
     return { updated: false, filledKeys: [] };
   }
 
@@ -245,7 +263,7 @@ function guideEnterpriseEnvConfig(keys, label) {
   }
   console.error("");
   console.error(
-    "💡 若為組織共用預設值，請更新 .cursor/.env.system 後重新執行 pantheon:oracle / pantheon:descend 以預填至 .env.local\n",
+    "💡 若為組織共用預設值，請更新 Pantheon .env.system 後重新執行 pantheon:oracle / pantheon:descend 以預填至 .env.local\n",
   );
 }
 
@@ -315,7 +333,7 @@ export function guideJiraConfig() {
   console.error("");
 
   console.error("**3. 設置 Jira Base URL（企業級）:**");
-  console.error("   在 .cursor/.env.local 添加（或更新 .cursor/.env.system 後重新執行 oracle）:");
+  console.error("   在 .cursor/.env.local 添加（或重新執行 pantheon:oracle 以預填企業預設）:");
   console.error("   JIRA_BASE_URL=https://innotech.atlassian.net/");
   console.error("");
 
