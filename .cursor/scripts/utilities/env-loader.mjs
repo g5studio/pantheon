@@ -24,7 +24,13 @@
  * @external https://innotech.atlassian.net/browse/FE-8513
  */
 
-import { readFileSync, existsSync, writeFileSync } from "fs";
+import {
+  readFileSync,
+  existsSync,
+  writeFileSync,
+  copyFileSync,
+  unlinkSync,
+} from "fs";
 import { join, sep } from "path";
 import { execSync } from "child_process";
 
@@ -129,17 +135,15 @@ export function loadEnvLocal() {
  * @external https://innotech.atlassian.net/browse/FE-8513
  */
 export function resolvePantheonEnvSystemPath(projectRoot = getProjectRoot()) {
-  const mountedPath = join(projectRoot, ".pantheon", ".cursor", ".env.system");
-  if (existsSync(mountedPath)) {
-    return mountedPath;
+  const mountedPantheonDir = join(projectRoot, ".pantheon");
+
+  if (existsSync(mountedPantheonDir)) {
+    const mountedPath = join(mountedPantheonDir, ".cursor", ".env.system");
+    return existsSync(mountedPath) ? mountedPath : null;
   }
 
   const pantheonRepoPath = join(projectRoot, ".cursor", ".env.system");
-  if (existsSync(pantheonRepoPath)) {
-    return pantheonRepoPath;
-  }
-
-  return null;
+  return existsSync(pantheonRepoPath) ? pantheonRepoPath : null;
 }
 
 /**
@@ -246,6 +250,77 @@ export function seedEnvLocalFromSystem(options = {}) {
   }
 
   return { updated: false, filledKeys: [] };
+}
+
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description oracle/descend pull 後建立 .env.local、從 Pantheon .env.system 預填，並移除目標專案誤建的 .env.system。
+ * @purpose FE-8513：動態載入確保 pull 後使用最新邏輯，避免舊版 oracle 記憶體內仍複製 .env.system。
+ * @external https://innotech.atlassian.net/browse/FE-8513
+ */
+export function runEnvOracleSetup(cwd, { log } = {}) {
+  const logger = {
+    success: (message) =>
+      typeof log?.success === "function" ? log.success(message) : console.log(message),
+    warning: (message) =>
+      typeof log?.warning === "function"
+        ? log.warning(message)
+        : console.warn(message),
+    dim: (message) =>
+      typeof log?.dim === "function" ? log.dim(message) : console.log(message),
+  };
+
+  const envLocalPath = join(cwd, ".cursor", ".env.local");
+  const envExamplePath = join(cwd, ".pantheon", ".cursor", ".env.example");
+  const envSystemSourcePath = join(
+    cwd,
+    ".pantheon",
+    ".cursor",
+    ".env.system",
+  );
+  const hostEnvSystemPath = join(cwd, ".cursor", ".env.system");
+
+  if (existsSync(hostEnvSystemPath)) {
+    unlinkSync(hostEnvSystemPath);
+    logger.success(
+      "已移除目標專案 .cursor/.env.system（企業預設僅保留於 .pantheon）",
+    );
+  }
+
+  let envCreated = false;
+
+  if (!existsSync(envLocalPath)) {
+    if (existsSync(envExamplePath)) {
+      console.log("📝 建立環境變數配置檔...");
+      copyFileSync(envExamplePath, envLocalPath);
+      envCreated = true;
+      logger.success("已建立 .cursor/.env.local");
+    } else {
+      logger.warning(".env.example 不存在，跳過建立 .env.local");
+    }
+  } else {
+    logger.success(".cursor/.env.local 已存在");
+  }
+
+  if (existsSync(envSystemSourcePath) && existsSync(envLocalPath)) {
+    const seedResult = seedEnvLocalFromSystem({
+      envLocalPath,
+      envSystemPath: envSystemSourcePath,
+    });
+    if (seedResult.updated) {
+      logger.success(
+        `已從 Pantheon .env.system 預填至 .env.local：${seedResult.filledKeys.join(", ")}`,
+      );
+    } else {
+      logger.dim(".env.local 企業級欄位已齊，略過預填");
+    }
+  } else if (!existsSync(envSystemSourcePath)) {
+    logger.warning(
+      ".pantheon/.cursor/.env.system 不存在，略過企業級預填",
+    );
+  }
+
+  return { envCreated };
 }
 
 /**
@@ -608,5 +683,5 @@ export function getAgentDisplayName(options = {}) {
  * llm 分析紀錄區
  * @llm-review-submitted-at 2026-07-04T00:00:00.000Z
  * @llm-review-model gpt-5.4-nano
- * @llm-review-note FE-8513：runtime 僅讀 .env.local；oracle 以 seedEnvLocalFromSystem 從 .env.system 預填。
+ * @llm-review-note FE-8513：runEnvOracleSetup 動態載入並清理目標專案誤建 .env.system。
  */

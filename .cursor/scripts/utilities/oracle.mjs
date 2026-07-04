@@ -29,14 +29,12 @@ import {
   readFileSync,
   rmSync,
   unlinkSync,
-  copyFileSync,
   readdirSync,
   writeFileSync,
 } from "fs";
 import { execSync } from "child_process";
 import { dirname, join } from "path";
 import { fileURLToPath, pathToFileURL } from "url";
-import { seedEnvLocalFromSystem } from "./env-loader.mjs";
 
 /**
  * 宣告內容用途說明與單號關聯
@@ -300,6 +298,7 @@ function updateGitignore(cwd, installFolderName) {
     ".pantheon/",
     ".codegraph/",
     ".cursor/.env.local",
+    ".cursor/.env.system",
     ".cursor/skills/pantheon-mounted-workflow/",
     `.cursor/commands/${installFolderName}/`,
     `.cursor/rules/${installFolderName}/`,
@@ -383,6 +382,46 @@ async function runCodegraphSetup(cwd) {
     log.warning(
       "查詢流程會自動回退到本地索引模式（不影響 Oracle 同步）",
     );
+  }
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ *
+ * @description 在 pull 最新 Pantheon 後動態載入 env-loader 並執行 .env.local 建立與預填。
+ * @purpose FE-8513：避免舊版 oracle 程序記憶體仍執行複製 .env.system 至目標專案的邏輯。
+ * @external https://innotech.atlassian.net/browse/FE-8513
+ */
+async function runEnvSetup(cwd) {
+  const setupModuleCandidates = [
+    join(
+      cwd,
+      ".pantheon",
+      ".cursor",
+      "scripts",
+      "utilities",
+      "env-loader.mjs",
+    ),
+    join(dirname(fileURLToPath(import.meta.url)), "env-loader.mjs"),
+  ];
+
+  const setupModulePath = setupModuleCandidates.find((candidate) =>
+    existsSync(candidate),
+  );
+
+  if (!setupModulePath) {
+    log.warning("找不到 env-loader 模組，跳過 env 設定");
+    return { envCreated: false };
+  }
+
+  try {
+    const { runEnvOracleSetup } = await import(
+      pathToFileURL(setupModulePath).href
+    );
+    return runEnvOracleSetup(cwd, { log });
+  } catch (error) {
+    log.warning(`env 設定失敗：${error.message}`);
+    return { envCreated: false };
   }
 }
 
@@ -572,49 +611,10 @@ async function main() {
   await runCodegraphSetup(cwd);
 
   // ========================================
-  // 8. 檢查並建立 .env.local，從 Pantheon .env.system 預填（不在目標專案建立 .env.system）
+  // 8. 檢查並建立 .env.local，從 Pantheon .env.system 預填（pull 後動態載入最新 env 邏輯）
   // ========================================
   console.log("");
-  const envLocalPath = join(cwd, ".cursor", ".env.local");
-  const envExamplePath = join(cwd, ".pantheon", ".cursor", ".env.example");
-  const envSystemSourcePath = join(
-    cwd,
-    ".pantheon",
-    ".cursor",
-    ".env.system",
-  );
-  let envCreated = false;
-
-  if (!existsSync(envLocalPath)) {
-    if (existsSync(envExamplePath)) {
-      console.log("📝 建立環境變數配置檔...");
-      copyFileSync(envExamplePath, envLocalPath);
-      envCreated = true;
-      log.success("已建立 .cursor/.env.local");
-    } else {
-      log.warning(".env.example 不存在，跳過建立 .env.local");
-    }
-  } else {
-    log.success(".cursor/.env.local 已存在");
-  }
-
-  if (existsSync(envSystemSourcePath) && existsSync(envLocalPath)) {
-    const seedResult = seedEnvLocalFromSystem({
-      envLocalPath,
-      envSystemPath: envSystemSourcePath,
-    });
-    if (seedResult.updated) {
-      log.success(
-        `已從 Pantheon .env.system 預填至 .env.local：${seedResult.filledKeys.join(", ")}`,
-      );
-    } else {
-      log.dim(".env.local 企業級欄位已齊，略過預填");
-    }
-  } else if (!existsSync(envSystemSourcePath)) {
-    log.warning(
-      ".pantheon/.cursor/.env.system 不存在，略過企業級預填",
-    );
-  }
+  const { envCreated } = await runEnvSetup(cwd);
 
   // ========================================
   // 9. 輸出結果
