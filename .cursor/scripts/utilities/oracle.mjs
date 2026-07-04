@@ -36,6 +36,7 @@ import {
 import { execSync } from "child_process";
 import { dirname, join } from "path";
 import { fileURLToPath, pathToFileURL } from "url";
+import { seedEnvLocalFromSystem } from "./env-loader.mjs";
 
 /**
  * 宣告內容用途說明與單號關聯
@@ -572,7 +573,7 @@ async function main() {
 
   // ========================================
   // 8. 檢查並建立環境變數配置檔
-  // FE-8513: 掛載時自動建立 .cursor/.env.system（企業共用，可 commit；不加入 gitignore）
+  // FE-8513: 掛載時自動建立 .cursor/.env.system（企業共用範本）並預填至 .env.local
   // ========================================
   console.log("");
   const envLocalPath = join(cwd, ".cursor", ".env.local");
@@ -611,6 +612,26 @@ async function main() {
     }
   } else {
     log.success(".cursor/.env.local 已存在");
+  }
+
+  const systemPathForSeed = existsSync(envSystemPath)
+    ? envSystemPath
+    : existsSync(envSystemSourcePath)
+      ? envSystemSourcePath
+      : null;
+
+  if (systemPathForSeed && existsSync(envLocalPath)) {
+    const seedResult = seedEnvLocalFromSystem({
+      envLocalPath,
+      envSystemPath: systemPathForSeed,
+    });
+    if (seedResult.updated) {
+      log.success(
+        `已從 .env.system 預填至 .env.local：${seedResult.filledKeys.join(", ")}`,
+      );
+    } else {
+      log.dim(".env.local 企業級欄位已齊，略過預填");
+    }
   }
 
   // ========================================
@@ -671,7 +692,8 @@ async function main() {
     console.log("==========================================");
     log.warning("環境變數配置提醒");
     console.log("==========================================");
-    console.log("已建立 .cursor/.env.local，請編輯此檔案填入以下配置：");
+    console.log("已建立 .cursor/.env.local，企業級預設已從 .env.system 預填。");
+    console.log("請編輯此檔案填入個人必要配置：");
     console.log("");
     console.log("必要配置：");
     console.log("  - JIRA_EMAIL: Jira/Confluence 帳號 email");
