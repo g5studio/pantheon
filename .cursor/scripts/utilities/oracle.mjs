@@ -572,12 +572,10 @@ async function main() {
   await runCodegraphSetup(cwd);
 
   // ========================================
-  // 8. 檢查並建立環境變數配置檔
-  // FE-8513: 掛載時自動建立 .cursor/.env.system（企業共用範本）並預填至 .env.local
+  // 8. 檢查並建立 .env.local，從 Pantheon .env.system 預填（不在目標專案建立 .env.system）
   // ========================================
   console.log("");
   const envLocalPath = join(cwd, ".cursor", ".env.local");
-  const envSystemPath = join(cwd, ".cursor", ".env.system");
   const envExamplePath = join(cwd, ".pantheon", ".cursor", ".env.example");
   const envSystemSourcePath = join(
     cwd,
@@ -586,20 +584,6 @@ async function main() {
     ".env.system",
   );
   let envCreated = false;
-
-  if (!existsSync(envSystemPath)) {
-    if (existsSync(envSystemSourcePath)) {
-      console.log("📝 建立企業級環境變數配置檔...");
-      copyFileSync(envSystemSourcePath, envSystemPath);
-      log.success("已建立 .cursor/.env.system");
-    } else if (existsSync(join(cwd, ".cursor", ".env.system"))) {
-      log.success(".cursor/.env.system 已存在");
-    } else {
-      log.warning(".env.system 不存在，跳過建立 .cursor/.env.system");
-    }
-  } else {
-    log.success(".cursor/.env.system 已存在");
-  }
 
   if (!existsSync(envLocalPath)) {
     if (existsSync(envExamplePath)) {
@@ -614,24 +598,22 @@ async function main() {
     log.success(".cursor/.env.local 已存在");
   }
 
-  const systemPathForSeed = existsSync(envSystemPath)
-    ? envSystemPath
-    : existsSync(envSystemSourcePath)
-      ? envSystemSourcePath
-      : null;
-
-  if (systemPathForSeed && existsSync(envLocalPath)) {
+  if (existsSync(envSystemSourcePath) && existsSync(envLocalPath)) {
     const seedResult = seedEnvLocalFromSystem({
       envLocalPath,
-      envSystemPath: systemPathForSeed,
+      envSystemPath: envSystemSourcePath,
     });
     if (seedResult.updated) {
       log.success(
-        `已從 .env.system 預填至 .env.local：${seedResult.filledKeys.join(", ")}`,
+        `已從 Pantheon .env.system 預填至 .env.local：${seedResult.filledKeys.join(", ")}`,
       );
     } else {
       log.dim(".env.local 企業級欄位已齊，略過預填");
     }
+  } else if (!existsSync(envSystemSourcePath)) {
+    log.warning(
+      ".pantheon/.cursor/.env.system 不存在，略過企業級預填",
+    );
   }
 
   // ========================================
@@ -652,7 +634,6 @@ async function main() {
   console.log(`│   └── ${installFolderName}/`);
   console.log("├── skills/");
   console.log(`│   └── ${installFolderName}/`);
-  console.log("├── .env.system");
   console.log("└── .env.local");
   console.log(".agents/");
   console.log("├── commands/");
@@ -692,7 +673,7 @@ async function main() {
     console.log("==========================================");
     log.warning("環境變數配置提醒");
     console.log("==========================================");
-    console.log("已建立 .cursor/.env.local，企業級預設已從 .env.system 預填。");
+    console.log("已建立 .cursor/.env.local，企業級預設已從 Pantheon .env.system 預填。");
     console.log("請編輯此檔案填入個人必要配置：");
     console.log("");
     console.log("必要配置：");
