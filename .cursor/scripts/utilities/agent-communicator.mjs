@@ -63,8 +63,8 @@ Options:
   --force-refresh    resolve-target 強制重新查 company-members
 
 Env:
-  COMMUNICATOR_AGENT_API_URL     （企業級 env，local > .env.system；缺值時 throw）
-  COMMUNICATOR_AGENT_API_TOKEN   （企業級 env，local > .env.system；缺值時 throw）
+  COMMUNICATOR_AGENT_API_URL     （讀取 .cursor/.env.local；缺值時 throw）
+  COMMUNICATOR_AGENT_API_TOKEN   （讀取 .cursor/.env.local；缺值時 throw）
   COMMUNICATOR_AGENT_TARGET      （未設定時自動解析）
   COMMUNICATOR_RETURN_EDITOR     （慣用 editor deeplink；預設 cursor；含 claude-code）
   JIRA_EMAIL                     （target 自動解析用）

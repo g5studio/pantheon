@@ -24,7 +24,7 @@
  * @external https://innotech.atlassian.net/browse/FE-8513
  */
 
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync, writeFileSync } from "fs";
 import { join, sep } from "path";
 import { execSync } from "child_process";
 
@@ -125,7 +125,7 @@ export function loadEnvLocal() {
 /**
  * === 宣告內容用途說明與單號關聯 ===
  * @description 讀取企業級共用設定 `.cursor/.env.system`（可 commit，不 ignore）。
- * @purpose FE-8513：提供 system 層 env，供 local > system 取值鏈使用。
+ * @purpose FE-8513：作為 oracle/descend 預填 .env.local 的來源；runtime 腳本不直接讀取。
  * @external https://innotech.atlassian.net/browse/FE-8513
  */
 export function loadEnvSystem() {
@@ -164,32 +164,95 @@ function pickFirstEnvString(...values) {
   return "";
 }
 
+function escapeRegExp(string) {
+  return String(string).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * === 宣告內容用途說明與單號關聯 ===
+ * @description 將 .env.system 的非空值預填至 .env.local 的空欄位；不覆寫 local 既有值。
+ * @purpose oracle/descend 執行時集中種子 env，runtime 腳本僅讀 .env.local。
+ * @external https://innotech.atlassian.net/browse/FE-8513
+ */
+export function seedEnvLocalFromSystem(options = {}) {
+  const projectRoot = getProjectRoot();
+  const envLocalPath =
+    options.envLocalPath ?? join(projectRoot, ".cursor", ".env.local");
+  const envSystemPath =
+    options.envSystemPath ?? join(projectRoot, ".cursor", ".env.system");
+
+  if (!existsSync(envLocalPath) || !existsSync(envSystemPath)) {
+    return { updated: false, filledKeys: [] };
+  }
+
+  const system = parseEnvContent(readFileSync(envSystemPath, "utf-8"));
+  let content = readFileSync(envLocalPath, "utf-8");
+  const local = parseEnvContent(content);
+  const filledKeys = [];
+
+  for (const [key, value] of Object.entries(system)) {
+    const systemValue = pickFirstEnvString(value);
+    if (!systemValue) continue;
+
+    const localValue = pickFirstEnvString(local[key]);
+    if (localValue) continue;
+
+    const escapedKey = escapeRegExp(key);
+    const uncommentedEmpty = new RegExp(`^(${escapedKey}=)\\s*$`, "m");
+    const commentedEmpty = new RegExp(`^#\\s*(${escapedKey}=)\\s*$`, "m");
+
+    if (uncommentedEmpty.test(content)) {
+      content = content.replace(uncommentedEmpty, `$1${systemValue}`);
+      filledKeys.push(key);
+      local[key] = systemValue;
+      continue;
+    }
+
+    if (commentedEmpty.test(content)) {
+      content = content.replace(commentedEmpty, `$1${systemValue}`);
+      filledKeys.push(key);
+      local[key] = systemValue;
+      continue;
+    }
+
+    if (!(key in local)) {
+      content = `${content.trimEnd()}\n${key}=${systemValue}\n`;
+      filledKeys.push(key);
+      local[key] = systemValue;
+    }
+  }
+
+  if (filledKeys.length > 0) {
+    writeFileSync(envLocalPath, content, "utf-8");
+    return { updated: true, filledKeys };
+  }
+
+  return { updated: false, filledKeys: [] };
+}
+
 /**
  * === 宣告內容用途說明與單號關聯 ===
  * @description 企業級 env 缺失時輸出設定指引。
- * @purpose FE-8513：提示於 .env.local 或 .env.system 補齊。
+ * @purpose FE-8513：提示於 .env.local 補齊（oracle 已從 .env.system 預填）。
  * @external https://innotech.atlassian.net/browse/FE-8513
  */
 function guideEnterpriseEnvConfig(keys, label) {
   const keyList = Array.isArray(keys) ? keys : [keys];
   console.error(`\n❌ 缺少企業級環境變數：${label || keyList[0]}\n`);
-  console.error("📝 請在以下其中一處補齊（優先序：local > system）：\n");
-  console.error("**1. 個人覆寫（.cursor/.env.local）**");
+  console.error("📝 請在 .cursor/.env.local 補齊：\n");
   for (const key of keyList) {
     console.error(`   ${key}=<value>`);
   }
   console.error("");
-  console.error("**2. 企業共用（.cursor/.env.system，可 commit）**");
-  for (const key of keyList) {
-    console.error(`   ${key}=<value>`);
-  }
-  console.error("");
+  console.error(
+    "💡 若為組織共用預設值，請更新 .cursor/.env.system 後重新執行 pantheon:oracle / pantheon:descend 以預填至 .env.local\n",
+  );
 }
 
 /**
  * === 宣告內容用途說明與單號關聯 ===
- * @description 依 local > system 解析 env；缺值且 required 時 throw。
- * @purpose FE-8513：集中企業級 env 取值，code 內不留 hardcode default。
+ * @description 依 .env.local 解析 env；缺值且 required 時 throw。
+ * @purpose FE-8513：runtime 僅讀 .env.local；企業預設由 oracle 從 .env.system 預填。
  * @external https://innotech.atlassian.net/browse/FE-8513
  */
 export function resolveEnvValue(key, options = {}) {
@@ -201,7 +264,6 @@ export function resolveEnvValue(key, options = {}) {
   } = options;
   const keys = [key, ...legacyKeys];
   const local = loadEnvLocal();
-  const system = loadEnvSystem();
 
   for (const envKey of keys) {
     const value = pickFirstEnvString(local[envKey]);
@@ -210,17 +272,10 @@ export function resolveEnvValue(key, options = {}) {
     }
   }
 
-  for (const envKey of keys) {
-    const value = pickFirstEnvString(system[envKey]);
-    if (value) {
-      return typeof normalize === "function" ? normalize(value) : value;
-    }
-  }
-
   if (required) {
     guideEnterpriseEnvConfig(keys, label);
     throw new Error(
-      `企業級環境變數缺失：${label || key}（請補齊 .cursor/.env.local 或 .cursor/.env.system）`,
+      `企業級環境變數缺失：${label || key}（請補齊 .cursor/.env.local）`,
     );
   }
 
@@ -260,7 +315,7 @@ export function guideJiraConfig() {
   console.error("");
 
   console.error("**3. 設置 Jira Base URL（企業級）:**");
-  console.error("   在 .cursor/.env.system 或 .cursor/.env.local 添加:");
+  console.error("   在 .cursor/.env.local 添加（或更新 .cursor/.env.system 後重新執行 oracle）:");
   console.error("   JIRA_BASE_URL=https://innotech.atlassian.net/");
   console.error("");
 
@@ -274,7 +329,7 @@ export function guideJiraConfig() {
 
 /**
  * === 宣告內容用途說明與單號關聯 ===
- * @description 取得 Jira Base URL（local > system；無 hardcode default）。
+ * @description 取得 Jira Base URL（僅讀 .env.local）。
  * @purpose FE-8513：Jira Base URL 改由 JIRA_BASE_URL env 解析，移除 innotech hardcode
  * @external https://innotech.atlassian.net/browse/FE-8513
  */
@@ -293,7 +348,7 @@ export function getJiraBaseUrl(options = {}) {
 
 /**
  * === 宣告內容用途說明與單號關聯 ===
- * @description 取得 Jira 設定（email/apiToken 由 local 讀取；baseUrl 由 local > system）。
+ * @description 取得 Jira 設定（email/apiToken/baseUrl 皆由 .env.local 讀取）。
  * @purpose FE-7892、FE-8513：baseUrl 改走 getJiraBaseUrl，不再 hardcode innotech URL
  * @external https://innotech.atlassian.net/browse/FE-7892
  * @external https://innotech.atlassian.net/browse/FE-8513
@@ -401,7 +456,7 @@ export function getCompassApiToken() {
 
 /**
  * === 宣告內容用途說明與單號關聯 ===
- * @description 取得 Reviewer Agent API base URL（local > system；無 hardcode default）。
+ * @description 取得 Reviewer Agent API base URL（僅讀 .env.local）。
  * @purpose FE-8513：Reviewer API URL 改 resolveEnvValue，移除 DEFAULT_REVIEWER_AGENT_API_URL
  * @external https://innotech.atlassian.net/browse/FE-8513
  */
@@ -425,7 +480,7 @@ export function getReviewerAgentJobsUrl() {
 
 /**
  * === 宣告內容用途說明與單號關聯 ===
- * @description 取得 Communicator Agent API base URL（local > system）。
+ * @description 取得 Communicator Agent API base URL（僅讀 .env.local）。
  * @purpose FE-8513：新增 Communicator API URL getter，集中於 env-loader 解析
  * @external https://innotech.atlassian.net/browse/FE-8513
  */
@@ -439,7 +494,7 @@ export function getCommunicatorAgentApiUrl() {
 
 /**
  * === 宣告內容用途說明與單號關聯 ===
- * @description 取得 Communicator Agent API token（local > system）。
+ * @description 取得 Communicator Agent API token（僅讀 .env.local）。
  * @purpose FE-8513：新增 Communicator API token getter，集中於 env-loader 解析
  * @external https://innotech.atlassian.net/browse/FE-8513
  */
@@ -451,7 +506,7 @@ export function getCommunicatorAgentApiToken() {
 
 /**
  * === 宣告內容用途說明與單號關聯 ===
- * @description 取得 Master Control Agent Log API URL（local > system；支援舊名）。
+ * @description 取得 Master Control Agent Log API URL（僅讀 .env.local；支援舊名）。
  * @purpose llm-client 錯誤上報與 agent-log CLI 共用；FE-8513 改走 resolveEnvValue
  * @external https://innotech.atlassian.net/browse/FE-8388
  * @external https://innotech.atlassian.net/browse/FE-8513
@@ -467,7 +522,7 @@ export function getMasterControlAgentApiUrl(options = {}) {
 
 /**
  * === 宣告內容用途說明與單號關聯 ===
- * @description 取得 MR Reviewer（local > system；無 hardcode default）。
+ * @description 取得 MR Reviewer（僅讀 .env.local）。
  * @purpose FE-8513：MR reviewer 改 resolveEnvValue，移除 create-mr @william.chiang hardcode
  * @external https://innotech.atlassian.net/browse/FE-8513
  */
@@ -481,8 +536,8 @@ export function getMRReviewer(options = {}) {
 
 /**
  * === 宣告內容用途說明與單號關聯 ===
- * @description 取得 Figma Access Token（local > system）。
- * @purpose FE-8513：新增 Figma token getter，企業級 env 由 local > system 解析
+ * @description 取得 Figma Access Token（僅讀 .env.local）。
+ * @purpose FE-8513：Figma token 由 .env.local 解析（oracle 從 .env.system 預填）
  * @external https://innotech.atlassian.net/browse/FE-8513
  */
 export function getFigmaAccessToken(options = {}) {
@@ -520,5 +575,5 @@ export function getAgentDisplayName(options = {}) {
  * llm 分析紀錄區
  * @llm-review-submitted-at 2026-07-04T00:00:00.000Z
  * @llm-review-model gpt-5.4-nano
- * @llm-review-note FE-8513：新增 loadEnvSystem/resolveEnvValue，企業級 env 改 local > system，移除 hardcode default。
+ * @llm-review-note FE-8513：runtime 僅讀 .env.local；oracle 以 seedEnvLocalFromSystem 從 .env.system 預填。
  */
