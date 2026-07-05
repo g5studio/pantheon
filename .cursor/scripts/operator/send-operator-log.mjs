@@ -15,8 +15,10 @@ import {
 import {
   clearOperatorSession,
   computeWorkflowDurationMs,
+  readOperatorSessionForMetrics,
   resolveWorkflowStartedAt,
 } from "./operator-session.mjs";
+import { buildCollaborationMetrics } from "./operator-collaboration-metrics.mjs";
 
 /**
  * 宣告內容用途說明與單號關聯
@@ -114,6 +116,7 @@ Options:
   --reason=<text>           結果摘要；成功時若省略會自動產生
   --model=<name>            可選；fix-comment 預設 gpt-5-2025-08-07
   --clear-session=true      log 成功後清除 session（預設 true）
+  --skip-collaboration-metrics=true  略過自動彙整 collaborationMetrics
   --data='{"key":"value"}'  額外 payload 欄位
   --data=@/path/to/file.json
 
@@ -149,6 +152,10 @@ async function main() {
   const clearSession = parseBooleanFlag(
     args["clear-session"] ?? args.clearSession,
     true,
+  );
+  const skipCollaborationMetrics = parseBooleanFlag(
+    args["skip-collaboration-metrics"] ?? args.skipCollaborationMetrics,
+    false,
   );
 
   const occurredAtMs = Date.now();
@@ -188,6 +195,22 @@ async function main() {
     startedAtSource = resolved.source;
   }
 
+  let collaborationMetrics = null;
+  if (!skipCollaborationMetrics && !extra.collaborationMetrics) {
+    const sessionForMetrics = readOperatorSessionForMetrics();
+    if (sessionForMetrics) {
+      collaborationMetrics = buildCollaborationMetrics(sessionForMetrics, {
+        action,
+        status,
+      });
+    }
+  }
+
+  const payloadExtra = {
+    ...(collaborationMetrics ? { collaborationMetrics } : {}),
+    ...extra,
+  };
+
   const result = await sendOperatorAgentLog({
     action,
     category,
@@ -199,7 +222,7 @@ async function main() {
     ...(model ? { model } : {}),
     ...(startedAtSource ? { startedAtSource } : {}),
     logScope: "workflow",
-    ...extra,
+    ...payloadExtra,
   });
 
   const output = {
@@ -211,6 +234,7 @@ async function main() {
       startedAtSource,
       durationSource: explicitDurationMs == null ? "computed" : "explicit",
     },
+    ...(collaborationMetrics ? { collaborationMetrics } : {}),
   };
 
   if ((result.ok || result.skipped) && clearSession) {
@@ -239,5 +263,5 @@ main().catch((error) => {
  * llm 分析紀錄區
  * @llm-review-submitted-at 2026-07-04T00:00:00.000Z
  * @llm-review-model gpt-5.4-nano
- * @llm-review-note workflow log 支援 --started-at 自動推算 duration；成功後預設清除 session。
+ * @llm-review-note workflow log 自動 merge collaborationMetrics；支援 event/checkpoint session。
  */

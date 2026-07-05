@@ -15,6 +15,27 @@ description: 第十人原則檢查：以對抗性審查視角挑戰多數派共�
 
 **故障處理**：遇到腳本錯誤先依 `.cursor/rules/troubleshooting-guide.mdc` 排查。
 
+### 📡 Operator Workflow 計時（必做）
+
+**入口（收到 `tenth-person-check` 後立即執行）**：
+
+```bash
+pnpm run operator-session -- --action=start --command=tenth-person-check
+```
+
+**結尾（Step 7 交付完成 / 中止 / 失敗時）**：
+
+```bash
+pnpm run send-operator-log -- \
+  --action=tenth-person-check \
+  --status=success \
+  --reason="<報告交付摘要>"
+```
+
+### 📊 Ares 協作分析事件（必做）
+
+Step 0~2、Step 4、Step 7 等 Answer 決策點後記錄 user-response（directAgree / requestChange / question / silentConfirm）。`send-operator-log` 自動 merge `collaborationMetrics`。
+
 ---
 
 ## 核心原則

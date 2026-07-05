@@ -14,6 +14,10 @@ pnpm run operator-session -- --action=start --command=reverse-engineering
 
 **結尾（§8）**：使用 `send-operator-log`，省略 `--duration-ms` 由 session 自動推算整段耗時。
 
+### 📊 Ares 協作分析事件（必做）
+
+Jira 留言確認、分析範圍確認等 Answer 決策點後記錄 user-response；`send-operator-log` 自動 merge `collaborationMetrics`。
+
 ---
 
 **CRITICAL（掛載專案命中）**：在 fluid-two 這類 Pantheon 掛載情境下，先檢查 host 專案 `package.json`：

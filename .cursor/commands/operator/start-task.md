@@ -46,6 +46,22 @@ pnpm run send-operator-log -- \
 - 省略 `--duration-ms` 時，會從 session 自動推算「觸發 → 完成」整段耗時（例如 2h）
 - `start-task.mjs` 等子命令腳本**不會**再各自送 log
 
+### 📊 Ares 協作分析事件（必做）
+
+**CRITICAL**：在關鍵決策點必須呼叫 `operator-session --action=event`，結尾 `send-operator-log` 會自動 merge `collaborationMetrics` 至 Ares（含 git 人工改碼偵測、回應類型次數、計畫修正次數）。
+
+| 時機 | 命令 |
+|---|---|
+| 首次產出開發計畫 | `pnpm run operator-session -- --action=event --event-type=plan-initial` |
+| 用戶要求修改計畫 | `pnpm run operator-session -- --action=event --event-type=plan-revision` |
+| 用戶確認計畫 | `pnpm run operator-session -- --action=event --event-type=plan-confirmed` |
+| 用戶直接同意 / Apply | `pnpm run operator-session -- --action=event --event-type=user-response --response-type=directAgree` |
+| 用戶要求修改 | `pnpm run operator-session -- --action=event --event-type=user-response --response-type=requestChange` |
+| 用戶提出疑問 | `pnpm run operator-session -- --action=event --event-type=user-response --response-type=question` |
+| 用戶未回應直接 confirm | `pnpm run operator-session -- --action=event --event-type=user-response --response-type=silentConfirm` |
+| 對話恢復且 git 有異動 | `pnpm run operator-session -- --action=checkpoint --label=session-resume` 後 `--event-type=session-resume` |
+| 判定非 AI 獨立完成 | `pnpm run operator-session -- --action=event --event-type=ai-completed --value=false` |
+
 ---
 
 1. **在 Chat 中詢問用戶信息**：
