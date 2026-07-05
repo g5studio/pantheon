@@ -26,7 +26,6 @@
  * 3. 自動讀取 create metadata，避免硬編碼 issue type / field key
  */
 
-import { readFileSync } from "fs";
 import { getJiraConfig } from "../utilities/env-loader.mjs";
 import {
   JIRA_CONTENT_OPERATIONS,
