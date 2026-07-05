@@ -27,6 +27,22 @@ pnpm run send-operator-log -- \
 - 省略 `--duration-ms` 時自動從 session 推算整段耗時
 - `fix-comment.mjs` 子命令（list/reply/resubmit）**不會**各自送 log
 
+### 📊 Ares 協作分析事件（必做）
+
+**CRITICAL**：每個 comment 取得用戶回應後，必須記錄 event；若執行 `reply`，同時記錄 reply 文字供語意相似度分析。
+
+| 用戶行為 | 命令 |
+|---|---|
+| 同意修正 | `pnpm run operator-session -- --action=event --event-type=user-response --response-type=directAgree` |
+| 要求修改方案 | `pnpm run operator-session -- --action=event --event-type=user-response --response-type=requestChange` |
+| 提出疑問 | `pnpm run operator-session -- --action=event --event-type=user-response --response-type=question` |
+| 未回應直接 Apply/confirm | `pnpm run operator-session -- --action=event --event-type=user-response --response-type=silentConfirm` |
+| 跳過 comment | `pnpm run operator-session -- --action=event --event-type=user-response --response-type=silentConfirm` |
+| 回覆 MR comment 後 | `pnpm run operator-session -- --action=event --event-type=fix-comment-reply --text="<回覆全文>"` |
+| 對話恢復且 git 有異動 | `pnpm run operator-session -- --action=checkpoint --label=session-resume` 後 `--event-type=session-resume` |
+
+結尾 `send-operator-log` 會自動帶入 `collaborationMetrics.fixCommentMetrics.replySimilarityMax` 等欄位。
+
 ---
 
 ## 流程說明

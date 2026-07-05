@@ -14,6 +14,10 @@ pnpm run operator-session -- --action=start --command=resolve-conflict
 
 **結尾（Step 9）**：使用 `send-operator-log`，省略 `--duration-ms` 由 session 自動推算整段耗時。
 
+### 📊 Ares 協作分析事件（必做）
+
+每個 Answer 決策點後記錄 user-response；對話恢復且 git 有異動時執行 checkpoint + session-resume。`send-operator-log` 自動 merge `collaborationMetrics`。
+
 ---
 
 **故障處理優先原則**：所有既定程序遇到問題時，必須第一時間先依 `@troubleshooting-guide.mdc (1-199)`（`.cursor/rules/troubleshooting-guide.mdc`）進行排查與處理。

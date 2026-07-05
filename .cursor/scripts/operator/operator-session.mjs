@@ -12,8 +12,16 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { getProjectRoot } from "../utilities/env-loader.mjs";
+import { captureGitSnapshot } from "./operator-collaboration-metrics.mjs";
 
 const SESSION_FILE_NAME = ".operator-session.json";
+
+const VALID_USER_RESPONSE_TYPES = new Set([
+  "directAgree",
+  "requestChange",
+  "question",
+  "silentConfirm",
+]);
 
 /**
  * 宣告內容用途說明與單號關聯
@@ -84,11 +92,11 @@ export function readStartTaskNotesStartedAt() {
 
 /**
  * 宣告內容用途說明與單號關聯
- * @description 讀取目前 operator session。
- * @purpose 供 send-operator-log 以 @session 推算 duration。
- * @external https://innotech.atlassian.net/browse/FE-8460
+ * @description 讀取 session 原始 JSON（不做時間正規化）。
+ * @purpose 供 event/checkpoint 內部更新。
+ * @external https://innotech.atlassian.net/browse/FE-8517
  */
-export function readOperatorSession() {
+export function readOperatorSessionRaw() {
   const sessionPath = getOperatorSessionPath();
   if (!existsSync(sessionPath)) return null;
 
@@ -96,6 +104,128 @@ export function readOperatorSession() {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     return null;
   }
+  return parsed;
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 寫入完整 session 物件。
+ * @purpose 供 event/checkpoint 更新 session。
+ * @external https://innotech.atlassian.net/browse/FE-8517
+ */
+export function writeOperatorSessionObject(session) {
+  const sessionPath = getOperatorSessionPath();
+  mkdirSync(dirname(sessionPath), { recursive: true });
+  writeFileSync(sessionPath, `${JSON.stringify(session, null, 2)}\n`, "utf-8");
+  return session;
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 追加協作事件至 session.events。
+ * @purpose Agent 在決策點記錄 user-response / plan-revision 等。
+ * @external https://innotech.atlassian.net/browse/FE-8517
+ */
+export function appendOperatorSessionEvent(event = {}) {
+  const session = readOperatorSessionRaw();
+  if (!session?.workflowStartedAt) {
+    throw new Error("找不到有效 operator session，請先執行 --action=start");
+  }
+
+  const normalizedEvent = {
+    occurredAt: new Date().toISOString(),
+    ...event,
+  };
+
+  const events = Array.isArray(session.events) ? session.events : [];
+  events.push(normalizedEvent);
+
+  const nextSession = {
+    ...session,
+    events,
+    lastEventAt: normalizedEvent.occurredAt,
+  };
+
+  if (normalizedEvent.type === "plan-initial") {
+    nextSession.planMetrics = {
+      ...(session.planMetrics || {}),
+      initialPlanAt: normalizedEvent.occurredAt,
+    };
+  }
+
+  if (normalizedEvent.type === "plan-confirmed") {
+    nextSession.planMetrics = {
+      ...(nextSession.planMetrics || session.planMetrics || {}),
+      confirmedAt: normalizedEvent.occurredAt,
+    };
+  }
+
+  return writeOperatorSessionObject(nextSession);
+}
+
+function recordSessionEventFromCli(args) {
+  const eventType = String(args["event-type"] || args.eventType || "").trim();
+  if (!eventType) {
+    throw new Error("event 需要 --event-type=<type>");
+  }
+
+  if (eventType === "user-response") {
+    const responseType = String(args["response-type"] || args.responseType || "").trim();
+    if (!VALID_USER_RESPONSE_TYPES.has(responseType)) {
+      throw new Error(
+        `無效的 --response-type: ${responseType}（支援 directAgree/requestChange/question/silentConfirm）`,
+      );
+    }
+    return appendOperatorSessionEvent({ type: "user-response", responseType });
+  }
+
+  if (eventType === "plan-initial") {
+    return appendOperatorSessionEvent({ type: "plan-initial" });
+  }
+
+  if (eventType === "plan-revision") {
+    return appendOperatorSessionEvent({ type: "plan-revision" });
+  }
+
+  if (eventType === "plan-confirmed") {
+    return appendOperatorSessionEvent({ type: "plan-confirmed" });
+  }
+
+  if (eventType === "fix-comment-reply") {
+    const text = String(args.text || "").trim();
+    if (!text) {
+      throw new Error("fix-comment-reply 需要 --text=<reply>");
+    }
+    return appendOperatorSessionEvent({ type: "fix-comment-reply", text });
+  }
+
+  if (eventType === "session-resume") {
+    writeOperatorSessionCheckpoint("session-resume");
+    return appendOperatorSessionEvent({ type: "session-resume" });
+  }
+
+  if (eventType === "ai-completed") {
+    const value = String(args.value ?? "true").trim().toLowerCase();
+    const aiCompleted = !["false", "0", "no"].includes(value);
+    const session = readOperatorSessionRaw();
+    if (!session?.workflowStartedAt) {
+      throw new Error("找不到有效 operator session，請先執行 --action=start");
+    }
+    return writeOperatorSessionObject({ ...session, aiCompleted });
+  }
+
+  throw new Error(`未知 --event-type: ${eventType}`);
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 讀取目前 operator session。
+ * @purpose 供 send-operator-log 以 @session 推算 duration。
+ * @external https://innotech.atlassian.net/browse/FE-8460
+ */
+export function readOperatorSession() {
+  const parsed = readOperatorSessionRaw();
+  if (!parsed) return null;
 
   const workflowStartedAt = normalizeIsoTime(parsed.workflowStartedAt);
   if (!workflowStartedAt) return null;
@@ -119,18 +249,64 @@ export function writeOperatorSession({ action, extra = {} } = {}) {
     throw new Error("writeOperatorSession 需要 action");
   }
 
-  const sessionPath = getOperatorSessionPath();
-  mkdirSync(dirname(sessionPath), { recursive: true });
+  const gitSnapshotStart = captureGitSnapshot();
 
   const session = {
     action: normalizedAction,
     workflowStartedAt: new Date().toISOString(),
     projectRoot: getProjectRoot(),
+    gitSnapshotStart,
+    events: [],
+    planMetrics: {},
+    checkpoints: [],
     ...(extra && typeof extra === "object" && !Array.isArray(extra) ? extra : {}),
   };
 
-  writeFileSync(sessionPath, `${JSON.stringify(session, null, 2)}\n`, "utf-8");
-  return session;
+  return writeOperatorSessionObject(session);
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 記錄 session checkpoint（對話恢復時比對人工改碼）。
+ * @purpose 支援 abandonedAiCollaboration 推斷。
+ * @external https://innotech.atlassian.net/browse/FE-8517
+ */
+export function writeOperatorSessionCheckpoint(label = "") {
+  const session = readOperatorSessionRaw();
+  if (!session?.workflowStartedAt) {
+    throw new Error("找不到有效 operator session，請先執行 --action=start");
+  }
+
+  const checkpoint = {
+    label: String(label || "").trim() || "checkpoint",
+    capturedAt: new Date().toISOString(),
+    gitSnapshot: captureGitSnapshot(),
+  };
+
+  const checkpoints = Array.isArray(session.checkpoints) ? session.checkpoints : [];
+  checkpoints.push(checkpoint);
+
+  return writeOperatorSessionObject({
+    ...session,
+    checkpoints,
+    gitSnapshotLatest: checkpoint.gitSnapshot,
+  });
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 讀取 session 並附加終點 git 快照。
+ * @purpose 供 send-operator-log 彙整 collaborationMetrics。
+ * @external https://innotech.atlassian.net/browse/FE-8517
+ */
+export function readOperatorSessionForMetrics() {
+  const session = readOperatorSessionRaw();
+  if (!session?.workflowStartedAt) return null;
+
+  return {
+    ...session,
+    gitSnapshotEnd: captureGitSnapshot(),
+  };
 }
 
 /**
@@ -230,15 +406,30 @@ Usage:
   node .cursor/scripts/operator/operator-session.mjs --action=<action> [options]
 
 Actions:
-  start     記錄 operator workflow 起點（寫入 .cursor/tmp/.operator-session.json）
-  read      讀取目前 session（JSON 輸出）
-  clear     清除 session 檔案
+  start        記錄 operator workflow 起點（寫入 .cursor/tmp/.operator-session.json）
+  read         讀取目前 session（JSON 輸出）
+  clear        清除 session 檔案
+  event        追加協作事件（user-response / plan-revision / fix-comment-reply 等）
+  checkpoint   記錄 git checkpoint（對話恢復時比對人工改碼）
 
 Options (start):
   --command=<name>   operator 指令名稱（必填），例如 start-task、fix-comment
 
+Options (event):
+  --event-type=<type>                 事件類型（必填）
+  --response-type=<name>              user-response 專用：directAgree | requestChange | question | silentConfirm
+  --text=<reply>                      fix-comment-reply 專用
+  --value=true|false                  ai-completed 專用
+
+Options (checkpoint):
+  --label=<text>                      checkpoint 標籤（選填）
+
 Examples:
   node .cursor/scripts/operator/operator-session.mjs --action=start --command=start-task
+  node .cursor/scripts/operator/operator-session.mjs --action=event --event-type=user-response --response-type=directAgree
+  node .cursor/scripts/operator/operator-session.mjs --action=event --event-type=plan-revision
+  node .cursor/scripts/operator/operator-session.mjs --action=event --event-type=fix-comment-reply --text="已調整命名"
+  node .cursor/scripts/operator/operator-session.mjs --action=checkpoint --label=after-human-edit
   node .cursor/scripts/operator/operator-session.mjs --action=read
   node .cursor/scripts/operator/operator-session.mjs --action=clear
 `.trim());
@@ -272,6 +463,19 @@ function main() {
   if (action === "clear") {
     const result = clearOperatorSession();
     console.log(JSON.stringify({ ok: true, ...result }, null, 2));
+    return;
+  }
+
+  if (action === "event") {
+    const session = recordSessionEventFromCli(args);
+    console.log(JSON.stringify({ ok: true, session }, null, 2));
+    return;
+  }
+
+  if (action === "checkpoint") {
+    const label = String(args.label || "").trim();
+    const session = writeOperatorSessionCheckpoint(label);
+    console.log(JSON.stringify({ ok: true, session }, null, 2));
     return;
   }
 
