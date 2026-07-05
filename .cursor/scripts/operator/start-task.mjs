@@ -8,10 +8,6 @@ import { execSync, spawnSync } from "child_process";
 import { basename } from "path";
 import readline from "readline";
 import { getProjectRoot, getJiraConfig } from "../utilities/env-loader.mjs";
-import {
-  sendOperatorAgentLog,
-} from "./operator-log.mjs";
-import { isAgentLogEnabled } from "../client/agent-log-client.mjs";
 
 // 使用 env-loader 提供的 projectRoot
 const projectRoot = getProjectRoot();
@@ -185,66 +181,9 @@ function remoteBranchExists(branchName) {
   }
 }
 
-async function reportStartTaskLog({
-  startedAtIso,
-  durationMs,
-  status,
-  reason,
-  ticket,
-  sourceBranch,
-  featureBranch,
-  operationMode,
-  planConfirmed,
-}) {
-  if (!isAgentLogEnabled()) return;
-  const payload = {
-    action: "start-task",
-    category: "start-task",
-    status,
-    startedAt: startedAtIso,
-    occurredAt: new Date().toISOString(),
-    durationMs,
-    reason,
-    fallbackReason:
-      status === "success"
-        ? planConfirmed
-          ? "start-task plan confirmed"
-          : "start-task completed"
-        : "",
-    ticket: ticket || null,
-    sourceBranch: sourceBranch || null,
-    featureBranch: featureBranch || null,
-    operationMode: operationMode || "default",
-    hasManualCodeAdjustment: false,
-    planConfirmed: Boolean(planConfirmed),
-    mr: {
-      developmentReport: null,
-      labels: [],
-    },
-  };
-
-  try {
-    const result = await sendOperatorAgentLog(payload);
-    if (!result.ok && !result.skipped) {
-      console.warn(`⚠️  start-task log API 發送失敗: ${result.error || "unknown"}`);
-    }
-  } catch (error) {
-    console.warn(
-      `⚠️  start-task log API 發送異常: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-  }
-}
-
 async function main() {
   console.log("\n🚀 開始新任務\n");
-  const startedAt = new Date();
-  const startedAtIso = startedAt.toISOString();
-  const startedAtMs = Date.now();
   const operationMode = "default";
-  let processStatus = "success";
-  let reason = "";
 
   let ticket = "";
   let sourceBranchTrimmed = "";
@@ -297,8 +236,6 @@ async function main() {
       if (switchBranch.toLowerCase() === "y") {
         exec(`git checkout ${featureBranch}`);
       } else {
-        processStatus = "cancelled";
-        reason = "feature-branch-exists-user-declined-switch";
         return;
       }
     } else {
@@ -307,8 +244,6 @@ async function main() {
     }
   } catch (error) {
     console.error(`\n❌ Git 操作失敗: ${error.message}\n`);
-    processStatus = "failure";
-    reason = error instanceof Error ? error.message : String(error);
     return;
   }
 
@@ -373,25 +308,9 @@ async function main() {
       }
     } else {
       console.log("\n💡 如需調整計劃，請告知具體需求\n");
-      processStatus = "cancelled";
-      reason = "plan-not-confirmed";
     }
   } catch (error) {
     console.error(`\n⚠️  無法讀取 Jira ticket: ${error.message}\n`);
-    processStatus = "failure";
-    reason = error instanceof Error ? error.message : String(error);
-  } finally {
-    await reportStartTaskLog({
-      startedAtIso,
-      durationMs: Date.now() - startedAtMs,
-      status: processStatus,
-      reason,
-      ticket,
-      sourceBranch: sourceBranchTrimmed,
-      featureBranch,
-      operationMode,
-      planConfirmed,
-    });
   }
 }
 

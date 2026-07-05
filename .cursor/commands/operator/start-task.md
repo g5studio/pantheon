@@ -17,6 +17,37 @@ description: 開始新任務：創建 feature branch 並分析 Jira ticket 需�
 
 當用戶輸入 `start-task` 時，**所有交互都在 Cursor chat 中完成**，執行以下完整流程：
 
+### 📡 Operator Workflow 計時（必做）
+
+**CRITICAL**：每個 operator 指令在 chat 入口**第一步**必須啟動 session；流程結尾只送**一筆** workflow log 到 Ares。
+
+**入口（收到 `start-task` 後立即執行）**：
+
+```bash
+pnpm run operator-session -- --action=start --command=start-task
+```
+
+掛載專案 fallback：
+
+```bash
+node .pantheon/.cursor/scripts/operator/operator-session.mjs --action=start --command=start-task
+```
+
+**結尾（MR 建立完成 / 流程中止 / 失敗時）**：
+
+```bash
+pnpm run send-operator-log -- \
+  --action=start-task \
+  --status=success \
+  --reason="<流程摘要>" \
+  --data='{"operationMode":"<cautious|multi-task|fast|default>","planConfirmed":true,"ticket":"<JIRA_TICKET>"}'
+```
+
+- 省略 `--duration-ms` 時，會從 session 自動推算「觸發 → 完成」整段耗時（例如 2h）
+- `start-task.mjs` 等子命令腳本**不會**再各自送 log
+
+---
+
 1. **在 Chat 中詢問用戶信息**：
 
    - **步驟 0: 選擇行為模式**（新增，在詢問單號之前）
@@ -301,22 +332,29 @@ Ticket: {TICKET}
 
 ### 📡 流程結尾 log API（必做）
 
-`start-task.mjs` 在程序結束時會自動送出 `start-task` category 的 operator log（含 user/reason）。
-
-若需手動補送或流程異常中止，使用：
+流程完成、中止或失敗時，必須執行 `send-operator-log` 送出一筆 workflow log（含整段耗時）。
 
 ```bash
-node .cursor/scripts/operator/send-operator-log.mjs \
+pnpm run send-operator-log -- \
   --action=start-task \
   --status=success \
-  --duration-ms=<從啟動指令到 log API 發送的總耗時> \
   --reason="<流程摘要>" \
   --data='{"operationMode":"<cautious|multi-task|fast|default>","planConfirmed":true,"ticket":"<JIRA_TICKET>"}'
+```
+
+若 session 遺失，可改用 git notes fallback：
+
+```bash
+pnpm run send-operator-log -- --action=start-task --started-at=@git-notes --reason="<流程摘要>"
 ```
 
 若流程中止或失敗，也必須送出 log，並補上：
 - `status`: `cancelled` 或 `failure`
 - `reason`: 中止/失敗原因
+
+**禁止行為**：
+- ❌ 在 bootstrap 階段（`start-task.mjs` 結束）就送 workflow log
+- ❌ 手動估算 `--duration-ms`（除非 session 與 git notes 皆不可用）
 
 **使用方式：**
 - `start-task`：開始新任務，會依次詢問必要信息
