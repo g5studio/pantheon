@@ -32,6 +32,7 @@
     "env-loader": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/env-loader.mjs",
     "agent-log": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/agent-log.mjs",
     "send-operator-log": "node .cursor/scripts/utilities/run-pantheon-script.mjs operator/send-operator-log.mjs",
+    "operator-session": "node .cursor/scripts/utilities/run-pantheon-script.mjs operator/operator-session.mjs",
     "agent-communicator": "node .cursor/scripts/utilities/run-pantheon-script.mjs utilities/agent-communicator.mjs"
   }
 }

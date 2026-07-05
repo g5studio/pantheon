@@ -4,6 +4,18 @@ description: 問題定位功能：無法重現/機率性發生的線上問題排
 
 當用戶輸入 `reverse-engineering` 時，**所有交互都在 Cursor chat 中完成**，執行以下完整流程：
 
+### 📡 Operator Workflow 計時（必做）
+
+**入口（收到 `reverse-engineering` 後立即執行）**：
+
+```bash
+pnpm run operator-session -- --action=start --command=reverse-engineering
+```
+
+**結尾（§8）**：使用 `send-operator-log`，省略 `--duration-ms` 由 session 自動推算整段耗時。
+
+---
+
 **CRITICAL（掛載專案命中）**：在 fluid-two 這類 Pantheon 掛載情境下，先檢查 host 專案 `package.json`：
 - 有對應 script：使用 `pnpm run <script> -- <args>`
 - 無對應 script：使用 `node .pantheon/.cursor/scripts/utilities/run-pantheon-script.mjs <script-path> <args>`
@@ -276,16 +288,17 @@ node .pantheon/.cursor/scripts/jira/add-jira-comment.mjs <TICKET> "<報告內容
 
 ### 8. 發送 operator log API（必做）
 
-完成 reverse-engineering 程序（包含留言 Jira 與轉接前置）後，必須送出 `reverse-engineering` category 的 operator log：
+完成 reverse-engineering 程序（包含留言 Jira 與轉接前置）後，必須送出 **一筆** workflow log：
 
 ```bash
-node .cursor/scripts/operator/send-operator-log.mjs \
+pnpm run send-operator-log -- \
   --action=reverse-engineering \
   --status=success \
-  --duration-ms=<從啟動指令到 log API 發送的總耗時> \
   --reason="reverse-engineering completed" \
   --data='{"ticket":"<JIRA_TICKET>"}'
 ```
+
+- 省略 `--duration-ms` 時，從 session 自動推算整段流程耗時
 
 若流程中止或失敗，也必須送 log，並補上：
 - `status`: `cancelled` 或 `failure`

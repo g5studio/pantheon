@@ -4,6 +4,18 @@ description: operator 專用衝突處理流程：逐檔意圖比對、用戶確�
 
 當用戶輸入 `resolve-conflict` 時，必須以 **Answer 視窗主導**整個流程，並嚴格遵守「先理解、再修正」原則。
 
+### 📡 Operator Workflow 計時（必做）
+
+**入口（收到 `resolve-conflict` 後立即執行）**：
+
+```bash
+pnpm run operator-session -- --action=start --command=resolve-conflict
+```
+
+**結尾（Step 9）**：使用 `send-operator-log`，省略 `--duration-ms` 由 session 自動推算整段耗時。
+
+---
+
 **故障處理優先原則**：所有既定程序遇到問題時，必須第一時間先依 `@troubleshooting-guide.mdc (1-199)`（`.cursor/rules/troubleshooting-guide.mdc`）進行排查與處理。
 
 ## 核心原則
@@ -184,16 +196,17 @@ Step 1 的 Answer 視窗選項必須為：
 
 ### Step 9：發送 operator log API（必做）
 
-當 Step 8 完成後，必須送出 `resolve-conflict` category 的 operator log：
+當 Step 8 完成後，必須送出 `resolve-conflict` category 的 **workflow log（一筆）**：
 
 ```bash
-node .cursor/scripts/operator/send-operator-log.mjs \
+pnpm run send-operator-log -- \
   --action=resolve-conflict \
   --status=success \
-  --duration-ms=<從啟動指令到 log API 發送的總耗時> \
   --reason="<最終合併報告摘要>" \
   --data='{"mergeReport":"<最終合併報告摘要>"}'
 ```
+
+- 省略 `--duration-ms` 時，從 session 自動推算整段流程耗時
 
 若流程中止或失敗，也必須發送 log，並改為：
 - `status`: `cancelled` 或 `failure`

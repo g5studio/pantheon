@@ -3,12 +3,20 @@
 /**
  * 檔案用途區塊
  * @module send-operator-log
- * @purpose Operator 流程結束時送出 Ares agent log（resolve-conflict、fix-comment 收斂等）。
+ * @purpose Operator 流程結束時送出 Ares agent log（整段 workflow 一筆 log）。
  * @external https://innotech.atlassian.net/browse/FE-8460
  */
 
 import { existsSync, readFileSync } from "fs";
-import { sendOperatorAgentLog } from "./operator-log.mjs";
+import {
+  resolveFixCommentModel,
+  sendOperatorAgentLog,
+} from "./operator-log.mjs";
+import {
+  clearOperatorSession,
+  computeWorkflowDurationMs,
+  resolveWorkflowStartedAt,
+} from "./operator-session.mjs";
 
 /**
  * 宣告內容用途說明與單號關聯
@@ -73,6 +81,21 @@ function parseDurationMs(raw) {
   return Math.round(value);
 }
 
+function parseBooleanFlag(raw, defaultValue = false) {
+  if (raw == null || raw === "") return defaultValue;
+  if (raw === true) return true;
+  const normalized = String(raw).trim().toLowerCase();
+  if (["1", "true", "yes", "y"].includes(normalized)) return true;
+  if (["0", "false", "no", "n"].includes(normalized)) return false;
+  throw new Error(`無效的 boolean 參數值: ${raw}`);
+}
+
+function resolveWorkflowModel(action, explicitModel) {
+  const trimmed = String(explicitModel || "").trim();
+  if (trimmed) return trimmed;
+  return resolveFixCommentModel(action === "fix-comment" ? "resubmit" : null);
+}
+
 function printUsage() {
   console.error(`
 Operator Agent Log CLI
@@ -81,20 +104,27 @@ Usage:
   node .cursor/scripts/operator/send-operator-log.mjs --action=<action> [options]
 
 Required:
-  --action=<name>           例如 resolve-conflict、fix-comment、reverse-engineering
+  --action=<name>           例如 resolve-conflict、fix-comment、start-task
 
 Options:
   --status=success          success | failure | cancelled（預設 success）
   --category=<name>         預設與 action 相同
-  --duration-ms=<number>    流程總耗時（毫秒）
+  --started-at=<source>     @session（預設）| @git-notes | ISO 8601
+  --duration-ms=<number>    流程總耗時（毫秒）；省略時依 started-at 自動推算
   --reason=<text>           結果摘要；成功時若省略會自動產生
-  --model=<name>            可選；有 LLM 參與時帶入
+  --model=<name>            可選；fix-comment 預設 gpt-5-2025-08-07
+  --clear-session=true      log 成功後清除 session（預設 true）
   --data='{"key":"value"}'  額外 payload 欄位
   --data=@/path/to/file.json
 
+Workflow timing:
+  1. 指令入口執行 operator-session --action=start --command=<action>
+  2. 流程結尾執行 send-operator-log（省略 duration-ms 時自動從 session 推算）
+
 Examples:
-  node .cursor/scripts/operator/send-operator-log.mjs --action=resolve-conflict --duration-ms=120000 --reason="merge completed" --data='{"mergeReport":"..."}'
-  node .cursor/scripts/operator/send-operator-log.mjs --action=fix-comment --duration-ms=90000 --reason="comments processed" --data='{"mrUrl":"https://...","resultSummary":"..."}'
+  node .cursor/scripts/operator/operator-session.mjs --action=start --command=start-task
+  node .cursor/scripts/operator/send-operator-log.mjs --action=start-task --reason="mr created"
+  node .cursor/scripts/operator/send-operator-log.mjs --action=fix-comment --reason="comments processed" --data='{"mrUrl":"https://..."}'
 `.trim());
 }
 
@@ -112,22 +142,82 @@ async function main() {
   }
 
   const extra = parseOptionalDataInput(args.data);
-  const durationMs = parseDurationMs(args["duration-ms"] ?? args.durationMs);
+  const explicitDurationMs = parseDurationMs(args["duration-ms"] ?? args.durationMs);
   const category = String(args.category || action).trim();
   const reason = String(args.reason || "").trim();
-  const model = String(args.model || "").trim() || null;
+  const model = resolveWorkflowModel(action, args.model);
+  const clearSession = parseBooleanFlag(
+    args["clear-session"] ?? args.clearSession,
+    true,
+  );
+
+  const occurredAtMs = Date.now();
+  const occurredAt = new Date(occurredAtMs).toISOString();
+  let startedAt = null;
+  let durationMs = explicitDurationMs;
+  let startedAtSource = null;
+
+  if (durationMs == null) {
+    const startedAtArg = args["started-at"] ?? args.startedAt ?? "@session";
+    const resolved = resolveWorkflowStartedAt(startedAtArg, { action });
+    startedAt = resolved.startedAt;
+    startedAtSource = resolved.source;
+
+    if (
+      resolved.sessionAction &&
+      resolved.sessionAction !== action &&
+      startedAtArg === "@session"
+    ) {
+      console.warn(
+        `⚠️  session action (${resolved.sessionAction}) 與 --action (${action}) 不一致，仍使用 session 起點時間`,
+      );
+    }
+
+    if (!startedAt) {
+      throw new Error(
+        "無法推算 durationMs：請先執行 operator-session --action=start --command=<action>，或提供 --started-at / --duration-ms",
+      );
+    }
+
+    durationMs = computeWorkflowDurationMs(startedAt, occurredAtMs);
+  } else if (args["started-at"] || args.startedAt) {
+    const resolved = resolveWorkflowStartedAt(args["started-at"] ?? args.startedAt, {
+      action,
+    });
+    startedAt = resolved.startedAt;
+    startedAtSource = resolved.source;
+  }
 
   const result = await sendOperatorAgentLog({
     action,
     category,
     status,
+    ...(startedAt ? { startedAt } : {}),
+    occurredAt,
     durationMs: durationMs ?? undefined,
     reason,
     ...(model ? { model } : {}),
+    ...(startedAtSource ? { startedAtSource } : {}),
+    logScope: "workflow",
     ...extra,
   });
 
-  console.log(JSON.stringify(result, null, 2));
+  const output = {
+    ...result,
+    timing: {
+      startedAt,
+      occurredAt,
+      durationMs,
+      startedAtSource,
+      durationSource: explicitDurationMs == null ? "computed" : "explicit",
+    },
+  };
+
+  if ((result.ok || result.skipped) && clearSession) {
+    output.session = clearOperatorSession();
+  }
+
+  console.log(JSON.stringify(output, null, 2));
   process.exit(result.ok || result.skipped ? 0 : 1);
 }
 
@@ -147,7 +237,7 @@ main().catch((error) => {
 
 /**
  * llm 分析紀錄區
- * @llm-review-submitted-at 2026-06-27T00:00:00.000Z
+ * @llm-review-submitted-at 2026-07-04T00:00:00.000Z
  * @llm-review-model gpt-5.4-nano
- * @llm-review-note FE-8460：Operator 流程結束 log CLI，補齊 user/model/reason。
+ * @llm-review-note workflow log 支援 --started-at 自動推算 duration；成功後預設清除 session。
  */

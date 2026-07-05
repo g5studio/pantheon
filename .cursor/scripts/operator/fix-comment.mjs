@@ -20,11 +20,6 @@ import {
   getReviewerAgentJobsUrl,
   getJiraEmail,
 } from "../utilities/env-loader.mjs";
-import {
-  resolveFixCommentModel,
-  sendOperatorAgentLog,
-} from "./operator-log.mjs";
-import { isAgentLogEnabled } from "../client/agent-log-client.mjs";
 
 const projectRoot = getProjectRoot();
 
@@ -565,53 +560,7 @@ async function listAIReviewComments(mrUrl, options = {}) {
  */
 async function main() {
   const args = process.argv.slice(2);
-  const startedAt = new Date();
-  const startedAtIso = startedAt.toISOString();
-  const startedAtMs = Date.now();
-  let processStatus = "success";
-  let processReason = "";
-  const processSummary = {};
-
-  // 解析命令
   const command = args[0];
-  const mrUrl = args[1] || null;
-
-  async function finalizeAndExit(exitCode = 0) {
-    processStatus = exitCode === 0 ? processStatus : "failure";
-    if (isAgentLogEnabled()) {
-      try {
-        const result = await sendOperatorAgentLog({
-          action: "fix-comment",
-          category: "fix-comment",
-          status: processStatus,
-          startedAt: startedAtIso,
-          occurredAt: new Date().toISOString(),
-          durationMs: Date.now() - startedAtMs,
-          model: resolveFixCommentModel(command),
-          reason: processReason,
-          fallbackReason:
-            processStatus === "success" && command
-              ? `fix-comment ${command} completed`
-              : "",
-          command: command || null,
-          mrUrl,
-          ...processSummary,
-        });
-        if (!result.ok && !result.skipped) {
-          console.warn(
-            `⚠️  fix-comment log API 發送失敗: ${result.error || "unknown"}`,
-          );
-        }
-      } catch (error) {
-        console.warn(
-          `⚠️  fix-comment log API 發送異常: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-    }
-    process.exit(exitCode);
-  }
 
   if (!command) {
     console.log(`
@@ -633,9 +582,7 @@ async function main() {
   node fix-comment.mjs resolve "https://gitlab.service-hub.tech/frontend/fluid-two/-/merge_requests/3366" "abc123"
   node fix-comment.mjs resubmit "https://gitlab.service-hub.tech/frontend/fluid-two/-/merge_requests/3366"
 `);
-    processStatus = "cancelled";
-    processReason = "missing-command";
-    return finalizeAndExit(0);
+    process.exit(0);
   }
 
   try {
@@ -644,8 +591,7 @@ async function main() {
         const mrUrl = args[1];
         if (!mrUrl) {
           console.error("❌ 請提供 MR URL");
-          processReason = "missing-mr-url";
-          return finalizeAndExit(1);
+          process.exit(1);
         }
 
         // 解析 --since 參數
@@ -657,17 +603,11 @@ async function main() {
           if (isNaN(sinceDate.getTime())) {
             console.error(`❌ 無效的日期格式: ${dateStr}`);
             console.error("   請使用 YYYY-MM-DD 或 ISO 8601 格式");
-            processReason = "invalid-since-date";
-            return finalizeAndExit(1);
+            process.exit(1);
           }
         }
 
         const result = await listAIReviewComments(mrUrl, { sinceDate });
-        processSummary.unresolvedCommentCount = Array.isArray(result.comments)
-          ? result.comments.length
-          : 0;
-        processSummary.sourceBranch = result?.mrDetails?.source_branch || null;
-        processSummary.targetBranch = result?.mrDetails?.target_branch || null;
         // 輸出 JSON 格式供 AI 解析
         console.log("\n📤 JSON 輸出（供 AI 解析）:");
         console.log(JSON.stringify(result, null, 2));
@@ -681,8 +621,7 @@ async function main() {
 
         if (!mrUrl || !discussionId || !body) {
           console.error("❌ 請提供 MR URL、Discussion ID 和回覆內容");
-          processReason = "missing-reply-arguments";
-          return finalizeAndExit(1);
+          process.exit(1);
         }
 
         const token = getGitLabToken();
@@ -700,8 +639,6 @@ async function main() {
           discussionId,
           body
         );
-        processSummary.repliedDiscussionId = discussionId;
-        processSummary.replyNoteId = note?.id || null;
         console.log(`✅ 回覆成功！Note ID: ${note.id}\n`);
         break;
       }
@@ -712,8 +649,7 @@ async function main() {
 
         if (!mrUrl || !discussionId) {
           console.error("❌ 請提供 MR URL 和 Discussion ID");
-          processReason = "missing-resolve-arguments";
-          return finalizeAndExit(1);
+          process.exit(1);
         }
 
         const token = getGitLabToken();
@@ -724,7 +660,6 @@ async function main() {
         const { host, projectPath, mrIid } = parseMRUrl(mrUrl);
         console.log(`\n✔️  正在解決 discussion ${discussionId}...`);
         await resolveDiscussion(token, host, projectPath, mrIid, discussionId);
-        processSummary.resolvedDiscussionId = discussionId;
         console.log(`✅ Discussion 已解決！\n`);
         break;
       }
@@ -733,13 +668,11 @@ async function main() {
         const mrUrl = args[1];
         if (!mrUrl) {
           console.error("❌ 請提供 MR URL");
-          processReason = "missing-resubmit-mr-url";
-          return finalizeAndExit(1);
+          process.exit(1);
         }
 
         console.log(`\n🤖 正在重新提交 AI review...`);
         const result = await submitAIReview(mrUrl);
-        processSummary.resubmitResult = result?.status || "submitted";
         console.log(`✅ AI review 已提交！`);
         console.log(JSON.stringify(result, null, 2));
         break;
@@ -747,14 +680,11 @@ async function main() {
 
       default:
         console.error(`❌ 未知命令: ${command}`);
-        processReason = "unknown-command";
-        return finalizeAndExit(1);
+        process.exit(1);
     }
-    return finalizeAndExit(0);
   } catch (error) {
     console.error(`\n❌ 錯誤: ${error.message}\n`);
-    processReason = error instanceof Error ? error.message : String(error);
-    return finalizeAndExit(1);
+    process.exit(1);
   }
 }
 

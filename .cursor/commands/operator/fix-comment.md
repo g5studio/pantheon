@@ -4,6 +4,31 @@ description: 處理 MR 中 AI review 的 comments：分析建議、代理修正�
 
 當用戶輸入 `fix-comment` 時，**所有交互都在 Cursor chat 中完成**，執行以下完整流程：
 
+### 📡 Operator Workflow 計時（必做）
+
+**CRITICAL**：收到 `fix-comment` 後**第一步**啟動 session；流程結尾只送**一筆** workflow log。
+
+**入口（立即執行）**：
+
+```bash
+pnpm run operator-session -- --action=start --command=fix-comment
+```
+
+**結尾（resubmit 完成 / 中止 / 失敗時）**：
+
+```bash
+pnpm run send-operator-log -- \
+  --action=fix-comment \
+  --status=success \
+  --reason="<本次處理摘要>" \
+  --data='{"mrUrl":"<MR_URL>","unresolvedCommentCount":0,"resultSummary":"<本次處理摘要>"}'
+```
+
+- 省略 `--duration-ms` 時自動從 session 推算整段耗時
+- `fix-comment.mjs` 子命令（list/reply/resubmit）**不會**各自送 log
+
+---
+
 ## 流程說明
 
 ### 1. 詢問 MR 連結
@@ -129,13 +154,12 @@ node .pantheon/.cursor/scripts/operator/fix-comment.mjs list "<MR_URL>"
    ```
 
 3. **發送 operator log API**（必須執行）：
-   - 在本流程收斂後，使用 `send-operator-log` 送出一筆 **workflow 摘要 log**（含 user/model/reason）
-   - 子命令（list/reply/resubmit）執行時，`fix-comment.mjs` 也會各自送一筆 script log
+   - 在本流程收斂後，使用 `send-operator-log` 送出一筆 **workflow 摘要 log**
+   - 省略 `--duration-ms`，由 session 自動推算整段流程耗時
    ```bash
-   node .cursor/scripts/operator/send-operator-log.mjs \
+   pnpm run send-operator-log -- \
      --action=fix-comment \
      --status=success \
-     --duration-ms=<從啟動指令到 log API 發送的總耗時> \
      --reason="<本次處理摘要>" \
      --data='{"mrUrl":"<MR_URL>","unresolvedCommentCount":0,"resultSummary":"<本次處理摘要>"}'
    ```
