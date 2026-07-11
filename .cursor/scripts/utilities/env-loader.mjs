@@ -72,6 +72,7 @@ export function getProjectRoot() {
  *
  * @param {string} content - .env 文件內容
  * @returns {Object} 環境變數鍵值對
+ * FE-8513: 同 key 多行時保留既有非空值，避免後續空行覆蓋預填結果
  */
 function parseEnvContent(content) {
   const env = {};
@@ -80,10 +81,20 @@ function parseEnvContent(content) {
     if (line && !line.startsWith("#")) {
       const [key, ...valueParts] = line.split("=");
       if (key && valueParts.length > 0) {
-        env[key.trim()] = valueParts
+        const trimmedKey = key.trim();
+        const trimmedValue = valueParts
           .join("=")
           .trim()
           .replace(/^["']|["']$/g, "");
+        const existing = env[trimmedKey];
+        if (
+          trimmedValue === "" &&
+          typeof existing === "string" &&
+          existing !== ""
+        ) {
+          return;
+        }
+        env[trimmedKey] = trimmedValue;
       }
     }
   });
@@ -193,7 +204,7 @@ function escapeRegExp(string) {
 /**
  * === 宣告內容用途說明與單號關聯 ===
  * @description 將 Pantheon .env.system 的非空值預填至目標專案 .env.local；不覆寫 local 既有值。
- * @purpose oracle/descend 執行時集中種子 env，runtime 腳本僅讀 .env.local。
+ * @purpose FE-8513：同 key 多個空行一次全部預填，避免只填第一個導致 runtime 讀到空值
  * @external https://innotech.atlassian.net/browse/FE-8513
  */
 export function seedEnvLocalFromSystem(options = {}) {
@@ -220,18 +231,24 @@ export function seedEnvLocalFromSystem(options = {}) {
     if (localValue) continue;
 
     const escapedKey = escapeRegExp(key);
-    const uncommentedEmpty = new RegExp(`^(${escapedKey}=)\\s*$`, "m");
-    const commentedEmpty = new RegExp(`^#\\s*(${escapedKey}=)\\s*$`, "m");
+    const uncommentedEmpty = new RegExp(`^(${escapedKey}=)\\s*$`, "gm");
+    const nextUncommented = content.replace(
+      uncommentedEmpty,
+      `$1${systemValue}`,
+    );
 
-    if (uncommentedEmpty.test(content)) {
-      content = content.replace(uncommentedEmpty, `$1${systemValue}`);
+    if (nextUncommented !== content) {
+      content = nextUncommented;
       filledKeys.push(key);
       local[key] = systemValue;
       continue;
     }
 
-    if (commentedEmpty.test(content)) {
-      content = content.replace(commentedEmpty, `$1${systemValue}`);
+    const commentedEmpty = new RegExp(`^#\\s*(${escapedKey}=)\\s*$`, "gm");
+    const nextCommented = content.replace(commentedEmpty, `$1${systemValue}`);
+
+    if (nextCommented !== content) {
+      content = nextCommented;
       filledKeys.push(key);
       local[key] = systemValue;
       continue;
@@ -666,7 +683,7 @@ export function getAgentDisplayName(options = {}) {
 
 /**
  * llm 分析紀錄區
- * @llm-review-submitted-at 2026-07-04T00:00:00.000Z
- * @llm-review-model gpt-5.4-nano
- * @llm-review-note FE-8513：runEnvOracleSetup 動態載入並清理目標專案誤建 .env.system。
+ * @llm-review-submitted-at 2026-07-11T03:06:00.000Z
+ * @llm-review-model grok-4.5
+ * @llm-review-note FE-8513：修正 seed 同 key 多空行只填第一個，以及 parseEnvContent 空行覆蓋非空值。
  */
