@@ -203,9 +203,9 @@ function escapeRegExp(string) {
 
 /**
  * === 宣告內容用途說明與單號關聯 ===
- * @description 將 Pantheon .env.system 的非空值預填至目標專案 .env.local；不覆寫 local 既有值。
- * @purpose FE-8513：同 key 多個空行一次全部預填，避免只填第一個導致 runtime 讀到空值
- * @external https://innotech.atlassian.net/browse/FE-8513
+ * @description 將 Pantheon .env.system 的非空值預填至目標專案 .env.local；不覆寫 local 既有非空值。
+ * @purpose FE-8575：同 key 空行一律同步為有效值（含已有非空值時清掉殘留空行），避免 value+empty 重複
+ * @external https://innotech.atlassian.net/browse/FE-8575
  */
 export function seedEnvLocalFromSystem(options = {}) {
   const projectRoot = getProjectRoot();
@@ -228,36 +228,42 @@ export function seedEnvLocalFromSystem(options = {}) {
     if (!systemValue) continue;
 
     const localValue = pickFirstEnvString(local[key]);
-    if (localValue) continue;
-
+    // Prefer existing local non-empty; never overwrite with system.
+    const effectiveValue = localValue || systemValue;
     const escapedKey = escapeRegExp(key);
     const uncommentedEmpty = new RegExp(`^(${escapedKey}=)\\s*$`, "gm");
     const nextUncommented = content.replace(
       uncommentedEmpty,
-      `$1${systemValue}`,
+      `$1${effectiveValue}`,
     );
 
     if (nextUncommented !== content) {
       content = nextUncommented;
       filledKeys.push(key);
-      local[key] = systemValue;
+      local[key] = effectiveValue;
       continue;
     }
 
+    // Already has non-empty value and no empty uncommented lines left.
+    if (localValue) continue;
+
     const commentedEmpty = new RegExp(`^#\\s*(${escapedKey}=)\\s*$`, "gm");
-    const nextCommented = content.replace(commentedEmpty, `$1${systemValue}`);
+    const nextCommented = content.replace(
+      commentedEmpty,
+      `$1${effectiveValue}`,
+    );
 
     if (nextCommented !== content) {
       content = nextCommented;
       filledKeys.push(key);
-      local[key] = systemValue;
+      local[key] = effectiveValue;
       continue;
     }
 
     if (!(key in local)) {
-      content = `${content.trimEnd()}\n${key}=${systemValue}\n`;
+      content = `${content.trimEnd()}\n${key}=${effectiveValue}\n`;
       filledKeys.push(key);
-      local[key] = systemValue;
+      local[key] = effectiveValue;
     }
   }
 
@@ -683,7 +689,7 @@ export function getAgentDisplayName(options = {}) {
 
 /**
  * llm 分析紀錄區
- * @llm-review-submitted-at 2026-07-11T03:06:00.000Z
+ * @llm-review-submitted-at 2026-07-11T03:26:00.000Z
  * @llm-review-model grok-4.5
- * @llm-review-note FE-8513：修正 seed 同 key 多空行只填第一個，以及 parseEnvContent 空行覆蓋非空值。
+ * @llm-review-note FE-8575：已有非空值時仍同步清掉同 key 殘留空行，避免 value+empty 重複。
  */
