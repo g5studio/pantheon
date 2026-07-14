@@ -10,6 +10,12 @@
 # Cursor Skills 檔案
 .cursor/skills/
 
+# Cursor Hooks
+.cursor/hooks/
+
+# Cursor Docs
+.cursor/docs/
+
 # 工具設定檔案 / 範本
 .cursor/.env.example
 
