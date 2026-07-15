@@ -1,9 +1,10 @@
-# Prompt Event（OL-7）— Phase 1（不依賴 operator）
+# Prompt Event（OL-7）
+
+> **位置**：repo 根目錄 `docs/`（與 Cursor 掛載目錄 `.cursor/` 分離）。
 
 User Prompt / Assistant 往來觀測：經 Cursor Hooks 送出 `logScope=prompt` 的 agent log 至 Ares。
 
-**不進入** Prometheus 五維 analysis cohort（僅 `logScope=workflow` 計分）。  
-**本階段不含** `operator-session` / `interactionKind` / `operatorAction`（見後續 prometheus enrichment）。
+**不進入**五維 analysis cohort（僅 `logScope=workflow` 計分）。
 
 ## 啟用條件
 
