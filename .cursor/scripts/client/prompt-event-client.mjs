@@ -16,63 +16,29 @@ import {
   isAgentLogEnabled,
   sendAgentLog,
 } from "./agent-log-client.mjs";
-import {
-  getProjectRoot,
-  resolveEnvValue,
-} from "../utilities/env-loader.mjs";
+import { getProjectRoot } from "../utilities/env-loader.mjs";
 
 const TICKET_REGEX = /\b([A-Z][A-Z0-9]+-\d+)\b/g;
-const PRIVACY_MODES = new Set(["preview-hash", "hash-only", "full"]);
+
+/** 寫死預設：不新增 PROMPT_EVENT_* env；僅跟隨既有 Log API URL 啟用。 */
+const PROMPT_EVENT_DEFAULTS = {
+  privacyMode: "preview-hash",
+  previewChars: 200,
+  assistantEnabled: true,
+};
 
 /**
  * 宣告內容用途說明與單號關聯
- * @description 讀取 Prompt Event env（隱私模式、preview 長度、assistant 開關）。
- * @purpose hook collector 與 dry-run 共用設定；不含 operator scope。
+ * @description 回傳 Prompt Event 固定設定（無額外 env）。
+ * @purpose hook collector 與 dry-run 共用；啟用條件僅 MASTER_CONTROL_AGENT_API_URL。
  * @external https://innotech.atlassian.net/browse/OL-7
  */
 export function getPromptEventConfig() {
-  const enabledRaw = resolveEnvValue("PROMPT_EVENT_ENABLED", {
-    required: false,
-    label: "PROMPT_EVENT_ENABLED",
-  });
-  const privacyRaw = String(
-    resolveEnvValue("PROMPT_EVENT_PRIVACY_MODE", {
-      required: false,
-      label: "PROMPT_EVENT_PRIVACY_MODE",
-    }) || "preview-hash",
-  )
-    .trim()
-    .toLowerCase();
-  const previewRaw = resolveEnvValue("PROMPT_EVENT_PREVIEW_CHARS", {
-    required: false,
-    label: "PROMPT_EVENT_PREVIEW_CHARS",
-  });
-  const assistantRaw = resolveEnvValue("PROMPT_EVENT_ASSISTANT_ENABLED", {
-    required: false,
-    label: "PROMPT_EVENT_ASSISTANT_ENABLED",
-  });
-
-  const privacyMode = PRIVACY_MODES.has(privacyRaw) ? privacyRaw : "preview-hash";
-  const previewChars = Math.max(
-    32,
-    Math.min(2000, Number.parseInt(String(previewRaw || "200"), 10) || 200),
-  );
-
-  const enabledExplicit =
-    enabledRaw == null || String(enabledRaw).trim() === ""
-      ? null
-      : ["1", "true", "yes", "y"].includes(String(enabledRaw).trim().toLowerCase());
-
-  const assistantEnabled =
-    assistantRaw == null || String(assistantRaw).trim() === ""
-      ? true
-      : ["1", "true", "yes", "y"].includes(String(assistantRaw).trim().toLowerCase());
-
   return {
-    enabled: enabledExplicit === null ? isAgentLogEnabled() : enabledExplicit,
-    privacyMode,
-    previewChars,
-    assistantEnabled,
+    enabled: isAgentLogEnabled(),
+    privacyMode: PROMPT_EVENT_DEFAULTS.privacyMode,
+    previewChars: PROMPT_EVENT_DEFAULTS.previewChars,
+    assistantEnabled: PROMPT_EVENT_DEFAULTS.assistantEnabled,
   };
 }
 
@@ -364,7 +330,7 @@ export async function sendPromptEvent(options = {}) {
 
 /**
  * llm 分析紀錄區
- * @llm-review-submitted-at 2026-07-14T23:45:00.000Z
- * @llm-review-model gpt-5.4-nano
- * @llm-review-note OL-7 phase1：移除 operator session 依賴，僅保留 hook 可保證欄位與 branch/prompt ticket 推導。
+ * @llm-review-submitted-at 2026-07-15T05:05:00.000Z
+ * @llm-review-model cursor-grok
+ * @llm-review-note OL-7：移除 PROMPT_EVENT_* env，寫死 privacy/preview/assistant；僅跟隨 Log API URL 啟用。
  */
