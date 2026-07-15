@@ -13,8 +13,8 @@
 # Cursor Hooks
 .cursor/hooks/
 
-# Cursor Docs
-.cursor/docs/
+# 專案文件（repo 根目錄 docs/）
+/docs/
 
 # 工具設定檔案 / 範本
 .cursor/.env.example
