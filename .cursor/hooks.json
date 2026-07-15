@@ -17,6 +17,16 @@
       {
         "command": "node .cursor/hooks/cancel-pending-ask-notification.mjs --event=beforeSubmitPrompt",
         "timeout": 5
+      },
+      {
+        "command": "node .cursor/hooks/prompt-event-collector.mjs --event=beforeSubmitPrompt",
+        "timeout": 8
+      }
+    ],
+    "afterAgentResponse": [
+      {
+        "command": "node .cursor/hooks/prompt-event-collector.mjs --event=afterAgentResponse",
+        "timeout": 8
       }
     ]
   }
