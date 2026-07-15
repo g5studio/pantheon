@@ -95,7 +95,7 @@ async function main() {
       process.exit(0);
     }
 
-    const result = await Promise.race([
+    await Promise.race([
       sendPromptEvent({ hookInput: input, eventType }),
       new Promise((resolve) =>
         setTimeout(
@@ -104,10 +104,6 @@ async function main() {
         ),
       ),
     ]);
-
-    if (process.env.PROMPT_EVENT_DEBUG === "1") {
-      console.error(JSON.stringify(result));
-    }
   } catch {
     // 安靜失敗，避免阻斷 Cursor
   }
@@ -119,7 +115,7 @@ main();
 
 /**
  * llm 分析紀錄區
- * @llm-review-submitted-at 2026-07-14T17:30:00.000Z
- * @llm-review-model gpt-5.4-nano
- * @llm-review-note OL-7：hook 入口送出 prompt-event；失敗安靜退出。
+ * @llm-review-submitted-at 2026-07-15T05:05:00.000Z
+ * @llm-review-model cursor-grok
+ * @llm-review-note OL-7：移除 PROMPT_EVENT_DEBUG；結果安靜丟棄，失敗仍 exit 0。
  */

@@ -7,18 +7,19 @@ User Prompt / Assistant 往來觀測：經 Cursor Hooks 送出 `logScope=prompt`
 
 ## 啟用條件
 
-1. 設定 `MASTER_CONTROL_AGENT_API_URL`（或顯式 `PROMPT_EVENT_ENABLED=true`）
+1. 設定既有 `MASTER_CONTROL_AGENT_API_URL`（有值即啟用；**不新增**其他 env）
 2. 專案有 `.cursor/hooks.json` 註冊 `prompt-event-collector.mjs`
 
-## Env
+未設定 Log API URL 時 hook 安靜 skip，並 `exit 0`（不影響 Cursor）。
 
-| 變數 | 預設 | 說明 |
+## 固定行為（寫死，無額外 env）
+
+| 項目 | 值 | 說明 |
 |---|---|---|
-| `PROMPT_EVENT_ENABLED` | 跟隨 Log API | 未設則有 API URL 即啟用 |
-| `PROMPT_EVENT_PRIVACY_MODE` | `preview-hash` | `preview-hash` \| `hash-only` \| `full` |
-| `PROMPT_EVENT_PREVIEW_CHARS` | `200` | preview 長度 |
-| `PROMPT_EVENT_ASSISTANT_ENABLED` | `true` | 是否送 `afterAgentResponse` |
-| `PROMPT_EVENT_DEBUG` | `0` | hook stderr 除錯 |
+| 啟用 | 跟隨 Log API | 等同 `isAgentLogEnabled()` |
+| 隱私模式 | `preview-hash` | 送 `promptPreview` + `promptHash` + `promptLength` |
+| preview 長度 | `200` | 超長截斷並加 `…` |
+| assistant | 開啟 | `afterAgentResponse` 一併送出 |
 
 ## 主要欄位
 
@@ -26,7 +27,7 @@ User Prompt / Assistant 往來觀測：經 Cursor Hooks 送出 `logScope=prompt`
 |---|---|---|
 | `eventType` | 腳本保證 | `user-prompt` / `assistant-event` |
 | `promptHash` / `promptLength` | 腳本保證 | 一律有 |
-| `promptPreview` / `promptText` | 依隱私模式 | 預設只有 preview |
+| `promptPreview` | 腳本保證 | 預設 privacy 下有；不含全文 |
 | `conversationId` / `generationId` | hook 保證 | Cursor hook base schema |
 | `attachments` | hook 保證 | 附檔清單 |
 | `ticket` + `ticketSource` | 推導 | `branch` → `prompt-regex` → `none` |
