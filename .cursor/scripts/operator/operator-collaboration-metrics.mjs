@@ -286,13 +286,17 @@ function aggregateUserResponses(events = []) {
   return counts;
 }
 
-function aggregatePlanMetrics(events = [], session = {}) {
+function aggregatePlanMetrics(events = [], session = {}, options = {}) {
   const planEvents = events.filter((event) =>
     ["plan-initial", "plan-revision"].includes(event?.type),
   );
 
   const initialPlanEvent = planEvents.find((event) => event.type === "plan-initial");
   const revisionCount = planEvents.filter((event) => event.type === "plan-revision").length;
+  const hasPlanSignal =
+    planEvents.length > 0 || Boolean(session.planMetrics?.initialPlanAt);
+  const missing =
+    String(options.action || "").trim() === "start-task" && !hasPlanSignal;
 
   return {
     initialPlanAt:
@@ -301,6 +305,7 @@ function aggregatePlanMetrics(events = [], session = {}) {
       null,
     revisionCount,
     confirmedAt: session.planMetrics?.confirmedAt || null,
+    missing,
   };
 }
 
@@ -371,7 +376,7 @@ export function buildCollaborationMetrics(session, options = {}) {
 
   const humanEditSignals = computeHumanEditSignals(startSnapshot, endSnapshot);
   const userResponses = aggregateUserResponses(events);
-  const planMetrics = aggregatePlanMetrics(events, session);
+  const planMetrics = aggregatePlanMetrics(events, session, options);
 
   const replyTexts = events
     .filter((event) => event?.type === "fix-comment-reply")
@@ -423,7 +428,7 @@ export function buildCollaborationMetrics(session, options = {}) {
 
 /**
  * llm 分析紀錄區
- * @llm-review-submitted-at 2026-07-06T00:00:00.000Z
- * @llm-review-model gpt-5.4-nano
- * @llm-review-note 新增 collaborationMetrics 彙整；git 快照與 Jaccard reply 相似度。
+ * @llm-review-submitted-at 2026-07-15T07:20:00.000Z
+ * @llm-review-model cursor-grok
+ * @llm-review-note OL-6：start-task 無 plan events 時 planMetrics.missing=true。
  */

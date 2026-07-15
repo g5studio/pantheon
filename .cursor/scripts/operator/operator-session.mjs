@@ -3,8 +3,8 @@
 /**
  * 檔案用途區塊
  * @module operator-session
- * @purpose 記錄 operator 指令 workflow 起點，供 send-operator-log 推算整段流程耗時。
- * @external https://innotech.atlassian.net/browse/FE-8460
+ * @purpose 記錄 operator 指令 workflow 起點，並可綁定 ticket 供 send-operator-log 推導。
+ * @external https://innotech.atlassian.net/browse/OL-6
  */
 
 import { execSync } from "child_process";
@@ -13,6 +13,10 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { getProjectRoot } from "../utilities/env-loader.mjs";
 import { captureGitSnapshot } from "./operator-collaboration-metrics.mjs";
+import {
+  normalizeTicket,
+  warnIdentityGaps,
+} from "./operator-workflow-contract.mjs";
 
 const SESSION_FILE_NAME = ".operator-session.json";
 
@@ -239,17 +243,42 @@ export function readOperatorSession() {
 
 /**
  * 宣告內容用途說明與單號關聯
- * @description 寫入 operator session（指令 workflow 起點）。
- * @purpose Agent 在 operator 指令入口呼叫，記錄 workflowStartedAt。
- * @external https://innotech.atlassian.net/browse/FE-8460
+ * @description 更新既有 session 的 ticket（不重設 workflow 起點）。
+ * @purpose OL-6：流程中途補綁單號。
+ * @external https://innotech.atlassian.net/browse/OL-6
  */
-export function writeOperatorSession({ action, extra = {} } = {}) {
+export function setOperatorSessionTicket(ticket) {
+  const session = readOperatorSessionRaw();
+  if (!session?.workflowStartedAt) {
+    throw new Error("找不到有效 operator session，請先執行 --action=start");
+  }
+
+  const normalized = normalizeTicket(ticket);
+  if (!normalized) {
+    throw new Error("set 需要有效 --ticket=<JIRA-KEY>（例如 OL-6）");
+  }
+
+  return writeOperatorSessionObject({
+    ...session,
+    ticket: normalized,
+    ticketBoundAt: new Date().toISOString(),
+  });
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 寫入 operator session（指令 workflow 起點）。
+ * @purpose Agent 在 operator 指令入口呼叫，記錄 workflowStartedAt；可選綁 ticket。
+ * @external https://innotech.atlassian.net/browse/OL-6
+ */
+export function writeOperatorSession({ action, ticket = "", extra = {} } = {}) {
   const normalizedAction = String(action || "").trim();
   if (!normalizedAction) {
     throw new Error("writeOperatorSession 需要 action");
   }
 
   const gitSnapshotStart = captureGitSnapshot();
+  const normalizedTicket = normalizeTicket(ticket);
 
   const session = {
     action: normalizedAction,
@@ -259,6 +288,7 @@ export function writeOperatorSession({ action, extra = {} } = {}) {
     events: [],
     planMetrics: {},
     checkpoints: [],
+    ...(normalizedTicket ? { ticket: normalizedTicket } : {}),
     ...(extra && typeof extra === "object" && !Array.isArray(extra) ? extra : {}),
   };
 
@@ -407,6 +437,7 @@ Usage:
 
 Actions:
   start        記錄 operator workflow 起點（寫入 .cursor/tmp/.operator-session.json）
+  set          更新 session 綁定 ticket（不重設起點時間）
   read         讀取目前 session（JSON 輸出）
   clear        清除 session 檔案
   event        追加協作事件（user-response / plan-revision / fix-comment-reply 等）
@@ -414,6 +445,10 @@ Actions:
 
 Options (start):
   --command=<name>   operator 指令名稱（必填），例如 start-task、fix-comment
+  --ticket=<KEY>     可選；綁定 Jira ticket（例如 OL-6）
+
+Options (set):
+  --ticket=<KEY>     必填；更新 session.ticket
 
 Options (event):
   --event-type=<type>                 事件類型（必填）
@@ -425,7 +460,8 @@ Options (checkpoint):
   --label=<text>                      checkpoint 標籤（選填）
 
 Examples:
-  node .cursor/scripts/operator/operator-session.mjs --action=start --command=start-task
+  node .cursor/scripts/operator/operator-session.mjs --action=start --command=start-task --ticket=OL-6
+  node .cursor/scripts/operator/operator-session.mjs --action=set --ticket=OL-6
   node .cursor/scripts/operator/operator-session.mjs --action=event --event-type=user-response --response-type=directAgree
   node .cursor/scripts/operator/operator-session.mjs --action=event --event-type=plan-revision
   node .cursor/scripts/operator/operator-session.mjs --action=event --event-type=fix-comment-reply --text="已調整命名"
@@ -449,7 +485,16 @@ function main() {
     if (!command) {
       throw new Error("start 需要 --command=<operator-command>");
     }
-    const session = writeOperatorSession({ action: command });
+    warnIdentityGaps({ context: "operator-session:start" });
+    const ticket = String(args.ticket || "").trim();
+    const session = writeOperatorSession({ action: command, ticket });
+    console.log(JSON.stringify({ ok: true, session }, null, 2));
+    return;
+  }
+
+  if (action === "set") {
+    const ticket = String(args.ticket || "").trim();
+    const session = setOperatorSessionTicket(ticket);
     console.log(JSON.stringify({ ok: true, session }, null, 2));
     return;
   }
@@ -505,7 +550,7 @@ if (isDirectRun) {
 
 /**
  * llm 分析紀錄區
- * @llm-review-submitted-at 2026-07-04T00:00:00.000Z
- * @llm-review-model gpt-5.4-nano
- * @llm-review-note session 檔改存 .cursor/tmp/，沿用既有 tmp 目錄忽略規則。
+ * @llm-review-submitted-at 2026-07-15T07:20:00.000Z
+ * @llm-review-model cursor-grok
+ * @llm-review-note OL-6：session start／set 支援 ticket 綁定與身分預檢警告。
  */

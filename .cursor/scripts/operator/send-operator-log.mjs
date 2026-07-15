@@ -3,8 +3,8 @@
 /**
  * 檔案用途區塊
  * @module send-operator-log
- * @purpose Operator 流程結束時送出 Ares agent log（整段 workflow 一筆 log）。
- * @external https://innotech.atlassian.net/browse/FE-8460
+ * @purpose Operator 流程結束時送出 Ares agent log（整段 workflow 一筆）；OL-6 自動補 ticket／mrUrl／dataQuality。
+ * @external https://innotech.atlassian.net/browse/OL-6
  */
 
 import { existsSync, readFileSync } from "fs";
@@ -19,6 +19,10 @@ import {
   resolveWorkflowStartedAt,
 } from "./operator-session.mjs";
 import { buildCollaborationMetrics } from "./operator-collaboration-metrics.mjs";
+import {
+  resolveWorkflowContractFields,
+  warnIdentityGaps,
+} from "./operator-workflow-contract.mjs";
 
 /**
  * 宣告內容用途說明與單號關聯
@@ -117,15 +121,21 @@ Options:
   --model=<name>            可選；fix-comment 預設 gpt-5-2025-08-07
   --clear-session=true      log 成功後清除 session（預設 true）
   --skip-collaboration-metrics=true  略過自動彙整 collaborationMetrics
-  --data='{"key":"value"}'  額外 payload 欄位
+  --data='{"key":"value"}'  額外 payload 欄位（ticket／mrUrl 可省略，腳本會自動推導）
   --data=@/path/to/file.json
 
 Workflow timing:
-  1. 指令入口執行 operator-session --action=start --command=<action>
+  1. 指令入口執行 operator-session --action=start --command=<action> [--ticket=<KEY>]
   2. 流程結尾執行 send-operator-log（省略 duration-ms 時自動從 session 推算）
 
+Contract (OL-6):
+  - ticket：explicit --data > session > branch > git-notes > none（寫入 ticketSource）
+  - mrUrl：explicit --data > 目前 branch 的 opened MR（最佳努力）
+  - start-task 無 plan events 時 collaborationMetrics.planMetrics.missing=true
+  - 缺少 JIRA_EMAIL／AGENT_DISPLAY_NAME 時 stderr 警告並寫入 dataQuality
+
 Examples:
-  node .cursor/scripts/operator/operator-session.mjs --action=start --command=start-task
+  node .cursor/scripts/operator/operator-session.mjs --action=start --command=start-task --ticket=OL-6
   node .cursor/scripts/operator/send-operator-log.mjs --action=start-task --reason="mr created"
   node .cursor/scripts/operator/send-operator-log.mjs --action=fix-comment --reason="comments processed" --data='{"mrUrl":"https://..."}'
 `.trim());
@@ -196,19 +206,54 @@ async function main() {
   }
 
   let collaborationMetrics = null;
+  let sessionForMetrics = null;
   if (!skipCollaborationMetrics && !extra.collaborationMetrics) {
-    const sessionForMetrics = readOperatorSessionForMetrics();
+    sessionForMetrics = readOperatorSessionForMetrics();
     if (sessionForMetrics) {
       collaborationMetrics = buildCollaborationMetrics(sessionForMetrics, {
         action,
         status,
       });
     }
+  } else {
+    sessionForMetrics = readOperatorSessionForMetrics();
   }
+
+  warnIdentityGaps({ context: "send-operator-log" });
+
+  const contractFields = resolveWorkflowContractFields({
+    explicitTicket: extra.ticket,
+    explicitMrUrl: extra.mrUrl,
+    session: sessionForMetrics,
+    collaborationMetrics:
+      collaborationMetrics ||
+      (extra.collaborationMetrics && typeof extra.collaborationMetrics === "object"
+        ? extra.collaborationMetrics
+        : null),
+  });
+
+  // explicit --data 仍可覆寫一般欄位；契約欄位以腳本結果為準（ticket／ticketSource／dataQuality）
+  const {
+    ticket: _ignoredTicket,
+    ticketSource: _ignoredTicketSource,
+    ticketConfidence: _ignoredTicketConfidence,
+    mrUrl: _ignoredMrUrl,
+    mrUrlSource: _ignoredMrUrlSource,
+    dataQuality: _ignoredDataQuality,
+    gitBranch: _ignoredGitBranch,
+    ...extraRest
+  } = extra;
 
   const payloadExtra = {
     ...(collaborationMetrics ? { collaborationMetrics } : {}),
-    ...extra,
+    ...extraRest,
+    ticket: contractFields.ticket,
+    ticketSource: contractFields.ticketSource,
+    ticketConfidence: contractFields.ticketConfidence,
+    ...(contractFields.gitBranch ? { gitBranch: contractFields.gitBranch } : {}),
+    ...(contractFields.mrUrl ? { mrUrl: contractFields.mrUrl } : {}),
+    mrUrlSource: contractFields.mrUrlSource,
+    dataQuality: contractFields.dataQuality,
   };
 
   const result = await sendOperatorAgentLog({
@@ -233,6 +278,14 @@ async function main() {
       durationMs,
       startedAtSource,
       durationSource: explicitDurationMs == null ? "computed" : "explicit",
+    },
+    contract: {
+      ticket: contractFields.ticket,
+      ticketSource: contractFields.ticketSource,
+      ticketConfidence: contractFields.ticketConfidence,
+      mrUrl: contractFields.mrUrl || null,
+      mrUrlSource: contractFields.mrUrlSource,
+      dataQuality: contractFields.dataQuality,
     },
     ...(collaborationMetrics ? { collaborationMetrics } : {}),
   };
@@ -261,7 +314,7 @@ main().catch((error) => {
 
 /**
  * llm 分析紀錄區
- * @llm-review-submitted-at 2026-07-04T00:00:00.000Z
- * @llm-review-model gpt-5.4-nano
- * @llm-review-note workflow log 自動 merge collaborationMetrics；支援 event/checkpoint session。
+ * @llm-review-submitted-at 2026-07-15T07:20:00.000Z
+ * @llm-review-model cursor-grok
+ * @llm-review-note OL-6：send-operator-log 自動補 ticket／mrUrl／ticketSource／dataQuality。
  */
