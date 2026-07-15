@@ -3,7 +3,7 @@
 /**
  * 檔案用途區塊
  * @module prompt-event-client
- * @purpose 組裝並送出 User Prompt Event（logScope=prompt）至 Ares；本階段不依賴 operator session。
+ * @purpose 組裝並送出 User Prompt Event（logScope=prompt）；prometheus 分支含 operator-session enrichment。
  * @external https://innotech.atlassian.net/browse/OL-7
  */
 
@@ -17,6 +17,7 @@ import {
   sendAgentLog,
 } from "./agent-log-client.mjs";
 import { getProjectRoot } from "../utilities/env-loader.mjs";
+import { readOperatorSessionRaw } from "../operator/operator-session.mjs";
 
 const TICKET_REGEX = /\b([A-Z][A-Z0-9]+-\d+)\b/g;
 
@@ -25,12 +26,14 @@ const PROMPT_EVENT_DEFAULTS = {
   privacyMode: "preview-hash",
   previewChars: 200,
   assistantEnabled: true,
+  scope: "all",
+  operatorEnrichment: true,
 };
 
 /**
  * 宣告內容用途說明與單號關聯
  * @description 回傳 Prompt Event 固定設定（無額外 env）。
- * @purpose hook collector 與 dry-run 共用；啟用條件僅 MASTER_CONTROL_AGENT_API_URL。
+ * @purpose hook collector 共用；啟用條件僅 MASTER_CONTROL_AGENT_API_URL；prometheus 預設開啟 operator enrichment。
  * @external https://innotech.atlassian.net/browse/OL-7
  */
 export function getPromptEventConfig() {
@@ -39,6 +42,8 @@ export function getPromptEventConfig() {
     privacyMode: PROMPT_EVENT_DEFAULTS.privacyMode,
     previewChars: PROMPT_EVENT_DEFAULTS.previewChars,
     assistantEnabled: PROMPT_EVENT_DEFAULTS.assistantEnabled,
+    scope: PROMPT_EVENT_DEFAULTS.scope,
+    operatorEnrichment: PROMPT_EVENT_DEFAULTS.operatorEnrichment,
   };
 }
 
@@ -56,8 +61,8 @@ function getPromptEventStatePath(projectRoot = getProjectRoot()) {
 
 /**
  * 宣告內容用途說明與單號關聯
- * @description 讀取本地 conversation prompt 計數狀態。
- * @purpose 產出 promptIndexInConversation。
+ * @description 讀取本地 prompt 計數狀態。
+ * @purpose conversation / operator session 序號。
  * @external https://innotech.atlassian.net/browse/OL-7
  */
 export function readPromptEventState(projectRoot = getProjectRoot()) {
@@ -83,27 +88,48 @@ function writePromptEventState(state, projectRoot = getProjectRoot()) {
 
 /**
  * 宣告內容用途說明與單號關聯
- * @description 遞增 conversation 內 prompt 序號。
- * @purpose 標示同一對話往來順序（不依賴 operator session）。
+ * @description 遞增 conversation（與可選 operator session）prompt 序號。
+ * @purpose promptIndexInConversation / promptIndexInSession。
  * @external https://innotech.atlassian.net/browse/OL-7
  */
-export function bumpPromptIndexInConversation({
+export function bumpPromptIndexes({
   conversationId = "",
+  sessionId = "",
   projectRoot = getProjectRoot(),
 } = {}) {
   const state = readPromptEventState(projectRoot);
   const key = String(conversationId || "unknown").trim() || "unknown";
-  const current = state.conversations[key] || { promptCount: 0 };
+  const current = state.conversations[key] || {
+    promptCount: 0,
+    sessionCounts: {},
+  };
   current.promptCount = Number(current.promptCount || 0) + 1;
+
+  let promptIndexInSession = null;
+  const sid = String(sessionId || "").trim();
+  if (sid) {
+    const sessionCounts =
+      current.sessionCounts && typeof current.sessionCounts === "object"
+        ? current.sessionCounts
+        : {};
+    sessionCounts[sid] = Number(sessionCounts[sid] || 0) + 1;
+    current.sessionCounts = sessionCounts;
+    promptIndexInSession = sessionCounts[sid];
+  }
+
   state.conversations[key] = current;
   writePromptEventState(state, projectRoot);
-  return { promptIndexInConversation: current.promptCount };
+
+  return {
+    promptIndexInConversation: current.promptCount,
+    promptIndexInSession,
+  };
 }
 
 /**
  * 宣告內容用途說明與單號關聯
  * @description 從文字擷取第一個 Jira-like ticket。
- * @purpose branch / prompt 推導。
+ * @purpose ticket 推導。
  * @external https://innotech.atlassian.net/browse/OL-7
  */
 export function extractFirstTicket(text) {
@@ -136,14 +162,24 @@ function readGitBranch(projectRoot = getProjectRoot()) {
 
 /**
  * 宣告內容用途說明與單號關聯
- * @description 依 branch → prompt 正則推導 ticket，並標示來源與信心。
- * @purpose 本階段不含 operator session；無結果時 ticket=null。
+ * @description 依 session → branch → prompt 推導 ticket。
+ * @purpose session 來源標記 high confidence。
  * @external https://innotech.atlassian.net/browse/OL-7
  */
 export function resolveTicketContext({
+  session = null,
   promptText = "",
   projectRoot = getProjectRoot(),
 } = {}) {
+  const sessionTicket = String(session?.ticket || "").trim().toUpperCase();
+  if (sessionTicket && /^[A-Z][A-Z0-9]+-\d+$/.test(sessionTicket)) {
+    return {
+      ticket: sessionTicket,
+      ticketSource: "session",
+      ticketConfidence: "high",
+    };
+  }
+
   const branch = readGitBranch(projectRoot);
   const branchTicket = extractFirstTicket(branch);
   if (branchTicket) {
@@ -228,10 +264,18 @@ function normalizeAttachments(attachments) {
     .filter(Boolean);
 }
 
+function buildSessionId(session) {
+  if (!session || typeof session !== "object") return null;
+  const action = String(session.action || "").trim();
+  const started = String(session.workflowStartedAt || "").trim();
+  if (!action || !started) return null;
+  return `${action}@${started}`;
+}
+
 /**
  * 宣告內容用途說明與單號關聯
- * @description 由 Cursor hook input 組裝 user-prompt / assistant-event payload。
- * @purpose 純 prompt 觀測：logScope=prompt；不含 operator 情境欄位。
+ * @description 由 hook input 組裝 prompt-event；固定 merge operator-session 情境欄位。
+ * @purpose logScope=prompt；prometheus 寫死開啟 operator enrichment。
  * @external https://innotech.atlassian.net/browse/OL-7
  */
 export function buildPromptEventPayload({
@@ -239,6 +283,7 @@ export function buildPromptEventPayload({
   eventType = "user-prompt",
   projectRoot = getProjectRoot(),
   config = null,
+  session = undefined,
 } = {}) {
   const cfg = config || getPromptEventConfig();
   const input =
@@ -246,16 +291,39 @@ export function buildPromptEventPayload({
       ? hookInput
       : {};
 
+  const resolvedSession = cfg.operatorEnrichment
+    ? session === undefined
+      ? readOperatorSessionRaw()
+      : session
+    : null;
+
+  const operatorSessionActive = Boolean(resolvedSession?.workflowStartedAt);
+  const operatorAction = operatorSessionActive
+    ? String(resolvedSession.action || "").trim() || null
+    : null;
+  const sessionId = buildSessionId(resolvedSession);
+
+  if (cfg.scope === "operator-only" && !operatorSessionActive) {
+    return { skipped: true, reason: "scope-operator-only" };
+  }
+
   const promptText =
     eventType === "assistant-event"
       ? String(input.text || input.prompt || "")
       : String(input.prompt || input.text || "");
 
-  const ticketCtx = resolveTicketContext({ promptText, projectRoot });
-  const indexes = bumpPromptIndexInConversation({
-    conversationId: input.conversation_id || input.conversationId || "",
+  const ticketCtx = resolveTicketContext({
+    session: resolvedSession,
+    promptText,
     projectRoot,
   });
+
+  const indexes = bumpPromptIndexes({
+    conversationId: input.conversation_id || input.conversationId || "",
+    sessionId: sessionId || "",
+    projectRoot,
+  });
+
   const attachments = normalizeAttachments(input.attachments);
   const relatedTicketsInPrompt = extractAllTickets(promptText);
   const privacyFields = buildPrivacyFields(
@@ -263,7 +331,15 @@ export function buildPromptEventPayload({
     cfg.privacyMode,
     cfg.previewChars,
   );
+
   const occurredAt = new Date().toISOString();
+  const timeSinceSessionStartMs =
+    operatorSessionActive && resolvedSession.workflowStartedAt
+      ? Math.max(
+          0,
+          Date.parse(occurredAt) - Date.parse(resolvedSession.workflowStartedAt),
+        )
+      : null;
 
   return buildAgentLogPayload({
     action: "prompt-event",
@@ -275,6 +351,20 @@ export function buildPromptEventPayload({
         : "user prompt captured",
     logScope: "prompt",
     eventType,
+    ...(cfg.operatorEnrichment
+      ? {
+          interactionKind: operatorSessionActive ? "operator" : "freeform",
+          operatorSessionActive,
+          ...(operatorAction ? { operatorAction } : {}),
+          ...(sessionId ? { sessionId } : {}),
+          ...(typeof timeSinceSessionStartMs === "number"
+            ? { timeSinceSessionStartMs }
+            : {}),
+          ...(indexes.promptIndexInSession != null
+            ? { promptIndexInSession: indexes.promptIndexInSession }
+            : {}),
+        }
+      : {}),
     conversationId: input.conversation_id || input.conversationId || null,
     generationId: input.generation_id || input.generationId || null,
     model: input.model || null,
@@ -303,8 +393,8 @@ export function buildPromptEventPayload({
 
 /**
  * 宣告內容用途說明與單號關聯
- * @description 送出 prompt-event；未啟用時 skip。
- * @purpose hook collector 短 timeout 入口。
+ * @description 送出 prompt-event；未啟用或 scope 略過時 skip。
+ * @purpose hook collector 入口。
  * @external https://innotech.atlassian.net/browse/OL-7
  */
 export async function sendPromptEvent(options = {}) {
@@ -325,12 +415,16 @@ export async function sendPromptEvent(options = {}) {
     config: cfg,
   });
 
+  if (payload?.skipped) {
+    return { ok: false, skipped: true, reason: payload.reason };
+  }
+
   return sendAgentLog(payload);
 }
 
 /**
  * llm 分析紀錄區
- * @llm-review-submitted-at 2026-07-15T05:05:00.000Z
+ * @llm-review-submitted-at 2026-07-15T06:45:00.000Z
  * @llm-review-model cursor-grok
- * @llm-review-note OL-7：移除 PROMPT_EVENT_* env，寫死 privacy/preview/assistant；僅跟隨 Log API URL 啟用。
+ * @llm-review-note OL-7 phase2：對齊 main，移除 PROMPT_EVENT_* env；寫死 preview-hash/200/assistant/scope=all/enrichment on。
  */

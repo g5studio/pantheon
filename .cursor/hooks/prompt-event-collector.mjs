@@ -115,7 +115,7 @@ main();
 
 /**
  * llm 分析紀錄區
- * @llm-review-submitted-at 2026-07-15T05:05:00.000Z
+ * @llm-review-submitted-at 2026-07-15T06:45:00.000Z
  * @llm-review-model cursor-grok
- * @llm-review-note OL-7：移除 PROMPT_EVENT_DEBUG；結果安靜丟棄，失敗仍 exit 0。
+ * @llm-review-note OL-7：對齊 main，移除 PROMPT_EVENT_DEBUG；失敗仍 exit 0。
  */

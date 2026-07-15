@@ -1,16 +1,15 @@
-# Prompt Event（OL-7）— Phase 1（不依賴 operator）
+# Prompt Event（OL-7）— Phase 2（prometheus：含 operator enrichment）
 
-User Prompt / Assistant 往來觀測：經 Cursor Hooks 送出 `logScope=prompt` 的 agent log 至 Ares。
+在 Phase 1（純 Hooks prompt 觀測）之上，於 **prometheus** 分支讀取 `operator-session`，補齊情境欄位。
 
-**不進入** Prometheus 五維 analysis cohort（僅 `logScope=workflow` 計分）。  
-**本階段不含** `operator-session` / `interactionKind` / `operatorAction`（見後續 prometheus enrichment）。
+`logScope` 仍為 `prompt`，**不進入**五維 analysis cohort。
 
 ## 啟用條件
 
 1. 設定既有 `MASTER_CONTROL_AGENT_API_URL`（有值即啟用；**不新增**其他 env）
 2. 專案有 `.cursor/hooks.json` 註冊 `prompt-event-collector.mjs`
 
-未設定 Log API URL 時 hook 安靜 skip，並 `exit 0`（不影響 Cursor）。
+未設定 Log API URL 時 hook 安靜 skip，並 `exit 0`。
 
 ## 固定行為（寫死，無額外 env）
 
@@ -20,28 +19,30 @@ User Prompt / Assistant 往來觀測：經 Cursor Hooks 送出 `logScope=prompt`
 | 隱私模式 | `preview-hash` | 送 `promptPreview` + `promptHash` + `promptLength` |
 | preview 長度 | `200` | 超長截斷並加 `…` |
 | assistant | 開啟 | `afterAgentResponse` 一併送出 |
+| scope | `all` | freeform 與 operator 皆送 |
+| operator enrichment | 開啟 | 讀取 `operator-session` 補情境欄位 |
 
-## 主要欄位
+## 相對 Phase 1 新增
 
-| 欄位 | 準確度 | 說明 |
-|---|---|---|
-| `eventType` | 腳本保證 | `user-prompt` / `assistant-event` |
-| `promptHash` / `promptLength` | 腳本保證 | 一律有 |
-| `promptPreview` | 腳本保證 | 預設 privacy 下有；不含全文 |
-| `conversationId` / `generationId` | hook 保證 | Cursor hook base schema |
-| `attachments` | hook 保證 | 附檔清單 |
-| `ticket` + `ticketSource` | 推導 | `branch` → `prompt-regex` → `none` |
-| `ticketConfidence` | 腳本保證 | medium / low |
-| `promptIndexInConversation` | 腳本保證 | 同 conversation 序號 |
+| 欄位 | 說明 |
+|---|---|
+| `interactionKind` | `operator` / `freeform` |
+| `operatorSessionActive` | bool |
+| `operatorAction` | 如 `start-task` |
+| `sessionId` | `{action}@{workflowStartedAt}` |
+| `promptIndexInSession` | 該 operator session 內序號 |
+| `timeSinceSessionStartMs` | 距 session start |
+| `ticketSource=session` | 若 session 帶 ticket |
 
 ## 手動 dry-run
 
 ```bash
-printf '%s' '{"prompt":"hello OL-7","conversation_id":"c1","generation_id":"g1","model":"test"}' \
+pnpm run operator-session -- --action=start --command=start-task
+printf '%s' '{"prompt":"continue","conversation_id":"c1","generation_id":"g1"}' \
   | node .cursor/hooks/prompt-event-collector.mjs --event=beforeSubmitPrompt --dry-run
 ```
 
-## 相關單
+## 相關
 
 - Feature：[OL-7](https://innotech.atlassian.net/browse/OL-7)
-- Epic：[OL-5](https://innotech.atlassian.net/browse/OL-5)
+- Phase 1（main 零額外 env）：[MR !71](https://gitlab.service-hub.tech/frontend/pantheon/-/merge_requests/71)
