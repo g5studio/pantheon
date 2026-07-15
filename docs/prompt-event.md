@@ -1,5 +1,7 @@
 # Prompt Event（OL-7）— Phase 2（prometheus：含 operator enrichment）
 
+> **位置**：repo 根目錄 `docs/`（與 Cursor 掛載目錄 `.cursor/` 分離）。
+
 在 Phase 1（純 Hooks prompt 觀測）之上，於 **prometheus** 分支讀取 `operator-session`，補齊情境欄位。
 
 `logScope` 仍為 `prompt`，**不進入**五維 analysis cohort。
@@ -46,3 +48,5 @@ printf '%s' '{"prompt":"continue","conversation_id":"c1","generation_id":"g1"}' 
 
 - Feature：[OL-7](https://innotech.atlassian.net/browse/OL-7)
 - Phase 1（main 零額外 env）：[MR !71](https://gitlab.service-hub.tech/frontend/pantheon/-/merge_requests/71)
+- 發送時機總覽：[agent-log-events.md](./agent-log-events.md)
+- Workflow 五維契約：[workflow-log-contract.md](./workflow-log-contract.md)

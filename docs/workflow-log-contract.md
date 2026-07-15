@@ -1,5 +1,7 @@
 # Workflow Log 資料契約（OL-6）— 五維分析對照
 
+> **位置**：repo 根目錄 `docs/`（與 Cursor 掛載目錄 `.cursor/` 分離）。
+
 Pantheon Operator 結尾送出的 `logScope=workflow` agent log，供 Ares Prometheus Pilot Capability Dashboard 計算五維能力。
 
 **原則**：腳本保證優先於 Agent 手動 `--data`；推不出 ticket 時標 `ticketSource=none`，不可假裝有項目鍵。
@@ -67,3 +69,5 @@ pnpm run operator-session -- --action=set --ticket=OL-6
 - Feature：[OL-6](https://innotech.atlassian.net/browse/OL-6)
 - Epic：[OL-5](https://innotech.atlassian.net/browse/OL-5)
 - Prompt Event（非五維 cohort）：[OL-7](https://innotech.atlassian.net/browse/OL-7)
+- Prompt Event 文件：[prompt-event.md](./prompt-event.md)
+- 發送時機總覽：[agent-log-events.md](./agent-log-events.md)
