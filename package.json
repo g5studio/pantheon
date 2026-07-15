@@ -1,6 +1,6 @@
 {
   "name": "pantheon",
-  "version": "1.5.5",
+  "version": "1.5.6",
   "private": true,
   "scripts": {
     "notify-cursor-rules-failed": "node .cursor/scripts/utilities/run-pantheon-script.mjs notification/notify-cursor-rules-failed.mjs",
