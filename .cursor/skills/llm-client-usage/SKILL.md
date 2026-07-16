@@ -32,7 +32,7 @@ const { result, model, provider, degradedReason } = await callLlmJson({
   action: "my-script",
   envLocal,
   providerEnvKeys: ["MY_SCRIPT_LLM_PROVIDER"],
-  defaultModel: "gpt-5.4-nano",
+  defaultModel: "gpt-5.6-luna",
   system,
   input,
   schema,
