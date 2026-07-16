@@ -13,6 +13,18 @@ User Prompt / Assistant 往來觀測：經 Cursor Hooks 送出 `logScope=prompt`
 
 未設定 Log API URL 時 hook 安靜 skip，並 `exit 0`（不影響 Cursor）。
 
+### 掛載專案（`pantheon:oracle` / `pantheon:descend`）
+
+`oracle` 會把 `.pantheon/.cursor/hooks.json` 同步到目標專案 `.cursor/hooks.json`，並把 command 改寫為指向 `.pantheon/.cursor/hooks/*`（腳本不複製到 `.cursor/hooks/`），以保留 `../scripts/client` 相對 import。
+
+驗證：
+
+```bash
+test -f .cursor/hooks.json && grep -q 'prompt-event-collector' .cursor/hooks.json && echo ok
+printf '%s' '{"prompt":"hello OL-7","conversation_id":"c1","generation_id":"g1","model":"test"}' \
+  | node .pantheon/.cursor/hooks/prompt-event-collector.mjs --event=beforeSubmitPrompt --dry-run
+```
+
 ## 固定行為（寫死，無額外 env）
 
 | 項目 | 值 | 說明 |
@@ -44,5 +56,6 @@ printf '%s' '{"prompt":"hello OL-7","conversation_id":"c1","generation_id":"g1",
 
 ## 相關單
 
+- Bug：[OL-12](https://innotech.atlassian.net/browse/OL-12)（oracle 未同步 hooks）
 - Feature：[OL-7](https://innotech.atlassian.net/browse/OL-7)
 - Epic：[OL-5](https://innotech.atlassian.net/browse/OL-5)

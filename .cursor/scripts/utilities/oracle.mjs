@@ -8,6 +8,7 @@
  * @external https://innotech.atlassian.net/browse/FE-7892
  * @external https://innotech.atlassian.net/browse/FE-7922
  * @external https://innotech.atlassian.net/browse/FE-8513
+ * @external https://innotech.atlassian.net/browse/OL-12 - oracle 同步 hooks.json，command 指向 .pantheon hooks
  */
 /**
  * === 宣告內容用途說明與單號關聯 ===
@@ -287,6 +288,77 @@ function materializeBootstrapSkill(cwd, installFolderName) {
 
 /**
  * 宣告內容用途說明與單號關聯
+ * @description 將 Pantheon hooks.json 同步到目標專案，並把 command 改指向 .pantheon/.cursor/hooks。
+ * @purpose Cursor 只載入專案根 `.cursor/hooks.json`；腳本留在 `.pantheon` 內以保留 `../scripts/client` 相對 import。
+ * @external https://innotech.atlassian.net/browse/OL-12
+ */
+function installCursorHooks(cwd) {
+  const sourceHooksJson = join(cwd, ".pantheon", ".cursor", "hooks.json");
+  const targetHooksJson = join(cwd, ".cursor", "hooks.json");
+  const sourceHooksDir = join(cwd, ".pantheon", ".cursor", "hooks");
+
+  if (!existsSync(sourceHooksJson)) {
+    log.dim("跳過 hooks：.pantheon/.cursor/hooks.json 不存在");
+    return;
+  }
+
+  if (!existsSync(sourceHooksDir)) {
+    log.warning(
+      "發現 hooks.json 但缺少 .pantheon/.cursor/hooks/，仍會寫入 hooks.json",
+    );
+  }
+
+  let config;
+  try {
+    config = JSON.parse(readFileSync(sourceHooksJson, "utf8"));
+  } catch (error) {
+    log.error(`解析 .pantheon/.cursor/hooks.json 失敗: ${error.message}`);
+    return;
+  }
+
+  /**
+   * 宣告內容用途說明與單號關聯
+   * @description 將 hook command 中的 `.cursor/hooks/` 改寫為 `.pantheon/.cursor/hooks/`。
+   * @purpose 掛載專案不複製 hooks 腳本，避免相對 import 指向不存在的 `.cursor/scripts/client`。
+   * @external https://innotech.atlassian.net/browse/OL-12
+   */
+  const rewriteHookCommand = (command) => {
+    if (typeof command !== "string") return command;
+    // OL-12: normalize `.cursor/hooks/` and already-rewritten `.pantheon/.cursor/hooks/`
+    return command.replace(
+      /(^|[\s"'])(?:\.pantheon\/)?\.cursor\/hooks\//g,
+      "$1.pantheon/.cursor/hooks/",
+    );
+  };
+
+  if (config?.hooks && typeof config.hooks === "object") {
+    for (const entries of Object.values(config.hooks)) {
+      if (!Array.isArray(entries)) continue;
+      for (const entry of entries) {
+        if (entry && typeof entry.command === "string") {
+          entry.command = rewriteHookCommand(entry.command);
+        }
+      }
+    }
+  }
+
+  const cursorDir = join(cwd, ".cursor");
+  if (!existsSync(cursorDir)) {
+    mkdirSync(cursorDir, { recursive: true });
+  }
+
+  writeFileSync(
+    targetHooksJson,
+    `${JSON.stringify(config, null, 2)}\n`,
+    "utf8",
+  );
+  log.success(
+    "已同步 .cursor/hooks.json（command 指向 .pantheon/.cursor/hooks）",
+  );
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
  *
  * @description 將 Pantheon 安裝產物加入目標專案 .gitignore。
  * @purpose 透過刪除既有區塊再重寫，確保已列入正確安裝路徑（含 .cursor/.agents 與 .env.local）。
@@ -299,6 +371,7 @@ function updateGitignore(cwd, installFolderName) {
     ".codegraph/",
     ".cursor/.env.local",
     ".cursor/.env.system",
+    ".cursor/hooks.json",
     ".cursor/skills/pantheon-mounted-workflow/",
     `.cursor/commands/${installFolderName}/`,
     `.cursor/rules/${installFolderName}/`,
@@ -592,6 +665,13 @@ async function main() {
   }
 
   // ========================================
+  // 4b. 同步 Cursor hooks（OL-12）
+  // ========================================
+  console.log("");
+  console.log("🪝 同步 Cursor hooks...");
+  installCursorHooks(cwd);
+
+  // ========================================
   // 5. 落地 bootstrap skill（確保目標專案可讀）
   // ========================================
   console.log("");
@@ -626,6 +706,7 @@ async function main() {
   console.log("");
   console.log("目錄結構：");
   console.log(".cursor/");
+  console.log("├── hooks.json  (commands → .pantheon/.cursor/hooks/)");
   console.log("├── commands/");
   console.log(`│   └── ${installFolderName}/`);
   console.log("├── rules/");
@@ -699,14 +780,7 @@ main().catch((error) => {
 
 /**
  * llm 分析紀錄區
- *
- * @llm-review-submitted-at 2026-06-13
- * @llm-review-model annotation-refactoring-engine
- * @llm-review-note 依規範補齊三段式註解區塊，並在可對應的宣告處加入 @description/@purpose/@external（使用 input.declarationOrigins 的票據）。
- */
-/**
- * === llm 分析紀錄區 ===
- * @llm-review-submitted-at 2026-06-13T18:05:10.338Z
- * @llm-review-model gpt-5.4-nano
- * @llm-review-note Refactor comments only: added required three-section file header, enriched selected declaration comments with ticket-linked @description/@purpose/@external using declarationOrigins, and appended required llm analysis record block. Runtime logic unchanged.
+ * @llm-review-submitted-at 2026-07-16T01:20:00.000Z
+ * @llm-review-model grok-4.5
+ * @llm-review-note OL-12: 新增 installCursorHooks，同步 hooks.json 並改寫 command 指向 .pantheon hooks；gitignore 加入 .cursor/hooks.json。
  */
