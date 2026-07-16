@@ -291,7 +291,7 @@ async function normalizeWithLlm(content, operation, options = {}) {
   const envLocal = loadEnvLocal();
   const model = resolveLlmModel({
     explicitModel: options.model,
-    defaultModel: "gpt-5.4-nano",
+    defaultModel: "gpt-5.6-luna",
   });
 
   const system = [
@@ -319,7 +319,7 @@ async function normalizeWithLlm(content, operation, options = {}) {
     envLocal,
     providerEnvKeys: ["JIRA_FORMAT_LLM_PROVIDER"],
     explicitModel: options.model,
-    defaultModel: "gpt-5.4-nano",
+    defaultModel: "gpt-5.6-luna",
     system,
     input,
     temperature: 0.1,

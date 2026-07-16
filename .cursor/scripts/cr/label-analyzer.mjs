@@ -419,7 +419,7 @@ async function suggestLabelsWithLlm({
 }) {
   const envLocal = loadEnvLocal();
   const model = resolveLlmModel({
-    defaultModel: "gpt-5.4-nano",
+    defaultModel: "gpt-5.6-luna",
   });
 
   const system = `
@@ -463,7 +463,7 @@ async function suggestLabelsWithLlm({
     action: "label-analyzer",
     envLocal,
     providerEnvKeys: ["LABEL_LLM_PROVIDER"],
-    defaultModel: "gpt-5.4-nano",
+    defaultModel: "gpt-5.6-luna",
     system,
     input,
     temperature: 0.1,
