@@ -203,19 +203,21 @@ function recordSessionEventFromCli(args) {
     return appendOperatorSessionEvent({ type: "fix-comment-reply", text });
   }
 
+  if (eventType === "user-prompt") {
+    const text = String(args.text || "").trim();
+    if (!text) {
+      throw new Error("user-prompt 需要 --text=<prompt>");
+    }
+    // OL-53: 供 LLM 判定改方向；本地 session 可保留較長原文
+    return appendOperatorSessionEvent({
+      type: "user-prompt",
+      text: text.slice(0, 4000),
+    });
+  }
+
   if (eventType === "session-resume") {
     writeOperatorSessionCheckpoint("session-resume");
     return appendOperatorSessionEvent({ type: "session-resume" });
-  }
-
-  if (eventType === "ai-completed") {
-    const value = String(args.value ?? "true").trim().toLowerCase();
-    const aiCompleted = !["false", "0", "no"].includes(value);
-    const session = readOperatorSessionRaw();
-    if (!session?.workflowStartedAt) {
-      throw new Error("找不到有效 operator session，請先執行 --action=start");
-    }
-    return writeOperatorSessionObject({ ...session, aiCompleted });
   }
 
   throw new Error(`未知 --event-type: ${eventType}`);
@@ -453,8 +455,7 @@ Options (set):
 Options (event):
   --event-type=<type>                 事件類型（必填）
   --response-type=<name>              user-response 專用：directAgree | requestChange | question | silentConfirm
-  --text=<reply>                      fix-comment-reply 專用
-  --value=true|false                  ai-completed 專用
+  --text=<text>                       fix-comment-reply / user-prompt 專用
 
 Options (checkpoint):
   --label=<text>                      checkpoint 標籤（選填）
@@ -465,6 +466,7 @@ Examples:
   node .cursor/scripts/operator/operator-session.mjs --action=event --event-type=user-response --response-type=directAgree
   node .cursor/scripts/operator/operator-session.mjs --action=event --event-type=plan-revision
   node .cursor/scripts/operator/operator-session.mjs --action=event --event-type=fix-comment-reply --text="已調整命名"
+  node .cursor/scripts/operator/operator-session.mjs --action=event --event-type=user-prompt --text="請改成用 LLM 判定"
   node .cursor/scripts/operator/operator-session.mjs --action=checkpoint --label=after-human-edit
   node .cursor/scripts/operator/operator-session.mjs --action=read
   node .cursor/scripts/operator/operator-session.mjs --action=clear

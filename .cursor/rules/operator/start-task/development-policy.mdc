@@ -91,7 +91,6 @@ alwaysApply: false
   "sourceBranch": "main",
   "featureBranch": "feature/IN-107113",
   "startedAt": "2025-12-10T14:30:00+08:00",
-  "aiCompleted": true,
   "developmentReport": null,
   "operationMode": "default",
   "modeConfig": {}
@@ -173,8 +172,7 @@ node .cursor/scripts/operator/save-start-task-info.mjs \
   --assignee="FE-William" \
   --priority="Medium" \
   --steps='["步驟1", "步驟2", "步驟3"]' \
-  --source-branch=main \
-  --ai-completed=true
+  --source-branch=main
 
 # 驗證保存成功
 node .cursor/scripts/operator/save-start-task-info.mjs --verify
@@ -207,8 +205,7 @@ AI 在以下時機，**必須**確認 Git notes 已保存：
      --ticket={從分支名提取} \
      --summary="[補充標題]" \
      --type={推斷類型} \
-     --steps='["已完成的步驟"]' \
-     --ai-completed=true
+     --steps='["已完成的步驟"]'
    ```
 4. **驗證保存成功後**才繼續流程
 
@@ -261,13 +258,11 @@ AI 在以下時機，**必須**確認 Git notes 已保存：
 
 ### 標記 AI 獨立完成的項目
 
-**CRITICAL**: 當 AI 使用 `start-task` 獨立完成一個項目時（即從開始到完成都由 AI 執行，用戶僅確認計劃），必須在保存開發計劃時標記為 AI 獨立完成。
+**OL-53 更新**：`aiCompleted` 已自 collaboration metrics／outcome 契約移除。是否「人工介入」改由 `send-operator-log` 的 `humanEditDetected` + LLM `humanDirectionAdjusted` 判定（見 `docs/workflow-log-contract.md`）。
 
-**標記方式**：
-- 在 `startTaskInfo` 對象中添加 `aiCompleted: true` 標記
-- 此標記用於後續 MR 時自動添加 AI label 和開發方案
+**MR／start-task 流程**仍可依 Git notes 存在與否判定「由 start-task 啟動」並附加 AI label／開發方案（不再依賴 `aiCompleted` 欄位）。
 
-**判斷標準**：
+**判斷標準**（流程語意，非 collaboration 欄位）：
 - 項目從 `start-task` 開始
 - 開發計劃由 AI 制定並經用戶確認
 - 開發過程主要由 AI 執行（用戶可能提供反饋或調整，但核心開發由 AI 完成）
@@ -275,7 +270,7 @@ AI 在以下時機，**必須**確認 Git notes 已保存：
 
 ### MR 時自動處理（cr 系列指令）
 
-當執行 `cr single-ticket` 或 `cr multiple-ticket` 指令建立 MR 時，如果檢測到是由 AI 使用 `start-task` 獨立完成的項目，必須自動執行以下操作：
+當執行 `cr single-ticket` 或 `cr multiple-ticket` 指令建立 MR 時，如果檢測到是由 AI 使用 `start-task` 啟動的項目，必須自動執行以下操作：
 
 #### 1. 自動添加 AI Label
 
@@ -804,7 +799,7 @@ node .cursor/scripts/operator/update-development-report.mjs --format
 
 在 `start-task.mjs` 中：
 - [x] 保存開發計劃時，包含完整欄位（ticket, summary, issueType, status, assignee, priority, suggestedSteps, startedAt, developmentReport）
-- [ ] 標記是否為 AI 獨立完成（`aiCompleted: true`）
+- [ ] （OL-53）不再依賴 `aiCompleted`；collaboration 由 humanEdit／LLM 改方向判定
 
 在 `agent-commit.mjs` 中：
 - [x] 在 commit 之後，檢查並複製 start-task Git notes 到新 commit

@@ -20,7 +20,6 @@
  *   --priority      優先級
  *   --steps         開發步驟（JSON 陣列格式）
  *   --source-branch 來源分支
- *   --ai-completed  是否為 AI 獨立完成（true/false）
  *   --read          讀取當前的 start-task info
  *   --verify        驗證 Git notes 是否存在
  *   --update        更新現有的 Git notes（合併模式）
@@ -157,7 +156,6 @@ function parseArgs(args) {
     priority: null,
     steps: null,
     sourceBranch: null,
-    aiCompleted: true, // 預設為 true
   };
 
   for (const arg of args) {
@@ -186,7 +184,8 @@ function parseArgs(args) {
     } else if (arg.startsWith("--source-branch=")) {
       params.sourceBranch = arg.slice("--source-branch=".length);
     } else if (arg.startsWith("--ai-completed=")) {
-      params.aiCompleted = arg.slice("--ai-completed=".length) === "true";
+      // OL-53: aiCompleted 已自 collaboration 契約移除；忽略此參數以保持 CLI 相容
+      console.warn("⚠️  --ai-completed 已棄用（OL-53），將被忽略");
     }
   }
 
@@ -206,7 +205,8 @@ function buildStartTaskInfo(params, existingInfo = null) {
   if (params.assignee) info.assignee = params.assignee;
   if (params.priority) info.priority = params.priority;
   if (params.sourceBranch) info.sourceBranch = params.sourceBranch;
-  info.aiCompleted = params.aiCompleted;
+  // OL-53: 不再寫入／保留 aiCompleted
+  if ("aiCompleted" in info) delete info.aiCompleted;
 
   // 處理 steps
   if (params.steps) {
@@ -300,7 +300,6 @@ function main() {
   --priority      優先級
   --steps         開發步驟（JSON 陣列格式）
   --source-branch 來源分支
-  --ai-completed  是否為 AI 獨立完成（預設 true）
   --read          讀取當前的 start-task info
   --verify        驗證 Git notes 是否存在
   --update        更新現有的 Git notes（合併模式）

@@ -60,7 +60,8 @@ pnpm run send-operator-log -- \
 | 用戶提出疑問 | `pnpm run operator-session -- --action=event --event-type=user-response --response-type=question` |
 | 用戶未回應直接 confirm | `pnpm run operator-session -- --action=event --event-type=user-response --response-type=silentConfirm` |
 | 對話恢復且 git 有異動 | `pnpm run operator-session -- --action=checkpoint --label=session-resume` 後 `--event-type=session-resume` |
-| 判定非 AI 獨立完成 | `pnpm run operator-session -- --action=event --event-type=ai-completed --value=false` |
+
+> **OL-53**：`aiCompleted`／`ai-completed` event 已移除。人工介入改由 `humanEditDetected`（dirty／非 AI commit）+ LLM `humanDirectionAdjusted`（session prompt）判定；無介入一律 `collaborationOutcome=ai-only`。
 
 ---
 
@@ -168,8 +169,7 @@ pnpm run send-operator-log -- \
        --assignee="{assignee}" \
        --priority="{priority}" \
        --steps='["步驟1", "步驟2", ...]' \
-       --source-branch="{來源分支}" \
-       --ai-completed=true
+       --source-branch="{來源分支}"
      ```
    - 驗證保存成功：`node .cursor/scripts/operator/save-start-task-info.mjs --verify`
    - **禁止**在保存成功前開始開發

@@ -64,9 +64,38 @@ pnpm run send-operator-log -- --action=start-task --reason="mr created"
 pnpm run operator-session -- --action=set --ticket=OL-6
 ```
 
+## collaborationMetrics（OL-53）
+
+`send-operator-log` 會自動 merge `collaborationMetrics`。契約重點：
+
+| 欄位 | 說明 |
+|---|---|
+| `humanEditDetected` | 人工改碼：以 uncommitted／dirty 差為主；**不以** `commitsDuringSession`／`headChanged` 單獨判定；符合 `agent-commit` subject 慣用格式的 commit 不計入手改 |
+| `humanDirectionAdjusted` | 人為調整方向：由 LLM 分析本 session 的 `user-prompt` 紀錄判定（**非** hardcode `plan-revision`／`requestChange`） |
+| `directionSignals` | LLM 結果細節：`reason`／`confidence`／`source`（`llm`｜`fallback`）／`promptCount` |
+| `collaborationOutcome` | **無人工介入**（無手改且無改方向）→ 一律 `ai-only`；有介入 → `mixed`／`human-primary`。**不拆** `guided-ai` |
+
+### 已移除／不相容
+
+| 舊欄位／行為 | 狀態 |
+|---|---|
+| `aiCompleted` | **已移除**（不再作為 outcome 輸入；session `ai-completed` event 已刪除） |
+| `guided-ai` outcome | **不採用**（無介入一律 `ai-only`） |
+| hardcode 改方向（僅看 `plan-revision`／`requestChange`） | **不採用**（改 LLM 分析 prompt） |
+
+### Prompt 紀錄來源
+
+Hook `prompt-event-collector` 在 operator session 作用中時，會把 user prompt 寫入 session event（`type=user-prompt`）。LLM 失敗時 `humanDirectionAdjusted=false` 且 `directionSignals.source=fallback`，**不阻斷** workflow log。
+
+### Prompt 使用邊界
+
+- Prompt 可作「改方向」／「否定人工改碼」的輔助依據
+- Prompt **不得**作為「肯定手改」的唯一依據（手改仍看 git dirty／非 AI commit）
+
 ## 相關
 
 - Feature：[OL-6](https://innotech.atlassian.net/browse/OL-6)
+- Collaboration 判定修正：[OL-53](https://innotech.atlassian.net/browse/OL-53)
 - Epic：[OL-5](https://innotech.atlassian.net/browse/OL-5)
 - Prompt Event（非五維 cohort）：[OL-7](https://innotech.atlassian.net/browse/OL-7)
 - Prompt Event 文件：[prompt-event.md](./prompt-event.md)

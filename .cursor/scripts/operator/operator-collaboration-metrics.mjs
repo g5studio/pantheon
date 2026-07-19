@@ -4,11 +4,12 @@
  * 檔案用途區塊
  * @module operator-collaboration-metrics
  * @purpose 彙整 Operator workflow 協作指標，供 Ares 分析 AI/人工協作狀況。
- * @external https://innotech.atlassian.net/browse/FE-8517
+ * @external https://innotech.atlassian.net/browse/OL-53
  */
 
 import { execSync } from "child_process";
-import { getProjectRoot } from "../utilities/env-loader.mjs";
+import { getProjectRoot, loadEnvLocal } from "../utilities/env-loader.mjs";
+import { callLlmJson } from "../client/llm-client.mjs";
 
 const VALID_USER_RESPONSE_TYPES = new Set([
   "directAgree",
@@ -16,6 +17,24 @@ const VALID_USER_RESPONSE_TYPES = new Set([
   "question",
   "silentConfirm",
 ]);
+
+/** agent-commit 慣用 subject：type(TICKET): lowercase message */
+const AGENT_COMMIT_SUBJECT_RE =
+  /^(feat|fix|update|refactor|chore|test|style|revert)\([A-Z][A-Z0-9]+-\d+\):\s+[a-z]/
+
+const DIRECTION_ANALYSIS_SCHEMA = {
+  type: "object",
+  properties: {
+    humanDirectionAdjusted: { type: "boolean" },
+    reason: { type: "string" },
+    confidence: {
+      type: "string",
+      enum: ["high", "medium", "low"],
+    },
+  },
+  required: ["humanDirectionAdjusted", "reason", "confidence"],
+  additionalProperties: false,
+};
 
 function safeJsonParse(text) {
   try {
@@ -106,7 +125,7 @@ function parseNumstat(text) {
  * 宣告內容用途說明與單號關聯
  * @description 擷取目前 git 工作區快照。
  * @purpose workflow 起點/終點比對，推斷人工改碼。
- * @external https://innotech.atlassian.net/browse/FE-8517
+ * @external https://innotech.atlassian.net/browse/OL-53
  */
 export function captureGitSnapshot() {
   let headCommit = null;
@@ -166,9 +185,36 @@ function countCommitsSince(startHeadCommit) {
 
 /**
  * 宣告內容用途說明與單號關聯
+ * @description 判斷 commit subject 是否符合 agent-commit 慣用格式。
+ * @purpose 排除 AI agent-commit 造成的 HEAD 變動誤判。
+ * @external https://innotech.atlassian.net/browse/OL-53
+ */
+export function isLikelyAgentCommitSubject(subject) {
+  return AGENT_COMMIT_SUBJECT_RE.test(String(subject || "").trim());
+}
+
+function listCommitSubjectsSince(startHeadCommit) {
+  if (!startHeadCommit) return [];
+  try {
+    const currentHead = exec("git rev-parse HEAD", { silent: true }).trim();
+    if (startHeadCommit === currentHead) return [];
+    const raw = exec(`git log --format=%s ${startHeadCommit}..HEAD`, {
+      silent: true,
+    });
+    return String(raw || "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
  * @description 比對起點/終點 git 快照，產生 humanEditSignals。
- * @purpose 支援 Ares 分析人工介入程度。
- * @external https://innotech.atlassian.net/browse/FE-8517
+ * @purpose OL-53：人工改碼以 dirty／uncommitted 為主；不單獨用 commit／HEAD 判定。
+ * @external https://innotech.atlassian.net/browse/OL-53
  */
 export function computeHumanEditSignals(startSnapshot, endSnapshot) {
   const start = startSnapshot || {};
@@ -178,6 +224,11 @@ export function computeHumanEditSignals(startSnapshot, endSnapshot) {
   const endDirty = new Set(end.dirtyFiles || []);
   const newDirtyFiles = [...endDirty].filter((file) => !startDirty.has(file));
   const commitsDuringSession = countCommitsSince(start.headCommit);
+  const commitSubjects = listCommitSubjectsSince(start.headCommit);
+  const agentCommitCount = commitSubjects.filter((subject) =>
+    isLikelyAgentCommitSubject(subject),
+  ).length;
+  const nonAgentCommitCount = Math.max(0, commitSubjects.length - agentCommitCount);
 
   const startUncommitted = start.uncommitted || { files: 0, additions: 0, deletions: 0 };
   const endUncommitted = end.uncommitted || { files: 0, additions: 0, deletions: 0 };
@@ -192,16 +243,20 @@ export function computeHumanEditSignals(startSnapshot, endSnapshot) {
     start.headCommit && end.headCommit && start.headCommit !== end.headCommit,
   );
 
-  const humanEditDetected =
-    commitsDuringSession > 0 ||
-    headChanged ||
+  const dirtyHumanEdit =
     newDirtyFiles.length > 0 ||
     uncommittedDelta.additions + uncommittedDelta.deletions > 0;
+
+  // OL-53: 不以 commitsDuringSession／headChanged 單獨判定；AI agent-commit 不計入手改。
+  // 僅當存在非 agent-commit 的 commit 時，才把「已提交的手改」計入。
+  const humanEditDetected = dirtyHumanEdit || nonAgentCommitCount > 0;
 
   return {
     humanEditDetected,
     commitsDuringSession,
     headChanged,
+    agentCommitCount,
+    nonAgentCommitCount,
     filesChangedDuringSession: Math.max(newDirtyFiles.length, uncommittedDelta.files),
     linesAdded: uncommittedDelta.additions,
     linesRemoved: uncommittedDelta.deletions,
@@ -311,65 +366,125 @@ function aggregatePlanMetrics(events = [], session = {}, options = {}) {
 
 /**
  * 宣告內容用途說明與單號關聯
- * @description 讀取 start-task git notes 的 aiCompleted。
- * @purpose 合併進 collaborationMetrics。
- * @external https://innotech.atlassian.net/browse/FE-8517
+ * @description 從 session events 收集本輪 user prompt 文字。
+ * @purpose 供 LLM 判定人為調整方向（非 hardcode 事件類型）。
+ * @external https://innotech.atlassian.net/browse/OL-53
  */
-export function readStartTaskAiCompleted() {
-  const candidates = ["HEAD", "HEAD^"];
+export function collectSessionPromptTexts(session) {
+  const events = Array.isArray(session?.events) ? session.events : [];
+  const prompts = [];
 
-  try {
-    candidates.push(exec("git merge-base HEAD main", { silent: true }).trim());
-  } catch {
-    // ignore
+  for (const event of events) {
+    if (event?.type !== "user-prompt") continue;
+    const text = String(event.text || "").trim();
+    if (text) prompts.push(text);
   }
 
-  for (const ref of candidates) {
-    try {
-      const noteContent = exec(`git notes --ref=start-task show ${ref}`, {
-        silent: true,
-      }).trim();
-      if (!noteContent) continue;
-      const info = safeJsonParse(noteContent);
-      if (!info || typeof info !== "object") continue;
-      if (typeof info.aiCompleted === "boolean") return info.aiCompleted;
-    } catch {
-      // try next
-    }
-  }
-
-  return null;
+  return prompts;
 }
 
-function resolveCollaborationOutcome({ aiCompleted, humanEditDetected, status }) {
-  if (humanEditDetected && aiCompleted === false) return "human-primary";
-  if (!humanEditDetected && aiCompleted === true) return "ai-only";
-  if (humanEditDetected && aiCompleted === true) return "mixed";
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 以 LLM 分析 session prompt，判定是否人為調整方向。
+ * @purpose OL-53：不得 hardcode plan-revision／requestChange；不得用 prompt 肯定手改。
+ * @external https://innotech.atlassian.net/browse/OL-53
+ */
+export async function analyzeHumanDirectionAdjusted(prompts = [], options = {}) {
+  const texts = (Array.isArray(prompts) ? prompts : [])
+    .map((text) => String(text || "").trim())
+    .filter(Boolean);
+
+  if (texts.length === 0) {
+    return {
+      humanDirectionAdjusted: false,
+      reason: "no session prompt records",
+      confidence: "low",
+      directionSignalSource: "fallback",
+    };
+  }
+
+  const system = [
+    "You classify whether the USER adjusted the TASK DIRECTION in an operator coding workflow.",
+    "humanDirectionAdjusted=true ONLY when the user changed plan, approach, requirements, scope, or rejected the proposed solution and asked for a different direction.",
+    "humanDirectionAdjusted=false for pure confirm/skip/agree/ack, clarifying questions that do not change direction, and status-only replies.",
+    "Do NOT decide human code edits. Prompt text must NEVER be used as the sole evidence that a human edited code.",
+    "Return JSON only.",
+  ].join(" ");
+
+  const input = [
+    "Session user prompts (chronological):",
+    ...texts.map((text, index) => `${index + 1}. ${text.slice(0, 2000)}`),
+  ].join("\n");
+
+  try {
+    const envLocal = options.envLocal || loadEnvLocal();
+    const { result } = await callLlmJson({
+      action: "operator-direction-analysis",
+      envLocal,
+      system,
+      input,
+      temperature: 0,
+      schema: DIRECTION_ANALYSIS_SCHEMA,
+      schemaName: "human_direction_adjusted",
+      defaultModel: "gpt-5.6-luna",
+    });
+
+    return {
+      humanDirectionAdjusted: Boolean(result?.humanDirectionAdjusted),
+      reason: String(result?.reason || "").trim() || "llm analysis",
+      confidence: ["high", "medium", "low"].includes(result?.confidence)
+        ? result.confidence
+        : "low",
+      directionSignalSource: "llm",
+    };
+  } catch (error) {
+    return {
+      humanDirectionAdjusted: false,
+      reason: `llm fallback: ${error?.message || "unknown error"}`,
+      confidence: "low",
+      directionSignalSource: "fallback",
+    };
+  }
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 依人工改碼／改方向訊號決定 collaborationOutcome。
+ * @purpose OL-53：無人工介入一律 ai-only；不拆 guided-ai；已移除 aiCompleted。
+ * @external https://innotech.atlassian.net/browse/OL-53
+ */
+export function resolveCollaborationOutcome({
+  humanEditDetected,
+  humanDirectionAdjusted,
+  status,
+}) {
+  const humanIntervention = Boolean(humanEditDetected || humanDirectionAdjusted);
+  if (!humanIntervention) return "ai-only";
+
   if (humanEditDetected && status === "cancelled") return "human-primary";
-  if (humanEditDetected) return "mixed";
-  if (aiCompleted === false) return "human-primary";
-  return "ai-only";
+  if (humanEditDetected && !humanDirectionAdjusted) return "human-primary";
+  return "mixed";
 }
 
 function resolveAbandonedAiCollaboration({
   humanEditDetected,
-  aiCompleted,
+  humanDirectionAdjusted,
   status,
   sessionResumeCount,
 }) {
-  if (!humanEditDetected) return false;
-  if (aiCompleted === false) return true;
+  const humanIntervention = Boolean(humanEditDetected || humanDirectionAdjusted);
+  if (!humanIntervention) return false;
   if (status === "cancelled" && sessionResumeCount === 0) return true;
   return false;
 }
 
 /**
  * 宣告內容用途說明與單號關聯
- * @description 依 session 事件與 git 快照彙整 collaborationMetrics。
+ * @description 依 session 事件與 git 快照彙整 collaborationMetrics（async：含 LLM 改方向判定）。
  * @purpose send-operator-log 自動 merge 進 Ares payload。
- * @external https://innotech.atlassian.net/browse/FE-8517
+ * @external https://innotech.atlassian.net/browse/OL-53
  */
-export function buildCollaborationMetrics(session, options = {}) {
+export async function buildCollaborationMetrics(session, options = {}) {
   const events = Array.isArray(session?.events) ? session.events : [];
   const startSnapshot = session?.gitSnapshotStart || null;
   const endSnapshot = session?.gitSnapshotEnd || captureGitSnapshot();
@@ -385,25 +500,20 @@ export function buildCollaborationMetrics(session, options = {}) {
 
   const sessionResumeCount = events.filter((event) => event.type === "session-resume").length;
 
-  let aiCompleted = session?.aiCompleted;
-  if (typeof aiCompleted !== "boolean" && options.action === "start-task") {
-    const fromNotes = readStartTaskAiCompleted();
-    aiCompleted = typeof fromNotes === "boolean" ? fromNotes : true;
-  }
-  if (typeof aiCompleted !== "boolean") {
-    aiCompleted = humanEditSignals.humanEditDetected ? null : true;
-  }
+  const prompts = collectSessionPromptTexts(session);
+  const directionAnalysis = await analyzeHumanDirectionAdjusted(prompts, options);
+  const humanDirectionAdjusted = Boolean(directionAnalysis.humanDirectionAdjusted);
 
   const status = options.status || "success";
   const collaborationOutcome = resolveCollaborationOutcome({
-    aiCompleted,
     humanEditDetected: humanEditSignals.humanEditDetected,
+    humanDirectionAdjusted,
     status,
   });
 
   const abandonedAiCollaboration = resolveAbandonedAiCollaboration({
     humanEditDetected: humanEditSignals.humanEditDetected,
-    aiCompleted,
+    humanDirectionAdjusted,
     status,
     sessionResumeCount,
   });
@@ -413,9 +523,16 @@ export function buildCollaborationMetrics(session, options = {}) {
 
   return {
     workflowStartedAt,
-    aiCompleted,
     humanEditDetected: humanEditSignals.humanEditDetected,
     humanEditSignals,
+    humanDirectionAdjusted,
+    directionSignals: {
+      humanDirectionAdjusted,
+      reason: directionAnalysis.reason,
+      confidence: directionAnalysis.confidence,
+      source: directionAnalysis.directionSignalSource,
+      promptCount: prompts.length,
+    },
     collaborationOutcome,
     abandonedAiCollaboration,
     userResponses,
@@ -428,7 +545,7 @@ export function buildCollaborationMetrics(session, options = {}) {
 
 /**
  * llm 分析紀錄區
- * @llm-review-submitted-at 2026-07-15T07:20:00.000Z
+ * @llm-review-submitted-at 2026-07-19T14:35:00.000Z
  * @llm-review-model cursor-grok
- * @llm-review-note OL-6：start-task 無 plan events 時 planMetrics.missing=true。
+ * @llm-review-note OL-53：dirty 為主排除 AI commit；LLM 判改方向；移除 aiCompleted；無介入=ai-only。
  */
