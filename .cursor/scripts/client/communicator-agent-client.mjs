@@ -574,7 +574,7 @@ export async function resolveNotificationBodyWithLlm({
       action: "communicator-notification-body",
       envLocal,
       providerEnvKeys: ["COMMUNICATOR_LLM_PROVIDER"],
-      defaultModel: "gpt-5.4-nano",
+      defaultModel: "gpt-5.6-luna",
       system: NOTIFICATION_BODY_SYSTEM_PROMPT,
       input: {
         messageTemplate,

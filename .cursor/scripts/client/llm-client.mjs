@@ -238,7 +238,7 @@ export function resolveLlmModel({
   explicitModel,
   envLocal: _envLocal,
   envKeys: _envKeys = [],
-  defaultModel = "gpt-5.4-nano",
+  defaultModel = "gpt-5.6-luna",
 }) {
   if (typeof explicitModel === "string" && explicitModel.trim())
     return explicitModel.trim();
@@ -389,7 +389,7 @@ export async function callLlmJson({
   explicitProvider = null,
   providerEnvKeys = [],
   explicitModel = null,
-  defaultModel = "gpt-5.4-nano",
+  defaultModel = "gpt-5.6-luna",
   customOpenAiApiUrl = null,
   system,
   input,
