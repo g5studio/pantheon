@@ -210,7 +210,8 @@ async function main() {
   if (!skipCollaborationMetrics && !extra.collaborationMetrics) {
     sessionForMetrics = readOperatorSessionForMetrics();
     if (sessionForMetrics) {
-      collaborationMetrics = buildCollaborationMetrics(sessionForMetrics, {
+      // OL-53: buildCollaborationMetrics 為 async（含 LLM 改方向判定）
+      collaborationMetrics = await buildCollaborationMetrics(sessionForMetrics, {
         action,
         status,
       });

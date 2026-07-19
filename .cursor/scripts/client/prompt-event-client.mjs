@@ -17,7 +17,10 @@ import {
   sendAgentLog,
 } from "./agent-log-client.mjs";
 import { getProjectRoot } from "../utilities/env-loader.mjs";
-import { readOperatorSessionRaw } from "../operator/operator-session.mjs";
+import {
+  appendOperatorSessionEvent,
+  readOperatorSessionRaw,
+} from "../operator/operator-session.mjs";
 
 const TICKET_REGEX = /\b([A-Z][A-Z0-9]+-\d+)\b/g;
 
@@ -393,25 +396,57 @@ export function buildPromptEventPayload({
 
 /**
  * 宣告內容用途說明與單號關聯
- * @description 送出 prompt-event；未啟用或 scope 略過時 skip。
+ * @description 將 user prompt 寫入 operator session（本地，供 collaboration LLM 分析）。
+ * @purpose OL-53：改方向判定需要本 session prompt 紀錄，不 hardcode 事件類型。
+ * @external https://innotech.atlassian.net/browse/OL-53
+ */
+function recordOperatorSessionUserPrompt(hookInput = {}, eventType = "user-prompt") {
+  if (eventType !== "user-prompt") return;
+
+  try {
+    const session = readOperatorSessionRaw();
+    if (!session?.workflowStartedAt) return;
+
+    const input =
+      hookInput && typeof hookInput === "object" && !Array.isArray(hookInput)
+        ? hookInput
+        : {};
+    const text = String(input.prompt || input.text || "").trim();
+    if (!text) return;
+
+    appendOperatorSessionEvent({
+      type: "user-prompt",
+      text: text.slice(0, 4000),
+    });
+  } catch {
+    // session 寫入失敗不得阻斷 prompt-event
+  }
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 送出 prompt-event；未啟用或 scope 略過時 skip。OL-53 會先寫入本地 session prompt。
  * @purpose hook collector 入口。
- * @external https://innotech.atlassian.net/browse/OL-7
+ * @external https://innotech.atlassian.net/browse/OL-53
  */
 export async function sendPromptEvent(options = {}) {
   const cfg = options.config || getPromptEventConfig();
+  const eventType = options.eventType || "user-prompt";
+
+  // OL-53: 本地 session prompt 與 Log API 啟用狀態解耦（改方向 LLM 仍需要）
+  recordOperatorSessionUserPrompt(options.hookInput, eventType);
+
   if (!cfg.enabled || !isAgentLogEnabled()) {
     return { ok: false, skipped: true, reason: "prompt-event-disabled" };
   }
 
-  if (
-    options.eventType === "assistant-event" &&
-    cfg.assistantEnabled === false
-  ) {
+  if (eventType === "assistant-event" && cfg.assistantEnabled === false) {
     return { ok: false, skipped: true, reason: "assistant-event-disabled" };
   }
 
   const payload = buildPromptEventPayload({
     ...options,
+    eventType,
     config: cfg,
   });
 
@@ -424,7 +459,7 @@ export async function sendPromptEvent(options = {}) {
 
 /**
  * llm 分析紀錄區
- * @llm-review-submitted-at 2026-07-15T06:45:00.000Z
+ * @llm-review-submitted-at 2026-07-19T14:42:00.000Z
  * @llm-review-model cursor-grok
- * @llm-review-note OL-7 phase2：對齊 main，移除 PROMPT_EVENT_* env；寫死 preview-hash/200/assistant/scope=all/enrichment on。
+ * @llm-review-note OL-53：修正 JSDoc 跑版；sendPromptEvent 前寫入 session user-prompt 供 LLM 改方向判定。
  */
