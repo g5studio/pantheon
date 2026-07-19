@@ -418,8 +418,9 @@ async function suggestLabelsWithLlm({
   existingLabels = [],
 }) {
   const envLocal = loadEnvLocal();
+  // OL-35 follow-up: label-analyzer 明確固定 gpt-5.4-nano（不跟隨 llm-client 全域預設 gpt-5.6-luna）
   const model = resolveLlmModel({
-    defaultModel: "gpt-5.6-luna",
+    defaultModel: "gpt-5.4-nano",
   });
 
   const system = `
@@ -463,7 +464,7 @@ async function suggestLabelsWithLlm({
     action: "label-analyzer",
     envLocal,
     providerEnvKeys: ["LABEL_LLM_PROVIDER"],
-    defaultModel: "gpt-5.6-luna",
+    defaultModel: "gpt-5.4-nano",
     system,
     input,
     temperature: 0.1,
