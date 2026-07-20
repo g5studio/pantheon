@@ -49,4 +49,5 @@ if (degradedReason) {
 - Prefer `api-domain` when `OPENAI_API_KEY` is unset.
 - Do **not** use Reviewer/Compass token or operator-proxy for LLM.
 - Keep `temperature` explicit only when model supports custom temperature.
+- `gpt-5.6-luna` only accepts the API default temperature (`1`); `llm-client` omits custom `temperature` for luna automatically. Do not pass `0` / `0.1` / `0.2` expecting determinism on luna.
 - For long-running batch flows, wrap each file/item call with timeout and continue-on-error reporting.
