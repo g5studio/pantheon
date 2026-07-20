@@ -166,6 +166,30 @@ function shouldFallbackToResponses(error) {
 }
 
 /**
+ * 宣告內容用途說明與單號關聯
+ * @description 判斷 model 是否接受自訂 temperature。
+ * @purpose gpt-5.6-luna 僅支援 API 預設 temperature（1）；傳 0／0.1／0.2 等會 400。
+ * @external https://innotech.atlassian.net/browse/OL-35
+ */
+function modelSupportsCustomTemperature(model) {
+  const m = String(model || "").toLowerCase();
+  // luna 系列：Only the default (1) value is supported
+  if (m.includes("luna")) return false;
+  return true;
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 決定 request body 是否帶 temperature。
+ * @purpose 不相容 model 省略欄位，避免 unsupported_value 400。
+ * @external https://innotech.atlassian.net/browse/OL-35
+ */
+function shouldSendTemperature(model, temperature) {
+  if (typeof temperature !== "number" || Number.isNaN(temperature)) return false;
+  return modelSupportsCustomTemperature(model);
+}
+
+/**
  * === 宣告內容用途說明與單號關聯 ===
  * @description 由 Error 物件推導標準化 llmErrorCode（HTTP status、timeout、json-parse 等）。
  * @purpose 供 reportLlmFailure 填入 agent log payload。
@@ -503,9 +527,12 @@ export async function callOpenAiChatCompletions({
 
     const body = {
       model,
-      temperature,
       messages,
     };
+    // OL-35: luna 等 model 僅接受預設 temperature，不可帶自訂值
+    if (shouldSendTemperature(model, temperature)) {
+      body.temperature = temperature;
+    }
     if (responseFormat && typeof responseFormat === "object") {
       body.response_format = responseFormat;
     }
@@ -535,7 +562,10 @@ export async function callOpenAiChatCompletions({
       model,
       input: normalizeMessagesForResponses(messages),
     };
-    if (typeof temperature === "number") body.temperature = temperature;
+    // OL-35: 與 chat/completions 相同，不相容 model 省略 temperature
+    if (shouldSendTemperature(model, temperature)) {
+      body.temperature = temperature;
+    }
 
     const textFormat = convertResponseFormatForResponses(responseFormat);
     if (textFormat) body.text = { format: textFormat };
@@ -673,8 +703,8 @@ export async function callOpenAiJson({
   }
 }
 /**
- * === llm 分析紀錄區 ===
- * @llm-review-submitted-at 2026-06-13T19:31:57.607Z
- * @llm-review-model gpt-5.4-nano
- * @llm-review-note LLM 僅支援 OPENAI_API_KEY 與 CUSTOM_OPENAI_API_URL；移除 Reviewer/Compass proxy 路徑。
+ * llm 分析紀錄區
+ * @llm-review-submitted-at 2026-07-20T18:25:00.000Z
+ * @llm-review-model cursor-grok
+ * @llm-review-note OL-35：luna 僅支援預設 temperature，request 省略自訂值；未變更 provider 決策邏輯。
  */
