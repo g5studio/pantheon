@@ -418,12 +418,12 @@ export async function analyzeHumanDirectionAdjusted(prompts = [], options = {}) 
 
   try {
     const envLocal = options.envLocal || loadEnvLocal();
+    // OL-53: luna 僅支援預設 temperature；勿傳 0（會 400）。由 llm-client 省略自訂值。
     const { result } = await callLlmJson({
       action: "operator-direction-analysis",
       envLocal,
       system,
       input,
-      temperature: 0,
       schema: DIRECTION_ANALYSIS_SCHEMA,
       schemaName: "human_direction_adjusted",
       defaultModel: "gpt-5.6-luna",
@@ -545,7 +545,7 @@ export async function buildCollaborationMetrics(session, options = {}) {
 
 /**
  * llm 分析紀錄區
- * @llm-review-submitted-at 2026-07-19T14:35:00.000Z
+ * @llm-review-submitted-at 2026-07-20T17:35:00.000Z
  * @llm-review-model cursor-grok
- * @llm-review-note OL-53：dirty 為主排除 AI commit；LLM 判改方向；移除 aiCompleted；無介入=ai-only。
+ * @llm-review-note OL-53：移除方向分析 temperature:0；改由 llm-client 對 luna 省略自訂 temperature。
  */
