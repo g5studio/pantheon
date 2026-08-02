@@ -15,7 +15,9 @@ import {
 import {
   clearOperatorSession,
   computeWorkflowDurationMs,
+  readOperatorSession,
   readOperatorSessionForMetrics,
+  resolveWorkflowActiveEndedAt,
   resolveWorkflowStartedAt,
 } from "./operator-session.mjs";
 import { buildCollaborationMetrics } from "./operator-collaboration-metrics.mjs";
@@ -126,7 +128,8 @@ Options:
 
 Workflow timing:
   1. 指令入口執行 operator-session --action=start --command=<action> [--ticket=<KEY>]
-  2. 流程結尾執行 send-operator-log（省略 duration-ms 時自動從 session 推算）
+  2. 開發完成確認時：operator-session --action=event --event-type=implementation-confirmed
+  3. 流程結尾執行 send-operator-log（省略 duration-ms 時：startedAt → implementation-confirmed；缺事件則 fallback 送 log 時間）
 
 Contract (OL-6):
   - ticket：explicit --data > session > branch > git-notes > none（寫入 ticketSource）
@@ -173,6 +176,8 @@ async function main() {
   let startedAt = null;
   let durationMs = explicitDurationMs;
   let startedAtSource = null;
+  let endedAt = null;
+  let endedAtSource = null;
 
   if (durationMs == null) {
     const startedAtArg = args["started-at"] ?? args.startedAt ?? "@session";
@@ -196,7 +201,23 @@ async function main() {
       );
     }
 
-    durationMs = computeWorkflowDurationMs(startedAt, occurredAtMs);
+    // OL-53: 優先以 implementation-confirmed 停表；缺事件時 fallback 到送 log 時間並警告
+    const activeEnd = resolveWorkflowActiveEndedAt(readOperatorSession());
+    if (activeEnd.endedAt) {
+      endedAt = activeEnd.endedAt;
+      endedAtSource = activeEnd.source;
+      durationMs = computeWorkflowDurationMs(
+        startedAt,
+        new Date(activeEnd.endedAt).getTime(),
+      );
+    } else {
+      endedAt = occurredAt;
+      endedAtSource = "send-log-fallback";
+      console.warn(
+        "⚠️  缺少 implementation-confirmed：durationMs 改以送 log 時間計算（含 commit／等待），請在開發完成確認時記錄該事件",
+      );
+      durationMs = computeWorkflowDurationMs(startedAt, occurredAtMs);
+    }
   } else if (args["started-at"] || args.startedAt) {
     const resolved = resolveWorkflowStartedAt(args["started-at"] ?? args.startedAt, {
       action,
@@ -262,11 +283,13 @@ async function main() {
     category,
     status,
     ...(startedAt ? { startedAt } : {}),
+    ...(endedAt ? { endedAt } : {}),
     occurredAt,
     durationMs: durationMs ?? undefined,
     reason,
     ...(model ? { model } : {}),
     ...(startedAtSource ? { startedAtSource } : {}),
+    ...(endedAtSource ? { endedAtSource } : {}),
     logScope: "workflow",
     ...payloadExtra,
   });
@@ -275,9 +298,11 @@ async function main() {
     ...result,
     timing: {
       startedAt,
+      endedAt,
       occurredAt,
       durationMs,
       startedAtSource,
+      endedAtSource,
       durationSource: explicitDurationMs == null ? "computed" : "explicit",
     },
     contract: {
@@ -315,7 +340,7 @@ main().catch((error) => {
 
 /**
  * llm 分析紀錄區
- * @llm-review-submitted-at 2026-07-15T07:20:00.000Z
+ * @llm-review-submitted-at 2026-08-02T06:55:00.000Z
  * @llm-review-model cursor-grok
- * @llm-review-note OL-6：send-operator-log 自動補 ticket／mrUrl／ticketSource／dataQuality。
+ * @llm-review-note OL-92：durationMs 優先以 implementation-confirmed 停表。
  */

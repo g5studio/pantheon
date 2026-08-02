@@ -39,7 +39,8 @@
 
 | 程序 / 入口 | 觸發時間點 | 是否 POST Ares | 主要內容 | 備註 |
 |---|---|---|---|---|
-| `operator-session --action=start` | Operator 指令**入口** | ❌ | 寫入 `.cursor/tmp/.operator-session.json`（起點時間、可選 ticket） | 供結尾算 `durationMs` |
+| `operator-session --action=start` | Operator 指令**入口** | ❌ | 寫入 `.cursor/tmp/.operator-session.json`（起點時間、可選 ticket） | 供結尾算 `durationMs` 起點 |
+| `operator-session --action=event --event-type=implementation-confirmed` | 開發完成確認（停止點 2） | ❌ | 寫入 `workflowActiveEndedAt` | **`durationMs` 停表點**（不含 commit／MR／延遲送 log） |
 | `operator-session --action=event` | 決策點／plan／回覆等 | ❌ | 追加 session.events | 結尾由 `send-operator-log` merge |
 | `operator-session --action=checkpoint` | 對話恢復等 | ❌ | git checkpoint | 人工改碼偵測用 |
 | `operator-session --action=set` | 中途補綁 ticket | ❌ | 更新 session.ticket | OL-6 |

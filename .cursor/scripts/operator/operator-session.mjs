@@ -164,6 +164,11 @@ export function appendOperatorSessionEvent(event = {}) {
     };
   }
 
+  // OL-53: 開發完成確認＝活躍開發停表點（不含後續 commit／MR／延遲送 log）
+  if (normalizedEvent.type === "implementation-confirmed") {
+    nextSession.workflowActiveEndedAt = normalizedEvent.occurredAt;
+  }
+
   return writeOperatorSessionObject(nextSession);
 }
 
@@ -218,6 +223,24 @@ function recordSessionEventFromCli(args) {
   if (eventType === "session-resume") {
     writeOperatorSessionCheckpoint("session-resume");
     return appendOperatorSessionEvent({ type: "session-resume" });
+  }
+
+  if (eventType === "agent-commit") {
+    const sha = String(args.sha || "").trim();
+    if (!sha) {
+      throw new Error("agent-commit 需要 --sha=<commitHash>");
+    }
+    // OL-53: operator 流程在 AI commit 後記錄 SHA（不改 cr/agent-commit.mjs）
+    return appendOperatorSessionEvent({
+      type: "agent-commit",
+      sha,
+      subject: String(args.subject || args.message || "").trim().slice(0, 500),
+    });
+  }
+
+  if (eventType === "implementation-confirmed") {
+    // OL-53: 強制停止點「開發完成確認」；durationMs 以此停表
+    return appendOperatorSessionEvent({ type: "implementation-confirmed" });
   }
 
   throw new Error(`未知 --event-type: ${eventType}`);
@@ -402,16 +425,55 @@ export function resolveWorkflowStartedAt(source, { action = "" } = {}) {
 
 /**
  * 宣告內容用途說明與單號關聯
- * @description 依起點時間計算流程 durationMs。
- * @purpose 對齊 Ares dashboard 整段 operator 指令耗時。
+ * @description 解析活躍開發結束時間（implementation-confirmed）。
+ * @purpose durationMs 停在實作確認，不含 commit／MR／延遲送 log。
+ * @external https://innotech.atlassian.net/browse/OL-53
+ */
+export function resolveWorkflowActiveEndedAt(session = null) {
+  const current = session || readOperatorSession();
+  if (!current) {
+    return { endedAt: null, source: "none" };
+  }
+
+  const fromField = normalizeIsoTime(current.workflowActiveEndedAt);
+  if (fromField) {
+    return { endedAt: fromField, source: "session-field" };
+  }
+
+  const events = Array.isArray(current.events) ? current.events : [];
+  let latest = "";
+  for (const event of events) {
+    if (event?.type !== "implementation-confirmed") continue;
+    const at = normalizeIsoTime(event.occurredAt);
+    if (at && (!latest || at > latest)) latest = at;
+  }
+
+  if (latest) {
+    return { endedAt: latest, source: "implementation-confirmed-event" };
+  }
+
+  return { endedAt: null, source: "none" };
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 依起點／結束時間計算流程 durationMs。
+ * @purpose 對齊 Ares dashboard 活躍開發耗時（預設結束點可為實作確認）。
  * @external https://innotech.atlassian.net/browse/FE-8460
+ * @external https://innotech.atlassian.net/browse/OL-53
  */
 export function computeWorkflowDurationMs(startedAtIso, endedAtMs = Date.now()) {
   const normalizedStartedAt = normalizeIsoTime(startedAtIso);
   if (!normalizedStartedAt) return null;
 
   const startedMs = new Date(normalizedStartedAt).getTime();
-  const duration = Math.round(endedAtMs - startedMs);
+  const endMs =
+    typeof endedAtMs === "number" && Number.isFinite(endedAtMs)
+      ? endedAtMs
+      : Date.parse(String(endedAtMs || ""));
+  if (!Number.isFinite(endMs)) return null;
+
+  const duration = Math.round(endMs - startedMs);
   return duration >= 0 ? duration : 0;
 }
 
@@ -442,7 +504,7 @@ Actions:
   set          更新 session 綁定 ticket（不重設起點時間）
   read         讀取目前 session（JSON 輸出）
   clear        清除 session 檔案
-  event        追加協作事件（user-response / plan-revision / fix-comment-reply 等）
+  event        追加協作事件（user-response / plan-revision / implementation-confirmed 等）
   checkpoint   記錄 git checkpoint（對話恢復時比對人工改碼）
 
 Options (start):
@@ -456,6 +518,8 @@ Options (event):
   --event-type=<type>                 事件類型（必填）
   --response-type=<name>              user-response 專用：directAgree | requestChange | question | silentConfirm
   --text=<text>                       fix-comment-reply / user-prompt 專用
+  --sha=<commitHash>                  agent-commit 專用
+  --subject=<text>                    agent-commit 可選 subject
 
 Options (checkpoint):
   --label=<text>                      checkpoint 標籤（選填）
@@ -465,8 +529,10 @@ Examples:
   node .cursor/scripts/operator/operator-session.mjs --action=set --ticket=OL-6
   node .cursor/scripts/operator/operator-session.mjs --action=event --event-type=user-response --response-type=directAgree
   node .cursor/scripts/operator/operator-session.mjs --action=event --event-type=plan-revision
+  node .cursor/scripts/operator/operator-session.mjs --action=event --event-type=implementation-confirmed
   node .cursor/scripts/operator/operator-session.mjs --action=event --event-type=fix-comment-reply --text="已調整命名"
   node .cursor/scripts/operator/operator-session.mjs --action=event --event-type=user-prompt --text="請改成用 LLM 判定"
+  node .cursor/scripts/operator/operator-session.mjs --action=event --event-type=agent-commit --sha=<hash> --subject="fix(OL-53): ..."
   node .cursor/scripts/operator/operator-session.mjs --action=checkpoint --label=after-human-edit
   node .cursor/scripts/operator/operator-session.mjs --action=read
   node .cursor/scripts/operator/operator-session.mjs --action=clear
@@ -552,7 +618,7 @@ if (isDirectRun) {
 
 /**
  * llm 分析紀錄區
- * @llm-review-submitted-at 2026-07-15T07:20:00.000Z
+ * @llm-review-submitted-at 2026-08-02T06:55:00.000Z
  * @llm-review-model cursor-grok
- * @llm-review-note OL-6：session start／set 支援 ticket 綁定與身分預檢警告。
+ * @llm-review-note OL-92：implementation-confirmed 停表；agent-commit SHA 事件。
  */

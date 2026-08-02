@@ -15,8 +15,8 @@ Pantheon Operator 結尾送出的 `logScope=workflow` agent log，供 Ares Prome
 
 | 維度 | Ares 主要依賴 | Pantheon 腳本保證 | Agent 仍可能影響 |
 |---|---|---|---|
-| 速度力 | `durationMs` + `ticket`／`mrUrl` | timing（session）；ticket／mrUrl 自動推導 + `ticketSource` | 顯式 `--data` 覆寫值 |
-| 爆發力 | 時間區間重疊（`startedAt`+`durationMs`） | session 起迄 | `AGENT_DISPLAY_NAME`（分組，若 Ares 啟用） |
+| 速度力 | `durationMs` + `ticket`／`mrUrl` | timing：`startedAt`→`implementation-confirmed`（`endedAt`）；缺事件才 fallback 送 log；ticket／mrUrl 自動推導 + `ticketSource` | 顯式 `--data`／`--duration-ms` 覆寫 |
+| 爆發力 | 時間區間重疊（`startedAt`+`durationMs`） | 活躍開發起迄（不含 commit／MR 等待） | `AGENT_DISPLAY_NAME`（分組，若 Ares 啟用） |
 | 決策力 | `planMetrics.revisionCount` | 有 plan events 則彙整；**無則 `planMetrics.missing=true`** | 是否打 `plan-initial`／`plan-revision` |
 | 穩定度 | 穩定並行平均 | session timing | 身分欄位完整度 |
 | 準確度 | 項目鍵（ticket／mrUrl） | 同速度力推導 | 顯式 `--data` |
@@ -64,13 +64,29 @@ pnpm run send-operator-log -- --action=start-task --reason="mr created"
 pnpm run operator-session -- --action=set --ticket=OL-6
 ```
 
+## Workflow timing（OL-53）
+
+| 欄位 | 說明 |
+|---|---|
+| `startedAt` | `operator-session --action=start` |
+| `endedAt` | 優先 `implementation-confirmed`（開發完成確認）；缺則 fallback 為送 log 時間 |
+| `occurredAt` | `send-operator-log` 執行當下（可晚於 endedAt） |
+| `durationMs` | `endedAt − startedAt`（活躍開發時長；**不含** commit／MR／延遲送 log） |
+| `endedAtSource` | `session-field`／`implementation-confirmed-event`／`send-log-fallback` |
+
+Agent 必須在 start-task「強制停止點 2：開發完成確認」用戶同意後立即：
+
+```bash
+pnpm run operator-session -- --action=event --event-type=implementation-confirmed
+```
+
 ## collaborationMetrics（OL-53）
 
 `send-operator-log` 會自動 merge `collaborationMetrics`。契約重點：
 
 | 欄位 | 說明 |
 |---|---|
-| `humanEditDetected` | 人工改碼：以 uncommitted／dirty 差為主；**不以** `commitsDuringSession`／`headChanged` 單獨判定；符合 `agent-commit` subject 慣用格式的 commit 不計入手改 |
+| `humanEditDetected` | 人工改碼：以 uncommitted／dirty 差為主；**不以** `commitsDuringSession`／`headChanged` 單獨判定。commit 訊號需同時滿足：(1) 起點 HEAD 仍是終點祖先（切 release／換歷史線則不採信）；(2) committer 時間 ≥ session 起點。AI commit 以 operator session 事件 `type=agent-commit` 的 SHA 辨識（由 operator 流程記錄；**不用** conventional subject 格式） |
 | `humanDirectionAdjusted` | 人為調整方向：由 LLM 分析本 session 的 `user-prompt` 紀錄判定（**非** hardcode `plan-revision`／`requestChange`） |
 | `directionSignals` | LLM 結果細節：`reason`／`confidence`／`source`（`llm`｜`fallback`）／`promptCount` |
 | `collaborationOutcome` | **無人工介入**（無手改且無改方向）→ 一律 `ai-only`；有介入 → `mixed`／`human-primary`。**不拆** `guided-ai` |
@@ -90,7 +106,7 @@ Hook `prompt-event-collector` 在 operator session 作用中時，會把 user pr
 ### Prompt 使用邊界
 
 - Prompt 可作「改方向」／「否定人工改碼」的輔助依據
-- Prompt **不得**作為「肯定手改」的唯一依據（手改仍看 git dirty／非 AI commit）
+- Prompt **不得**作為「肯定手改」的唯一依據（手改仍看 git dirty／session 時間窗內且非 `agent-commit` SHA 的 commit）
 
 ## 相關
 

@@ -608,8 +608,13 @@ node .cursor/scripts/cr/create-mr.mjs --labels="<專案labels>,AI" ...
    - 等待用戶回應「是」、「確認」、「可以」等肯定回答
    - **禁止**在用戶確認前執行 commit 或 MR 操作
 
-5. **執行 cr single-ticket 命令**：
-   - 只有在用戶明確確認後，才執行 `cr single-ticket` 命令
+5. **記錄活躍開發結束（CRITICAL，OL-53）**：
+   - 用戶明確確認後、執行 commit／MR **之前**，必須立即：
+     `pnpm run operator-session -- --action=event --event-type=implementation-confirmed`
+   - 此事件為 workflow `durationMs` 停表點；缺漏會把後續 commit／等待時間灌進耗時
+
+6. **執行 cr single-ticket 命令**：
+   - 只有在用戶明確確認且已記錄 `implementation-confirmed` 後，才執行 `cr single-ticket` 命令
    - 將用戶確認的報告內容檢附到 MR description
 
 ### 顯示格式範例
