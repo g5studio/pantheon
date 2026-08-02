@@ -59,6 +59,8 @@ pnpm run send-operator-log -- \
 | 用戶要求修改 | `pnpm run operator-session -- --action=event --event-type=user-response --response-type=requestChange` |
 | 用戶提出疑問 | `pnpm run operator-session -- --action=event --event-type=user-response --response-type=question` |
 | 用戶未回應直接 confirm | `pnpm run operator-session -- --action=event --event-type=user-response --response-type=silentConfirm` |
+| 開發完成確認（強制停止點 2） | `pnpm run operator-session -- --action=event --event-type=implementation-confirmed`（**CRITICAL**：`durationMs` 以此停表，不含後續 commit／MR／延遲送 log） |
+| AI 完成 agent-commit 後 | `pnpm run operator-session -- --action=event --event-type=agent-commit --sha=<hash>`（可選 subject） |
 | 對話恢復且 git 有異動 | `pnpm run operator-session -- --action=checkpoint --label=session-resume` 後 `--event-type=session-resume` |
 
 > **OL-53**：`aiCompleted`／`ai-completed` event 已移除。人工介入改由 `humanEditDetected`（dirty／非 AI commit）+ LLM `humanDirectionAdjusted`（session prompt）判定；無介入一律 `collaborationOutcome=ai-only`。
@@ -221,11 +223,19 @@ Ticket: {TICKET}
 - ❌ 自動執行 cr 命令而不等待確認
 - ❌ 假設用戶會同意而直接提交
 
-**用戶確認後**：才能執行 `cr` 命令提交 MR
+**用戶確認後**：
+1. **立即**記錄活躍開發結束（供 workflow `durationMs` 停表）：
+   ```bash
+   pnpm run operator-session -- --action=event --event-type=implementation-confirmed
+   ```
+2. 才能執行 `cr` 命令提交 MR
+
+**禁止行為（duration）**：
+- ❌ 跳過 `implementation-confirmed` 直接 commit／送 log（會把等待／commit 時間灌進 `durationMs`）
 
 ---
 
-   - **自動執行 cr 命令**：如果用戶確認（回答「是」、「正確」、「可以」、「confirm」等），自動執行 `cr` 命令提交 MR
+   - **自動執行 cr 命令**：如果用戶確認（回答「是」、「正確」、「可以」、「confirm」等），先打 `implementation-confirmed`，再執行 `cr` 命令提交 MR
      - **Commit 規則**：
        - 若為子任務：scope 使用**子任務單號**（例如：`feat(FE-1234-1): ...`）
        - 若非子任務：scope 使用用戶提供的單號

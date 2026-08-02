@@ -18,10 +18,6 @@ const VALID_USER_RESPONSE_TYPES = new Set([
   "silentConfirm",
 ]);
 
-/** agent-commit 慣用 subject：type(TICKET): lowercase message */
-const AGENT_COMMIT_SUBJECT_RE =
-  /^(feat|fix|update|refactor|chore|test|style|revert)\([A-Z][A-Z0-9]+-\d+\):\s+[a-z]/
-
 const DIRECTION_ANALYSIS_SCHEMA = {
   type: "object",
   properties: {
@@ -169,42 +165,52 @@ export function captureGitSnapshot() {
   };
 }
 
-function countCommitsSince(startHeadCommit) {
-  if (!startHeadCommit) return 0;
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 判斷 start commit 是否為 end HEAD 的祖先。
+ * @purpose 切 release／換歷史線時 A..B 會膨脹，此時 commit 訊號不可信。
+ * @external https://innotech.atlassian.net/browse/OL-53
+ */
+export function isCommitAncestorOfHead(startHeadCommit, endHeadCommit) {
+  const start = String(startHeadCommit || "").trim();
+  const end = String(endHeadCommit || "").trim();
+  if (!start || !end) return false;
+  if (start === end) return true;
   try {
-    const currentHead = exec("git rev-parse HEAD", { silent: true }).trim();
-    if (startHeadCommit === currentHead) return 0;
-    const count = exec(`git rev-list --count ${startHeadCommit}..HEAD`, {
-      silent: true,
-    }).trim();
-    return Number(count) || 0;
+    exec(`git merge-base --is-ancestor ${start} ${end}`, { silent: true });
+    return true;
   } catch {
-    return 0;
+    return false;
   }
 }
 
 /**
  * 宣告內容用途說明與單號關聯
- * @description 判斷 commit subject 是否符合 agent-commit 慣用格式。
- * @purpose 排除 AI agent-commit 造成的 HEAD 變動誤判。
+ * @description 列出 start..end 的 commit（含 sha／committer 時間／subject）。
+ * @purpose 供 session 時間窗過濾；不再用 subject 格式判斷 agent。
  * @external https://innotech.atlassian.net/browse/OL-53
  */
-export function isLikelyAgentCommitSubject(subject) {
-  return AGENT_COMMIT_SUBJECT_RE.test(String(subject || "").trim());
-}
-
-function listCommitSubjectsSince(startHeadCommit) {
-  if (!startHeadCommit) return [];
+export function listCommitsBetween(startHeadCommit, endHeadCommit) {
+  const start = String(startHeadCommit || "").trim();
+  const end = String(endHeadCommit || "").trim();
+  if (!start || !end || start === end) return [];
   try {
-    const currentHead = exec("git rev-parse HEAD", { silent: true }).trim();
-    if (startHeadCommit === currentHead) return [];
-    const raw = exec(`git log --format=%s ${startHeadCommit}..HEAD`, {
+    const raw = exec(`git log --format=%H%x09%ct%x09%s ${start}..${end}`, {
       silent: true,
     });
     return String(raw || "")
       .split("\n")
       .map((line) => line.trim())
-      .filter(Boolean);
+      .filter(Boolean)
+      .map((line) => {
+        const [sha, ct, ...subjectParts] = line.split("\t");
+        return {
+          sha: String(sha || "").trim(),
+          committerTs: Number(ct) || 0,
+          subject: subjectParts.join("\t").trim(),
+        };
+      })
+      .filter((item) => item.sha);
   } catch {
     return [];
   }
@@ -212,23 +218,66 @@ function listCommitSubjectsSince(startHeadCommit) {
 
 /**
  * 宣告內容用途說明與單號關聯
- * @description 比對起點/終點 git 快照，產生 humanEditSignals。
- * @purpose OL-53：人工改碼以 dirty／uncommitted 為主；不單獨用 commit／HEAD 判定。
+ * @description 從 session events 收集 type=agent-commit 的 SHA。
+ * @purpose 以 operator session 紀錄辨識 AI commit，不用 conventional subject 格式。
  * @external https://innotech.atlassian.net/browse/OL-53
  */
-export function computeHumanEditSignals(startSnapshot, endSnapshot) {
+export function collectAgentCommitShas(session) {
+  const events = Array.isArray(session?.events) ? session.events : [];
+  const shas = new Set();
+  for (const event of events) {
+    if (event?.type !== "agent-commit") continue;
+    const sha = String(event.sha || "").trim().toLowerCase();
+    if (sha) shas.add(sha);
+  }
+  return shas;
+}
+
+/**
+ * 宣告內容用途說明與單號關聯
+ * @description 比對起點/終點 git 快照，產生 humanEditSignals。
+ * @purpose OL-53：dirty 為主；commit 需祖先可信 + session 時間窗；agent 以 session SHA 辨識。
+ * @external https://innotech.atlassian.net/browse/OL-53
+ */
+export function computeHumanEditSignals(startSnapshot, endSnapshot, options = {}) {
   const start = startSnapshot || {};
   const end = endSnapshot || captureGitSnapshot();
+  const sessionStartedAtMs = Date.parse(
+    String(options.sessionStartedAt || start.capturedAt || ""),
+  );
+  const hasSessionStart = Number.isFinite(sessionStartedAtMs);
+  const agentCommitShas =
+    options.agentCommitShas instanceof Set
+      ? options.agentCommitShas
+      : new Set(
+          Array.isArray(options.agentCommitShas)
+            ? options.agentCommitShas.map((sha) => String(sha || "").trim().toLowerCase())
+            : [],
+        );
 
   const startDirty = new Set(start.dirtyFiles || []);
   const endDirty = new Set(end.dirtyFiles || []);
   const newDirtyFiles = [...endDirty].filter((file) => !startDirty.has(file));
-  const commitsDuringSession = countCommitsSince(start.headCommit);
-  const commitSubjects = listCommitSubjectsSince(start.headCommit);
-  const agentCommitCount = commitSubjects.filter((subject) =>
-    isLikelyAgentCommitSubject(subject),
+
+  const commitRangeReliable = isCommitAncestorOfHead(start.headCommit, end.headCommit);
+  const rawCommits = commitRangeReliable
+    ? listCommitsBetween(start.headCommit, end.headCommit)
+    : [];
+  const sessionCommits = hasSessionStart
+    ? rawCommits.filter((commit) => commit.committerTs * 1000 >= sessionStartedAtMs)
+    : [];
+
+  // OL-53: 不用 subject 格式判斷 agent（人與 AI 都可能用 type(TICKET): msg）。
+  // 僅採信 operator session 的 agent-commit 事件 SHA；無紀錄時不把 commit 當手改。
+  const agentCommitAttribution = agentCommitShas.size > 0 ? "session-events" : "unavailable";
+  const agentCommitCount = sessionCommits.filter((commit) =>
+    agentCommitShas.has(commit.sha.toLowerCase()),
   ).length;
-  const nonAgentCommitCount = Math.max(0, commitSubjects.length - agentCommitCount);
+  const humanCommitCount =
+    agentCommitAttribution === "session-events"
+      ? sessionCommits.filter((commit) => !agentCommitShas.has(commit.sha.toLowerCase()))
+          .length
+      : 0;
 
   const startUncommitted = start.uncommitted || { files: 0, additions: 0, deletions: 0 };
   const endUncommitted = end.uncommitted || { files: 0, additions: 0, deletions: 0 };
@@ -247,16 +296,20 @@ export function computeHumanEditSignals(startSnapshot, endSnapshot) {
     newDirtyFiles.length > 0 ||
     uncommittedDelta.additions + uncommittedDelta.deletions > 0;
 
-  // OL-53: 不以 commitsDuringSession／headChanged 單獨判定；AI agent-commit 不計入手改。
-  // 僅當存在非 agent-commit 的 commit 時，才把「已提交的手改」計入。
-  const humanEditDetected = dirtyHumanEdit || nonAgentCommitCount > 0;
+  // 不以 commitsDuringSession／headChanged／subject 格式單獨判定。
+  const humanEditDetected = dirtyHumanEdit || humanCommitCount > 0;
 
   return {
     humanEditDetected,
-    commitsDuringSession,
+    commitsDuringSession: sessionCommits.length,
+    commitsInRangeRaw: rawCommits.length,
     headChanged,
+    commitRangeReliable,
+    agentCommitAttribution,
     agentCommitCount,
-    nonAgentCommitCount,
+    // 相容舊欄位：語意改為「session 時間窗內、且非 session agent-commit SHA」
+    nonAgentCommitCount: humanCommitCount,
+    humanCommitCount,
     filesChangedDuringSession: Math.max(newDirtyFiles.length, uncommittedDelta.files),
     linesAdded: uncommittedDelta.additions,
     linesRemoved: uncommittedDelta.deletions,
@@ -489,7 +542,10 @@ export async function buildCollaborationMetrics(session, options = {}) {
   const startSnapshot = session?.gitSnapshotStart || null;
   const endSnapshot = session?.gitSnapshotEnd || captureGitSnapshot();
 
-  const humanEditSignals = computeHumanEditSignals(startSnapshot, endSnapshot);
+  const humanEditSignals = computeHumanEditSignals(startSnapshot, endSnapshot, {
+    sessionStartedAt: session?.workflowStartedAt || startSnapshot?.capturedAt || null,
+    agentCommitShas: collectAgentCommitShas(session),
+  });
   const userResponses = aggregateUserResponses(events);
   const planMetrics = aggregatePlanMetrics(events, session, options);
 
@@ -545,7 +601,7 @@ export async function buildCollaborationMetrics(session, options = {}) {
 
 /**
  * llm 分析紀錄區
- * @llm-review-submitted-at 2026-07-20T17:35:00.000Z
+ * @llm-review-submitted-at 2026-07-30T19:30:00.000Z
  * @llm-review-model cursor-grok
- * @llm-review-note OL-53：移除方向分析 temperature:0；改由 llm-client 對 luna 省略自訂 temperature。
+ * @llm-review-note OL-92：commit 需祖先可信+時間窗；agent 改 session SHA；停用 subject 格式判定。
  */
